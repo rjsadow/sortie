@@ -1,0 +1,52 @@
+{
+  "applications": [
+    {
+      "id": "app-1",
+      "name": "GitHub",
+      "description": "Code hosting and collaboration platform",
+      "url": "https://github.com",
+      "icon": "https://github.githubassets.com/favicons/favicon.svg",
+      "category": "Development"
+    },
+    {
+      "id": "app-2",
+      "name": "Jira",
+      "description": "Project and issue tracking",
+      "url": "https://atlassian.com/jira",
+      "icon": "https://wac-cdn.atlassian.com/assets/img/favicons/atlassian/favicon.png",
+      "category": "Project Management"
+    },
+    {
+      "id": "app-3",
+      "name": "Confluence",
+      "description": "Team collaboration and documentation",
+      "url": "https://atlassian.com/confluence",
+      "icon": "https://wac-cdn.atlassian.com/assets/img/favicons/atlassian/favicon.png",
+      "category": "Documentation"
+    },
+    {
+      "id": "app-4",
+      "name": "Slack",
+      "description": "Team messaging and communication",
+      "url": "https://slack.com",
+      "icon": "https://a.slack-edge.com/80588/marketing/img/meta/favicon-32.png",
+      "category": "Communication"
+    },
+    {
+      "id": "app-5",
+      "name": "Jenkins",
+      "description": "Continuous integration and deployment",
+      "url": "https://jenkins.io",
+      "icon": "https://www.jenkins.io/favicon.ico",
+      "category": "Development"
+    },
+    {
+      "id": "app-6",
+      "name": "Grafana",
+      "description": "Monitoring and observability dashboards",
+      "url": "https://grafana.com",
+      "icon": "https://grafana.com/static/assets/img/fav32.png",
+      "category": "Monitoring"
+    }
+  ]
+}
