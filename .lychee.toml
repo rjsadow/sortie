@@ -1,0 +1,11 @@
+# Lychee link checker configuration
+# https://lychee.cli.rs/
+
+# Exclude localhost URLs (used for development documentation)
+exclude = [
+    "^http://localhost",
+    "^https://localhost",
+]
+
+# Don't check links in code blocks
+include_verbatim = false
