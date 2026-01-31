@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Application, AppConfig } from './types';
+import type { Application, AppConfig, User } from './types';
 import { SessionModal } from './components/SessionModal';
+import { Login } from './components/Login';
 
 function App() {
+  const [user, setUser] = useState<User | null>(() => {
+    const stored = localStorage.getItem('launchpad-user');
+    return stored ? JSON.parse(stored) : null;
+  });
   const [apps, setApps] = useState<Application[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -143,6 +148,20 @@ function App() {
     setFocusedIndex(-1);
   }, [search]);
 
+  const handleLogin = (loggedInUser: User) => {
+    setUser(loggedInUser);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('launchpad-user');
+    setUser(null);
+  };
+
+  // Show login screen if not authenticated
+  if (!user) {
+    return <Login onLogin={handleLogin} darkMode={darkMode} />;
+  }
+
   // Build a flat list for keyboard navigation while maintaining category order
   let appIndex = 0;
 
@@ -219,6 +238,25 @@ function App() {
                   </svg>
                 )}
               </button>
+              {/* User menu */}
+              <div className="flex items-center gap-2 pl-2 border-l border-white/20">
+                <span className="text-sm hidden sm:inline">{user.displayName || user.username}</span>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
