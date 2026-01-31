@@ -20,7 +20,7 @@ import (
 	"github.com/rjsadow/launchpad/internal/websocket"
 )
 
-//go:embed web/dist/*
+//go:embed all:web/dist
 var embeddedFiles embed.FS
 
 var database *db.DB
