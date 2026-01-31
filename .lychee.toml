@@ -1,10 +1,15 @@
 # Lychee link checker configuration
 # https://lychee.cli.rs/
 
-# Exclude localhost URLs (used for development documentation)
+# Exclude placeholder and development URLs
 exclude = [
+    # Localhost (development)
     "^http://localhost",
     "^https://localhost",
+    # Example domains (placeholder URLs in documentation)
+    "example\\.com",
+    # Placeholder CDN URLs
+    "your-cdn\\.com",
 ]
 
 # Don't check links in code blocks
