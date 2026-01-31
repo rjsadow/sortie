@@ -4,11 +4,13 @@ A centralized application launcher for large organizations.
 
 ## Vision
 
-Provide users a single, reliable portal to launch dozens or hundreds of custom applications. Simple, effective, reliable, secure.
+Provide users a single, reliable portal to launch dozens or hundreds of
+custom applications. Simple, effective, reliable, secure.
 
 ## MVP (Phase 1)
 
 ### Core Features
+
 - [ ] Static landing page with branding
 - [ ] Application grid/list view displaying configured apps
 - [ ] Click-to-launch functionality (opens apps in new tab)
@@ -17,12 +19,14 @@ Provide users a single, reliable portal to launch dozens or hundreds of custom a
 - [ ] Responsive design (desktop + mobile)
 
 ### Tech Stack (Recommended)
+
 - **Frontend:** React + TypeScript
 - **Styling:** Tailwind CSS (using brand colors: #398D9B, #4AB7C3)
 - **Build:** Vite
 - **Deployment:** Static hosting (GitHub Pages, Netlify, or self-hosted)
 
 ### Data Model (MVP)
+
 ```json
 {
   "applications": [

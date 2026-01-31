@@ -2,7 +2,10 @@
 
 ## What is Launchpad?
 
-Launchpad is an open-source web application that provides a centralized portal for launching internal applications within large organizations. Instead of maintaining bookmarks, wikis, or scattered documentation, users access a single page to find and launch any application they need.
+Launchpad is an open-source web application that provides a centralized
+portal for launching internal applications within large organizations.
+Instead of maintaining bookmarks, wikis, or scattered documentation,
+users access a single page to find and launch any application they need.
 
 ## Core Principles
 
@@ -27,7 +30,7 @@ Launchpad is an open-source web application that provides a centralized portal f
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │           User's Browser                │
 │  ┌───────────────────────────────────┐  │
@@ -45,7 +48,8 @@ Launchpad is an open-source web application that provides a centralized portal f
     └────────┘ └────────┘ └────────┘
 ```
 
-Launchpad is a **static** application - it links to other applications but does not host them.
+Launchpad is a **static** application - it links to other applications
+but does not host them.
 
 ## Brand Guidelines
 

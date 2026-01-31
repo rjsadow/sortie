@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (will be installed in container)
+web/node_modules
+
+# Build artifacts (will be built in container)
+web/dist
+launchpad
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation and non-essential files
+docs/
+agents/
+*.md
+!README.md
+
+# CI/CD
+.github
+
+# Local environment
+.env
+.env.*
+*.log
