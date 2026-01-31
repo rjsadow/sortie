@@ -12,7 +12,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/launchpad/internal/k8s"
 	"github.com/rjsadow/launchpad/internal/sessions"
 	"github.com/rjsadow/launchpad/internal/websocket"
 )
@@ -22,30 +24,45 @@ var embeddedFiles embed.FS
 
 var database *db.DB
 var sessionManager *sessions.Manager
+var appConfig *config.Config
 
 func main() {
-	port := flag.Int("port", 8080, "Port to listen on")
-	dbPath := flag.String("db", "launchpad.db", "Path to SQLite database")
+	// Parse command-line flags (can override env vars)
+	port := flag.Int("port", config.DefaultPort, "Port to listen on")
+	dbPath := flag.String("db", config.DefaultDBPath, "Path to SQLite database")
 	seedPath := flag.String("seed", "", "Path to apps.json for initial seeding")
 	flag.Parse()
 
-	// Initialize database
+	// Load configuration (env vars + flag overrides)
 	var err error
-	database, err = db.Open(*dbPath)
+	appConfig, err = config.LoadWithFlags(*port, *dbPath, *seedPath)
+	if err != nil {
+		log.Fatalf("Configuration error:\n%v\n\nSee .env.example for configuration options.", err)
+	}
+
+	// Initialize Kubernetes configuration
+	k8s.Configure(appConfig.Namespace, appConfig.Kubeconfig, appConfig.VNCSidecarImage)
+
+	// Initialize database
+	database, err = db.Open(appConfig.DB)
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
 	defer database.Close()
 
 	// Seed from JSON if provided and database is empty
-	if *seedPath != "" {
-		if err := database.SeedFromJSON(*seedPath); err != nil {
+	if appConfig.Seed != "" {
+		if err := database.SeedFromJSON(appConfig.Seed); err != nil {
 			log.Printf("Warning: failed to seed from JSON: %v", err)
 		}
 	}
 
-	// Initialize session manager
-	sessionManager = sessions.NewManager(database)
+	// Initialize session manager with config
+	sessionManager = sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
+		SessionTimeout:  appConfig.SessionTimeout,
+		CleanupInterval: appConfig.SessionCleanupInterval,
+		PodReadyTimeout: appConfig.PodReadyTimeout,
+	})
 	sessionManager.Start()
 	defer sessionManager.Stop()
 
@@ -98,7 +115,7 @@ func main() {
 		fileServer.ServeHTTP(w, r)
 	})
 
-	addr := fmt.Sprintf(":%d", *port)
+	addr := fmt.Sprintf(":%d", appConfig.Port)
 	log.Printf("Launchpad server starting on http://localhost%s", addr)
 
 	if err := http.ListenAndServe(addr, nil); err != nil {
@@ -375,26 +392,21 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default branding - can be overridden via config file
-	config := BrandingConfig{
-		LogoURL:        "",
-		PrimaryColor:   "#398D9B",
-		SecondaryColor: "#4AB7C3",
-		TenantName:     "Launchpad",
+	// Use centralized config for branding
+	brandingCfg := BrandingConfig{
+		LogoURL:        appConfig.LogoURL,
+		PrimaryColor:   appConfig.PrimaryColor,
+		SecondaryColor: appConfig.SecondaryColor,
+		TenantName:     appConfig.TenantName,
 	}
 
-	// Try to load from config file if it exists
-	configPath := os.Getenv("LAUNCHPAD_CONFIG")
-	if configPath == "" {
-		configPath = "branding.json"
-	}
-
-	if data, err := os.ReadFile(configPath); err == nil {
-		json.Unmarshal(data, &config)
+	// Try to load overrides from config file if it exists
+	if data, err := os.ReadFile(appConfig.BrandingConfigPath); err == nil {
+		json.Unmarshal(data, &brandingCfg)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	json.NewEncoder(w).Encode(brandingCfg)
 }
 
 // handleSessions handles GET (list) and POST (create) for /api/sessions

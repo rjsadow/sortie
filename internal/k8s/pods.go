@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -61,11 +60,8 @@ func DefaultPodConfig(sessionID, appID, appName, containerImage string) *PodConf
 
 // BuildPodSpec creates a Kubernetes Pod specification for a session
 func BuildPodSpec(config *PodConfig) *corev1.Pod {
-	// Get VNC sidecar image from env or use default
-	vncImage := os.Getenv("LAUNCHPAD_VNC_SIDECAR_IMAGE")
-	if vncImage == "" {
-		vncImage = VNCSidecarImage
-	}
+	// Get VNC sidecar image from centralized config
+	vncImage := GetVNCSidecarImage()
 
 	// Sanitize pod name (must be DNS-1123 compliant)
 	podName := fmt.Sprintf("launchpad-session-%s", config.SessionID)

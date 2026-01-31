@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -25,6 +23,13 @@ const (
 	DefaultPodReadyTimeout = 2 * time.Minute
 )
 
+// ManagerConfig holds configuration for the session manager.
+type ManagerConfig struct {
+	SessionTimeout  time.Duration
+	CleanupInterval time.Duration
+	PodReadyTimeout time.Duration
+}
+
 // Manager handles session lifecycle
 type Manager struct {
 	db              *db.DB
@@ -37,34 +42,34 @@ type Manager struct {
 	sessions map[string]*db.Session
 }
 
-// NewManager creates a new session manager
+// NewManager creates a new session manager with default configuration.
+// Deprecated: Use NewManagerWithConfig for explicit configuration.
 func NewManager(database *db.DB) *Manager {
-	timeout := DefaultSessionTimeout
-	if envTimeout := os.Getenv("SESSION_TIMEOUT"); envTimeout != "" {
-		if minutes, err := strconv.Atoi(envTimeout); err == nil {
-			timeout = time.Duration(minutes) * time.Minute
-		}
-	}
+	return NewManagerWithConfig(database, ManagerConfig{
+		SessionTimeout:  DefaultSessionTimeout,
+		CleanupInterval: DefaultCleanupInterval,
+		PodReadyTimeout: DefaultPodReadyTimeout,
+	})
+}
 
-	cleanupInterval := DefaultCleanupInterval
-	if envInterval := os.Getenv("SESSION_CLEANUP_INTERVAL"); envInterval != "" {
-		if minutes, err := strconv.Atoi(envInterval); err == nil {
-			cleanupInterval = time.Duration(minutes) * time.Minute
-		}
+// NewManagerWithConfig creates a new session manager with the given configuration.
+func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
+	// Apply defaults for zero values
+	if cfg.SessionTimeout == 0 {
+		cfg.SessionTimeout = DefaultSessionTimeout
 	}
-
-	podReadyTimeout := DefaultPodReadyTimeout
-	if envTimeout := os.Getenv("POD_READY_TIMEOUT"); envTimeout != "" {
-		if seconds, err := strconv.Atoi(envTimeout); err == nil {
-			podReadyTimeout = time.Duration(seconds) * time.Second
-		}
+	if cfg.CleanupInterval == 0 {
+		cfg.CleanupInterval = DefaultCleanupInterval
+	}
+	if cfg.PodReadyTimeout == 0 {
+		cfg.PodReadyTimeout = DefaultPodReadyTimeout
 	}
 
 	return &Manager{
 		db:              database,
-		sessionTimeout:  timeout,
-		cleanupInterval: cleanupInterval,
-		podReadyTimeout: podReadyTimeout,
+		sessionTimeout:  cfg.SessionTimeout,
+		cleanupInterval: cfg.CleanupInterval,
+		podReadyTimeout: cfg.PodReadyTimeout,
 		stopCh:          make(chan struct{}),
 		sessions:        make(map[string]*db.Session),
 	}

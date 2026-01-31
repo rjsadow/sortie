@@ -16,16 +16,43 @@ var (
 	client     *kubernetes.Clientset
 	clientErr  error
 	namespace  string
+
+	// Configuration set via Configure()
+	configuredNamespace       string
+	configuredKubeconfig      string
+	configuredVNCSidecarImage string
 )
 
+// Configure sets the Kubernetes configuration from the application config.
+// This should be called once at application startup before any other k8s operations.
+func Configure(ns, kubeconfig, vncSidecarImage string) {
+	configuredNamespace = ns
+	configuredKubeconfig = kubeconfig
+	configuredVNCSidecarImage = vncSidecarImage
+}
+
+// GetVNCSidecarImage returns the configured VNC sidecar image.
+func GetVNCSidecarImage() string {
+	if configuredVNCSidecarImage != "" {
+		return configuredVNCSidecarImage
+	}
+	return VNCSidecarImage
+}
+
 // GetNamespace returns the Kubernetes namespace to use for sessions.
-// Priority: LAUNCHPAD_NAMESPACE env var > in-cluster namespace > "default"
+// Priority: configured value > LAUNCHPAD_NAMESPACE env var > in-cluster namespace > "default"
 func GetNamespace() string {
 	if namespace != "" {
 		return namespace
 	}
 
-	// Check environment variable first
+	// Check configured value first
+	if configuredNamespace != "" {
+		namespace = configuredNamespace
+		return namespace
+	}
+
+	// Check environment variable (legacy support)
 	if ns := os.Getenv("LAUNCHPAD_NAMESPACE"); ns != "" {
 		namespace = ns
 		return namespace
@@ -69,9 +96,12 @@ func GetClient() (*kubernetes.Clientset, error) {
 }
 
 // buildConfigFromKubeconfig builds a REST config from kubeconfig file.
-// Priority: KUBECONFIG env var > ~/.kube/config
+// Priority: configured value > KUBECONFIG env var > ~/.kube/config
 func buildConfigFromKubeconfig() (*rest.Config, error) {
-	kubeconfigPath := os.Getenv("KUBECONFIG")
+	kubeconfigPath := configuredKubeconfig
+	if kubeconfigPath == "" {
+		kubeconfigPath = os.Getenv("KUBECONFIG")
+	}
 	if kubeconfigPath == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -94,4 +124,7 @@ func ResetClient() {
 	client = nil
 	clientErr = nil
 	namespace = ""
+	configuredNamespace = ""
+	configuredKubeconfig = ""
+	configuredVNCSidecarImage = ""
 }
