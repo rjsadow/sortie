@@ -1,0 +1,1066 @@
+openapi: 3.1.0
+info:
+  title: Launchpad API
+  description: |
+    API for Launchpad - a centralized application launcher for large organizations.
+
+    Launchpad provides a single portal to launch dozens or hundreds of custom applications,
+    with support for both URL-based and container-based application launching.
+  version: 1.0.0
+  contact:
+    name: Launchpad Team
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://launchpad.example.com
+    description: Production server
+
+tags:
+  - name: Apps
+    description: Application management (CRUD operations)
+  - name: Sessions
+    description: Container session lifecycle management
+  - name: Auth
+    description: Authentication endpoints (SSO/OIDC)
+  - name: Health
+    description: Service health and status
+  - name: Analytics
+    description: Usage analytics and statistics
+  - name: Config
+    description: Tenant configuration and branding
+  - name: Audit
+    description: Audit logging
+
+# Default security - most endpoints require authentication
+# Public endpoints explicitly override with security: []
+security:
+  - sessionCookie: []
+
+paths:
+  # ===================
+  # Health Endpoints
+  # ===================
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Get service health status
+      description: Returns the health status of the Launchpad service and its dependencies.
+      operationId: getHealth
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /api/health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness probe
+      description: Kubernetes readiness probe endpoint. Returns 200 when the service is ready to accept traffic.
+      operationId: getReadiness
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Service is ready
+        '503':
+          description: Service is not ready
+
+  /api/health/live:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe
+      description: Kubernetes liveness probe endpoint. Returns 200 when the service is alive.
+      operationId: getLiveness
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Service is alive
+        '503':
+          description: Service is not alive
+
+  # ===================
+  # Auth Endpoints
+  # ===================
+  /api/auth/login:
+    get:
+      tags:
+        - Auth
+      summary: Initiate login
+      description: |
+        Initiates the authentication flow. Redirects the user to the configured
+        identity provider (SAML/OIDC) for authentication.
+      operationId: login
+      security: []  # Public endpoint - initiates auth flow
+      parameters:
+        - name: redirect_uri
+          in: query
+          description: URL to redirect to after successful authentication
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect to identity provider
+          headers:
+            Location:
+              description: Identity provider login URL
+              schema:
+                type: string
+                format: uri
+
+  /api/auth/callback:
+    get:
+      tags:
+        - Auth
+      summary: Authentication callback
+      description: |
+        Callback endpoint for the identity provider. Processes the authentication
+        response and establishes a session.
+      operationId: authCallback
+      security: []  # Public endpoint - receives auth provider callback
+      parameters:
+        - name: code
+          in: query
+          description: Authorization code from identity provider (OIDC)
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: State parameter for CSRF protection
+          schema:
+            type: string
+        - name: SAMLResponse
+          in: query
+          description: SAML response (for SAML providers)
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to original destination after successful auth
+          headers:
+            Location:
+              description: Original redirect URI
+              schema:
+                type: string
+                format: uri
+            Set-Cookie:
+              description: Session cookie
+              schema:
+                type: string
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout
+      description: Terminates the user session and clears authentication state.
+      operationId: logout
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Successfully logged out"
+        '302':
+          description: Redirect to identity provider logout (if configured)
+          headers:
+            Location:
+              description: Identity provider logout URL
+              schema:
+                type: string
+                format: uri
+
+  /api/auth/user:
+    get:
+      tags:
+        - Auth
+      summary: Get current user
+      description: Returns information about the currently authenticated user.
+      operationId: getCurrentUser
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ===================
+  # Apps Endpoints
+  # ===================
+  /api/apps:
+    get:
+      tags:
+        - Apps
+      summary: List all applications
+      description: Returns a list of all configured applications.
+      operationId: listApps
+      security: []  # Public endpoint - app list is public
+      responses:
+        '200':
+          description: List of applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Application'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Apps
+      summary: Create an application
+      description: Creates a new application in the launchpad.
+      operationId: createApp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationCreate'
+      responses:
+        '201':
+          description: Application created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          description: Invalid request body or missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Application with this ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/apps/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Application ID
+        schema:
+          type: string
+        example: "jenkins"
+
+    get:
+      tags:
+        - Apps
+      summary: Get an application
+      description: Returns a single application by ID.
+      operationId: getApp
+      responses:
+        '200':
+          description: Application details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '404':
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Apps
+      summary: Update an application
+      description: Updates an existing application.
+      operationId: updateApp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationUpdate'
+      responses:
+        '200':
+          description: Application updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          description: Invalid request body or missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Apps
+      summary: Delete an application
+      description: Deletes an application from the launchpad.
+      operationId: deleteApp
+      responses:
+        '204':
+          description: Application deleted successfully
+        '404':
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ===================
+  # Sessions Endpoints
+  # ===================
+  /api/sessions:
+    get:
+      tags:
+        - Sessions
+      summary: List sessions
+      description: Returns a list of active container sessions. Optionally filter by user.
+      operationId: listSessions
+      parameters:
+        - name: user_id
+          in: query
+          description: Filter sessions by user ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Sessions
+      summary: Create a session
+      description: |
+        Creates a new container session for a container-based application.
+        This will provision a Kubernetes pod running the application container
+        with a VNC sidecar for browser-based access.
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          description: Invalid request or application not configured for container launch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Session ID
+        schema:
+          type: string
+        example: "sess-abc123"
+
+    get:
+      tags:
+        - Sessions
+      summary: Get a session
+      description: Returns details of a specific session including its current status.
+      operationId: getSession
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Sessions
+      summary: Terminate a session
+      description: |
+        Terminates an active session. This will delete the associated Kubernetes pod
+        and clean up all resources.
+      operationId: terminateSession
+      responses:
+        '204':
+          description: Session terminated successfully
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ws/sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Session ID
+        schema:
+          type: string
+        example: "sess-abc123"
+
+    get:
+      tags:
+        - Sessions
+      summary: WebSocket connection for session VNC
+      description: |
+        WebSocket endpoint for streaming VNC data from a container session.
+        Connect to this endpoint to receive the graphical output from the
+        container application.
+
+        **Protocol**: WebSocket binary frames containing VNC RFB protocol data.
+      operationId: sessionWebSocket
+      responses:
+        '101':
+          description: WebSocket upgrade successful
+        '404':
+          description: Session not found
+        '500':
+          description: Internal server error
+
+  # ===================
+  # Analytics Endpoints
+  # ===================
+  /api/analytics/launch:
+    post:
+      tags:
+        - Analytics
+      summary: Record app launch
+      description: Records an application launch event for analytics tracking.
+      operationId: recordLaunch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - app_id
+              properties:
+                app_id:
+                  type: string
+                  description: ID of the launched application
+                  example: "jenkins"
+      responses:
+        '201':
+          description: Launch recorded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "recorded"
+        '400':
+          description: Missing app_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/analytics/stats:
+    get:
+      tags:
+        - Analytics
+      summary: Get analytics statistics
+      description: Returns usage statistics including total launches and per-app breakdown.
+      operationId: getAnalyticsStats
+      responses:
+        '200':
+          description: Analytics statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsStats'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ===================
+  # Config Endpoints
+  # ===================
+  /api/config:
+    get:
+      tags:
+        - Config
+      summary: Get branding configuration
+      description: Returns tenant-specific branding configuration (logo, colors, name).
+      operationId: getConfig
+      security: []  # Public endpoint - branding is public
+      responses:
+        '200':
+          description: Branding configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandingConfig'
+
+  # ===================
+  # Audit Endpoints
+  # ===================
+  /api/audit:
+    get:
+      tags:
+        - Audit
+      summary: Get audit logs
+      description: Returns recent audit log entries (up to 100).
+      operationId: getAuditLogs
+      responses:
+        '200':
+          description: List of audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLog'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ===================
+  # Legacy Endpoints
+  # ===================
+  /apps.json:
+    get:
+      tags:
+        - Apps
+      summary: Get apps (legacy format)
+      description: |
+        Returns applications in the legacy JSON format for frontend compatibility.
+        **Deprecated**: Use `/api/apps` instead.
+      operationId: getAppsLegacy
+      deprecated: true
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Applications in legacy format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Application'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: launchpad_session
+      description: Session cookie set after successful authentication
+
+  schemas:
+    # ===================
+    # Application Schemas
+    # ===================
+    Application:
+      type: object
+      required:
+        - id
+        - name
+        - url
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the application
+          example: "jenkins"
+        name:
+          type: string
+          description: Display name of the application
+          example: "Jenkins CI"
+        description:
+          type: string
+          description: Brief description of the application
+          example: "Continuous integration and deployment server"
+        url:
+          type: string
+          format: uri
+          description: URL to launch the application (for URL-based apps)
+          example: "https://jenkins.example.com"
+        icon:
+          type: string
+          description: Path or URL to the application icon
+          example: "/icons/jenkins.png"
+        category:
+          type: string
+          description: Category for grouping applications
+          example: "Development"
+        launch_type:
+          type: string
+          enum:
+            - url
+            - container
+          default: url
+          description: How the application is launched
+          example: "url"
+        container_image:
+          type: string
+          description: Container image for container-based applications
+          example: "jenkins/jenkins:lts"
+
+    ApplicationCreate:
+      type: object
+      required:
+        - id
+        - name
+        - url
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the application
+          example: "jenkins"
+        name:
+          type: string
+          description: Display name of the application
+          example: "Jenkins CI"
+        description:
+          type: string
+          description: Brief description of the application
+          example: "Continuous integration and deployment server"
+        url:
+          type: string
+          format: uri
+          description: URL to launch the application
+          example: "https://jenkins.example.com"
+        icon:
+          type: string
+          description: Path or URL to the application icon
+          example: "/icons/jenkins.png"
+        category:
+          type: string
+          description: Category for grouping applications
+          example: "Development"
+        launch_type:
+          type: string
+          enum:
+            - url
+            - container
+          default: url
+          description: How the application is launched
+        container_image:
+          type: string
+          description: Container image (required if launch_type is container)
+          example: "jenkins/jenkins:lts"
+
+    ApplicationUpdate:
+      type: object
+      required:
+        - name
+        - url
+      properties:
+        name:
+          type: string
+          description: Display name of the application
+          example: "Jenkins CI"
+        description:
+          type: string
+          description: Brief description of the application
+          example: "Continuous integration and deployment server"
+        url:
+          type: string
+          format: uri
+          description: URL to launch the application
+          example: "https://jenkins.example.com"
+        icon:
+          type: string
+          description: Path or URL to the application icon
+          example: "/icons/jenkins.png"
+        category:
+          type: string
+          description: Category for grouping applications
+          example: "Development"
+        launch_type:
+          type: string
+          enum:
+            - url
+            - container
+          description: How the application is launched
+        container_image:
+          type: string
+          description: Container image (required if launch_type is container)
+          example: "jenkins/jenkins:lts"
+
+    # ===================
+    # Session Schemas
+    # ===================
+    CreateSessionRequest:
+      type: object
+      required:
+        - app_id
+      properties:
+        app_id:
+          type: string
+          description: ID of the application to launch
+          example: "vscode"
+        user_id:
+          type: string
+          description: User ID (defaults to "anonymous" if not provided)
+          example: "user123"
+
+    SessionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique session identifier
+          example: "sess-abc123"
+        user_id:
+          type: string
+          description: ID of the user who created the session
+          example: "user123"
+        app_id:
+          type: string
+          description: ID of the application
+          example: "vscode"
+        app_name:
+          type: string
+          description: Name of the application
+          example: "Visual Studio Code"
+        pod_name:
+          type: string
+          description: Kubernetes pod name
+          example: "launchpad-sess-abc123"
+        status:
+          type: string
+          enum:
+            - pending
+            - creating
+            - running
+            - terminating
+            - terminated
+            - failed
+          description: Current status of the session
+          example: "running"
+        websocket_url:
+          type: string
+          description: WebSocket URL for VNC streaming
+          example: "/ws/sessions/sess-abc123"
+        created_at:
+          type: string
+          format: date-time
+          description: When the session was created
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the session was last updated
+          example: "2024-01-15T10:31:00Z"
+
+    # ===================
+    # Auth Schemas
+    # ===================
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique user identifier
+          example: "user123"
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: "user@example.com"
+        name:
+          type: string
+          description: User display name
+          example: "John Doe"
+        roles:
+          type: array
+          items:
+            type: string
+          description: User roles for authorization
+          example: ["user", "admin"]
+
+    # ===================
+    # Health Schemas
+    # ===================
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - unhealthy
+            - degraded
+          description: Overall health status
+          example: "healthy"
+        version:
+          type: string
+          description: Application version
+          example: "1.0.0"
+        uptime:
+          type: string
+          description: Service uptime
+          example: "24h15m30s"
+        checks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HealthCheck'
+          description: Individual health checks
+          example:
+            database:
+              status: "healthy"
+              latency_ms: 5
+            kubernetes:
+              status: "healthy"
+              latency_ms: 12
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - unhealthy
+          description: Health check status
+          example: "healthy"
+        latency_ms:
+          type: integer
+          description: Latency in milliseconds
+          example: 5
+        error:
+          type: string
+          description: Error message if unhealthy
+          example: "connection refused"
+
+    # ===================
+    # Analytics Schemas
+    # ===================
+    AnalyticsStats:
+      type: object
+      properties:
+        total_launches:
+          type: integer
+          description: Total number of app launches
+          example: 1500
+        app_stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppStats'
+          description: Per-application statistics
+
+    AppStats:
+      type: object
+      properties:
+        app_id:
+          type: string
+          description: Application ID
+          example: "jenkins"
+        app_name:
+          type: string
+          description: Application name
+          example: "Jenkins CI"
+        launch_count:
+          type: integer
+          description: Number of launches
+          example: 250
+
+    # ===================
+    # Config Schemas
+    # ===================
+    BrandingConfig:
+      type: object
+      properties:
+        logo_url:
+          type: string
+          description: URL to the tenant logo
+          example: "https://example.com/logo.png"
+        primary_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Primary brand color (hex)
+          example: "#398D9B"
+        secondary_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          description: Secondary brand color (hex)
+          example: "#4AB7C3"
+        tenant_name:
+          type: string
+          description: Tenant/organization name
+          example: "Acme Corp"
+
+    # ===================
+    # Audit Schemas
+    # ===================
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Audit log entry ID
+          example: 1
+        timestamp:
+          type: string
+          format: date-time
+          description: When the action occurred
+          example: "2024-01-15T10:30:00Z"
+        user:
+          type: string
+          description: User who performed the action
+          example: "admin"
+        action:
+          type: string
+          description: Action that was performed
+          example: "CREATE_APP"
+        details:
+          type: string
+          description: Additional details about the action
+          example: "Created app: Jenkins CI (jenkins)"
+
+    # ===================
+    # Error Schema
+    # ===================
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Application not found"
+        code:
+          type: string
+          description: Error code for programmatic handling
+          example: "NOT_FOUND"
