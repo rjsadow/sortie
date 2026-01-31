@@ -1,0 +1,7 @@
+# False positive: RFC 6455 example WebSocket key used in documentation
+# This is the standard test key from the WebSocket RFC, not an actual secret
+2d013ca363147747c8d02acd6a9797e6db4fcea2:docs/REVERSE_PROXY.md:generic-api-key:270
+4efe0f6b9dc34a2f2ee436e62c3d500a63e72f01:docs/REVERSE_PROXY.md:generic-api-key:270
+aef0f3fcc8f911f59e14973b3aecf8b0c6fb9df5:docs/REVERSE_PROXY.md:generic-api-key:270
+257e2dce1934de5f9529ecaea9e68603f8deeaad:docs/REVERSE_PROXY.md:generic-api-key:270
+fe8fb6ce740430572efd20f1fab40b0bc8ebe446:docs/REVERSE_PROXY.md:generic-api-key:270
