@@ -20,3 +20,7 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+
+# Database
+*.db
+*.db-journal
