@@ -15,6 +15,7 @@ import (
 	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
 	"github.com/rjsadow/launchpad/internal/k8s"
+	"github.com/rjsadow/launchpad/internal/middleware"
 	"github.com/rjsadow/launchpad/internal/sessions"
 	"github.com/rjsadow/launchpad/internal/websocket"
 )
@@ -118,7 +119,10 @@ func main() {
 	addr := fmt.Sprintf(":%d", appConfig.Port)
 	log.Printf("Launchpad server starting on http://localhost%s", addr)
 
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	// Wrap default mux with security headers middleware
+	handler := middleware.SecurityHeaders(http.DefaultServeMux)
+
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatal("Server error:", err)
 		os.Exit(1)
 	}
