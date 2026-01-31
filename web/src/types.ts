@@ -15,7 +15,13 @@ export interface AppConfig {
   applications: Application[];
 }
 
-export type SessionStatus = 'pending' | 'creating' | 'running' | 'terminating' | 'terminated' | 'failed';
+// Session state machine:
+//   creating -> running (pod ready)
+//   creating -> failed  (pod creation failed)
+//   running  -> stopped (user terminated)
+//   running  -> expired (timeout cleanup)
+//   running  -> failed  (runtime error)
+export type SessionStatus = 'creating' | 'running' | 'failed' | 'stopped' | 'expired';
 
 export interface Session {
   id: string;

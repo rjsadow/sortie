@@ -44,16 +44,22 @@ type AuditLog struct {
 	Details   string    `json:"details"`
 }
 
-// SessionStatus represents the status of a container session
+// SessionStatus represents the status of a container session.
+// Valid states: creating, running, failed, stopped, expired
+// State machine:
+//   creating -> running (pod ready)
+//   creating -> failed  (pod creation failed)
+//   running  -> stopped (user terminated)
+//   running  -> expired (timeout cleanup)
+//   running  -> failed  (runtime error)
 type SessionStatus string
 
 const (
-	SessionStatusPending     SessionStatus = "pending"
-	SessionStatusCreating    SessionStatus = "creating"
-	SessionStatusRunning     SessionStatus = "running"
-	SessionStatusTerminating SessionStatus = "terminating"
-	SessionStatusTerminated  SessionStatus = "terminated"
-	SessionStatusFailed      SessionStatus = "failed"
+	SessionStatusCreating SessionStatus = "creating"
+	SessionStatusRunning  SessionStatus = "running"
+	SessionStatusFailed   SessionStatus = "failed"
+	SessionStatusStopped  SessionStatus = "stopped"
+	SessionStatusExpired  SessionStatus = "expired"
 )
 
 // Session represents an active container session

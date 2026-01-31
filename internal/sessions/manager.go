@@ -103,7 +103,7 @@ func (m *Manager) cleanupLoop() {
 	}
 }
 
-// cleanupStaleSessions terminates sessions that have been running too long
+// cleanupStaleSessions expires sessions that have been running too long
 func (m *Manager) cleanupStaleSessions() error {
 	sessions, err := m.db.GetStaleSessions(m.sessionTimeout)
 	if err != nil {
@@ -111,9 +111,9 @@ func (m *Manager) cleanupStaleSessions() error {
 	}
 
 	for _, session := range sessions {
-		log.Printf("Cleaning up stale session: %s (pod: %s)", session.ID, session.PodName)
-		if err := m.TerminateSession(context.Background(), session.ID); err != nil {
-			log.Printf("Error terminating stale session %s: %v", session.ID, err)
+		log.Printf("Expiring stale session: %s (pod: %s)", session.ID, session.PodName)
+		if err := m.ExpireSession(context.Background(), session.ID); err != nil {
+			log.Printf("Error expiring stale session %s: %v", session.ID, err)
 		}
 	}
 
@@ -186,7 +186,7 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 
 	// Wait for pod to be ready
 	if err := k8s.WaitForPodReady(ctx, podName, m.podReadyTimeout); err != nil {
-		log.Printf("Pod %s failed to become ready: %v", podName, err)
+		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("pod failed to become ready: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
 		return
 	}
@@ -194,7 +194,7 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	// Get pod IP
 	podIP, err := k8s.GetPodIP(ctx, podName)
 	if err != nil {
-		log.Printf("Failed to get pod IP for %s: %v", podName, err)
+		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("failed to get pod IP: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
 		return
 	}
@@ -203,6 +203,8 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	if err := m.db.UpdateSessionPodIP(sessionID, podIP); err != nil {
 		log.Printf("Failed to update pod IP for session %s: %v", sessionID, err)
 	}
+
+	LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusRunning, "pod ready")
 	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusRunning); err != nil {
 		log.Printf("Failed to update session status for %s: %v", sessionID, err)
 	}
@@ -214,8 +216,6 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 		session.Status = db.SessionStatusRunning
 	}
 	m.mu.Unlock()
-
-	log.Printf("Session %s is now running (pod: %s, IP: %s)", sessionID, podName, podIP)
 }
 
 // GetSession returns a session by ID
@@ -255,8 +255,18 @@ func (m *Manager) ListSessionsByUser(ctx context.Context, userID string) ([]db.S
 	return sessions, nil
 }
 
-// TerminateSession terminates a session and deletes the pod
+// TerminateSession stops a session (user-initiated) and deletes the pod
 func (m *Manager) TerminateSession(ctx context.Context, sessionID string) error {
+	return m.terminateWithStatus(ctx, sessionID, db.SessionStatusStopped, "user requested")
+}
+
+// ExpireSession expires a session (timeout-initiated) and deletes the pod
+func (m *Manager) ExpireSession(ctx context.Context, sessionID string) error {
+	return m.terminateWithStatus(ctx, sessionID, db.SessionStatusExpired, "session timeout")
+}
+
+// terminateWithStatus handles session termination with the specified final status
+func (m *Manager) terminateWithStatus(ctx context.Context, sessionID string, finalStatus db.SessionStatus, reason string) error {
 	// Get session
 	session, err := m.GetSession(ctx, sessionID)
 	if err != nil {
@@ -266,9 +276,14 @@ func (m *Manager) TerminateSession(ctx context.Context, sessionID string) error 
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
 
-	// Update status to terminating
-	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusTerminating); err != nil {
-		log.Printf("Failed to update session status to terminating: %v", err)
+	// Validate state transition
+	if err := ValidateAndLogTransition(sessionID, session.Status, finalStatus, reason); err != nil {
+		// If already in a terminal state, just log and return success
+		if IsTerminalState(session.Status) {
+			log.Printf("Session %s already in terminal state: %s", sessionID, session.Status)
+			return nil
+		}
+		return err
 	}
 
 	// Delete the pod
@@ -276,8 +291,8 @@ func (m *Manager) TerminateSession(ctx context.Context, sessionID string) error 
 		log.Printf("Warning: failed to delete pod %s: %v", session.PodName, err)
 	}
 
-	// Update status to terminated
-	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusTerminated); err != nil {
+	// Update status to final state
+	if err := m.db.UpdateSessionStatus(sessionID, finalStatus); err != nil {
 		return fmt.Errorf("failed to update session status: %w", err)
 	}
 
@@ -286,7 +301,6 @@ func (m *Manager) TerminateSession(ctx context.Context, sessionID string) error 
 	delete(m.sessions, sessionID)
 	m.mu.Unlock()
 
-	log.Printf("Session %s terminated (pod: %s)", sessionID, session.PodName)
 	return nil
 }
 

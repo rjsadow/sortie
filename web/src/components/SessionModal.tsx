@@ -55,7 +55,6 @@ export function SessionModal({ app, isOpen, onClose, darkMode }: SessionModalPro
 
     // Derive from session status
     switch (session.status) {
-      case 'pending':
       case 'creating':
         return { connectionState: 'waiting', statusMessage: 'Starting container...' };
       case 'running':
@@ -65,7 +64,8 @@ export function SessionModal({ app, isOpen, onClose, darkMode }: SessionModalPro
         return { connectionState: 'waiting', statusMessage: 'Waiting for container...' };
       case 'failed':
         return { connectionState: 'error', statusMessage: error || 'Session failed to start' };
-      case 'terminated':
+      case 'stopped':
+      case 'expired':
         return { connectionState: 'idle', statusMessage: '' };
       default:
         return { connectionState: 'idle', statusMessage: '' };
@@ -74,7 +74,9 @@ export function SessionModal({ app, isOpen, onClose, darkMode }: SessionModalPro
 
   // Handle close
   const handleClose = useCallback(async () => {
-    if (session && session.status !== 'terminated' && session.status !== 'failed') {
+    // Only terminate if not already in a terminal state
+    const terminalStates = ['stopped', 'expired', 'failed'];
+    if (session && !terminalStates.includes(session.status)) {
       await terminateSession();
     }
     onClose();

@@ -64,7 +64,7 @@ export function useSession(): UseSessionReturn {
       const updatedSession = await pollSessionStatus(sessionId);
       if (updatedSession) {
         // Stop polling if session is in a terminal state
-        if (['running', 'terminated', 'failed'].includes(updatedSession.status)) {
+        if (['running', 'stopped', 'expired', 'failed'].includes(updatedSession.status)) {
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
