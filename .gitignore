@@ -2,7 +2,8 @@
 web/node_modules/
 
 # Build outputs
-web/dist/
+web/dist/*
+!web/dist/.gitkeep
 launchpad
 
 # IDE

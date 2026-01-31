@@ -1,0 +1,2 @@
+# This file ensures the dist directory exists for go:embed
+# The actual build output will be placed here by `npm run build`
