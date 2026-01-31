@@ -1,5 +1,13 @@
 export type LaunchType = 'url' | 'container';
 
+// ResourceLimits defines CPU and memory constraints for container applications
+export interface ResourceLimits {
+  cpu_request?: string;    // CPU request (e.g., "100m", "0.5")
+  cpu_limit?: string;      // CPU limit (e.g., "1", "2")
+  memory_request?: string; // Memory request (e.g., "256Mi", "1Gi")
+  memory_limit?: string;   // Memory limit (e.g., "512Mi", "2Gi")
+}
+
 export interface Application {
   id: string;
   name: string;
@@ -9,6 +17,7 @@ export interface Application {
   category: string;
   launch_type: LaunchType;
   container_image?: string;
+  resource_limits?: ResourceLimits; // Resource limits for container apps
 }
 
 export interface AppConfig {

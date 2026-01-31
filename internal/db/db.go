@@ -18,16 +18,25 @@ const (
 	LaunchTypeContainer LaunchType = "container"
 )
 
+// ResourceLimits defines CPU and memory resource constraints for container applications
+type ResourceLimits struct {
+	CPURequest    string `json:"cpu_request,omitempty"`    // CPU request (e.g., "100m", "0.5")
+	CPULimit      string `json:"cpu_limit,omitempty"`      // CPU limit (e.g., "1", "2")
+	MemoryRequest string `json:"memory_request,omitempty"` // Memory request (e.g., "256Mi", "1Gi")
+	MemoryLimit   string `json:"memory_limit,omitempty"`   // Memory limit (e.g., "512Mi", "2Gi")
+}
+
 // Application represents an app in the launchpad
 type Application struct {
-	ID             string     `json:"id"`
-	Name           string     `json:"name"`
-	Description    string     `json:"description"`
-	URL            string     `json:"url"`
-	Icon           string     `json:"icon"`
-	Category       string     `json:"category"`
-	LaunchType     LaunchType `json:"launch_type"`
-	ContainerImage string     `json:"container_image,omitempty"`
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	URL            string          `json:"url"`
+	Icon           string          `json:"icon"`
+	Category       string          `json:"category"`
+	LaunchType     LaunchType      `json:"launch_type"`
+	ContainerImage string          `json:"container_image,omitempty"`
+	ResourceLimits *ResourceLimits `json:"resource_limits,omitempty"` // Resource limits for container apps
 }
 
 // AppConfig is the JSON structure for apps.json
@@ -111,7 +120,11 @@ func (db *DB) migrate() error {
 		icon TEXT NOT NULL,
 		category TEXT NOT NULL,
 		launch_type TEXT NOT NULL DEFAULT 'url',
-		container_image TEXT DEFAULT ''
+		container_image TEXT DEFAULT '',
+		cpu_request TEXT DEFAULT '',
+		cpu_limit TEXT DEFAULT '',
+		memory_request TEXT DEFAULT '',
+		memory_limit TEXT DEFAULT ''
 	);
 
 	CREATE TABLE IF NOT EXISTS audit_log (
@@ -156,6 +169,10 @@ func (db *DB) migrate() error {
 	migrations := []string{
 		"ALTER TABLE applications ADD COLUMN launch_type TEXT NOT NULL DEFAULT 'url'",
 		"ALTER TABLE applications ADD COLUMN container_image TEXT DEFAULT ''",
+		"ALTER TABLE applications ADD COLUMN cpu_request TEXT DEFAULT ''",
+		"ALTER TABLE applications ADD COLUMN cpu_limit TEXT DEFAULT ''",
+		"ALTER TABLE applications ADD COLUMN memory_request TEXT DEFAULT ''",
+		"ALTER TABLE applications ADD COLUMN memory_limit TEXT DEFAULT ''",
 	}
 
 	for _, migration := range migrations {
@@ -202,7 +219,7 @@ func (db *DB) SeedFromJSON(jsonPath string) error {
 
 // ListApps returns all applications
 func (db *DB) ListApps() ([]Application, error) {
-	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, container_image FROM applications ORDER BY category, name")
+	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, container_image, cpu_request, cpu_limit, memory_request, memory_limit FROM applications ORDER BY category, name")
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +229,8 @@ func (db *DB) ListApps() ([]Application, error) {
 	for rows.Next() {
 		var app Application
 		var launchType, containerImage string
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage); err != nil {
+		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
+		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit); err != nil {
 			return nil, err
 		}
 		app.LaunchType = LaunchType(launchType)
@@ -220,6 +238,15 @@ func (db *DB) ListApps() ([]Application, error) {
 			app.LaunchType = LaunchTypeURL
 		}
 		app.ContainerImage = containerImage
+		// Set resource limits if any are specified
+		if cpuRequest != "" || cpuLimit != "" || memoryRequest != "" || memoryLimit != "" {
+			app.ResourceLimits = &ResourceLimits{
+				CPURequest:    cpuRequest,
+				CPULimit:      cpuLimit,
+				MemoryRequest: memoryRequest,
+				MemoryLimit:   memoryLimit,
+			}
+		}
 		apps = append(apps, app)
 	}
 
@@ -230,10 +257,11 @@ func (db *DB) ListApps() ([]Application, error) {
 func (db *DB) GetApp(id string) (*Application, error) {
 	var app Application
 	var launchType, containerImage string
+	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 	err := db.conn.QueryRow(
-		"SELECT id, name, description, url, icon, category, launch_type, container_image FROM applications WHERE id = ?",
+		"SELECT id, name, description, url, icon, category, launch_type, container_image, cpu_request, cpu_limit, memory_request, memory_limit FROM applications WHERE id = ?",
 		id,
-	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage)
+	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -246,6 +274,15 @@ func (db *DB) GetApp(id string) (*Application, error) {
 		app.LaunchType = LaunchTypeURL
 	}
 	app.ContainerImage = containerImage
+	// Set resource limits if any are specified
+	if cpuRequest != "" || cpuLimit != "" || memoryRequest != "" || memoryLimit != "" {
+		app.ResourceLimits = &ResourceLimits{
+			CPURequest:    cpuRequest,
+			CPULimit:      cpuLimit,
+			MemoryRequest: memoryRequest,
+			MemoryLimit:   memoryLimit,
+		}
+	}
 	return &app, nil
 }
 
@@ -255,9 +292,17 @@ func (db *DB) CreateApp(app Application) error {
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
 	}
+	// Extract resource limits (use empty strings if not specified)
+	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
+	if app.ResourceLimits != nil {
+		cpuRequest = app.ResourceLimits.CPURequest
+		cpuLimit = app.ResourceLimits.CPULimit
+		memoryRequest = app.ResourceLimits.MemoryRequest
+		memoryLimit = app.ResourceLimits.MemoryLimit
+	}
 	_, err := db.conn.Exec(
-		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, container_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage,
+		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, container_image, cpu_request, cpu_limit, memory_request, memory_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
 	)
 	return err
 }
@@ -268,9 +313,17 @@ func (db *DB) UpdateApp(app Application) error {
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
 	}
+	// Extract resource limits (use empty strings if not specified)
+	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
+	if app.ResourceLimits != nil {
+		cpuRequest = app.ResourceLimits.CPURequest
+		cpuLimit = app.ResourceLimits.CPULimit
+		memoryRequest = app.ResourceLimits.MemoryRequest
+		memoryLimit = app.ResourceLimits.MemoryLimit
+	}
 	result, err := db.conn.Exec(
-		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, container_image = ? WHERE id = ?",
-		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, app.ID,
+		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, container_image = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ? WHERE id = ?",
+		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, cpuRequest, cpuLimit, memoryRequest, memoryLimit, app.ID,
 	)
 	if err != nil {
 		return err

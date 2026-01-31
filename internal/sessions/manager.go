@@ -143,6 +143,22 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 	// Create pod configuration
 	podConfig := k8s.DefaultPodConfig(sessionID, app.ID, app.Name, app.ContainerImage)
 
+	// Apply app-specific resource limits if configured
+	if app.ResourceLimits != nil {
+		if app.ResourceLimits.CPURequest != "" {
+			podConfig.CPURequest = app.ResourceLimits.CPURequest
+		}
+		if app.ResourceLimits.CPULimit != "" {
+			podConfig.CPULimit = app.ResourceLimits.CPULimit
+		}
+		if app.ResourceLimits.MemoryRequest != "" {
+			podConfig.MemoryRequest = app.ResourceLimits.MemoryRequest
+		}
+		if app.ResourceLimits.MemoryLimit != "" {
+			podConfig.MemoryLimit = app.ResourceLimits.MemoryLimit
+		}
+	}
+
 	// Build and create the pod
 	pod := k8s.BuildPodSpec(podConfig)
 	createdPod, err := k8s.CreatePod(ctx, pod)

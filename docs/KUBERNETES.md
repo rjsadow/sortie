@@ -104,6 +104,46 @@ Add applications with `launch_type: "container"` to your apps.json:
 }
 ```
 
+### Per-Application Resource Limits
+
+You can specify custom CPU and memory resource limits for container applications.
+If not specified, default values are used (CPU: 500m request / 2 limit,
+Memory: 512Mi request / 2Gi limit).
+
+```json
+{
+  "id": "libreoffice",
+  "name": "LibreOffice",
+  "description": "Full office suite in a container",
+  "url": "",
+  "icon": "https://example.com/libreoffice.png",
+  "category": "Productivity",
+  "launch_type": "container",
+  "container_image": "jlesage/libreoffice:latest",
+  "resource_limits": {
+    "cpu_request": "500m",
+    "cpu_limit": "2",
+    "memory_request": "1Gi",
+    "memory_limit": "4Gi"
+  }
+}
+```
+
+Resource limits use Kubernetes resource quantity notation:
+
+- **CPU**: millicores (e.g., "100m" = 0.1 CPU, "2" = 2 CPUs)
+- **Memory**: bytes with suffix (e.g., "256Mi", "1Gi", "2Gi")
+
+| Field | Description | Default |
+| ----- | ----------- | ------- |
+| `cpu_request` | Minimum CPU guaranteed | `500m` |
+| `cpu_limit` | Maximum CPU allowed | `2` |
+| `memory_request` | Minimum memory guaranteed | `512Mi` |
+| `memory_limit` | Maximum memory allowed | `2Gi` |
+
+**Note**: Resource limits are enforced by Kubernetes. Pods exceeding memory
+limits will be OOM-killed. CPU limits are throttled but not killed.
+
 ### Building Application Images
 
 Application container images must:
