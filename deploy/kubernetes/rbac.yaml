@@ -1,0 +1,51 @@
+---
+# ServiceAccount for Launchpad
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: launchpad
+  namespace: launchpad
+  labels:
+    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/component: server
+
+---
+# Role with minimal permissions for session management
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: launchpad-session-manager
+  namespace: launchpad
+  labels:
+    app.kubernetes.io/name: launchpad
+rules:
+  # Pod management for sessions
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+  # Pod logs for debugging (optional)
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # Events for monitoring pod status
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+---
+# RoleBinding to attach the role to the service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: launchpad-session-manager
+  namespace: launchpad
+  labels:
+    app.kubernetes.io/name: launchpad
+subjects:
+  - kind: ServiceAccount
+    name: launchpad
+    namespace: launchpad
+roleRef:
+  kind: Role
+  name: launchpad-session-manager
+  apiGroup: rbac.authorization.k8s.io

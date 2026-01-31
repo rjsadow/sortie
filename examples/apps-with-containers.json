@@ -1,0 +1,71 @@
+{
+  "applications": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Code hosting platform",
+      "url": "https://github.com",
+      "icon": "https://github.githubassets.com/favicons/favicon.svg",
+      "category": "Development",
+      "launch_type": "url"
+    },
+    {
+      "id": "firefox",
+      "name": "Firefox Browser",
+      "description": "Firefox web browser in a secure container",
+      "url": "",
+      "icon": "https://www.mozilla.org/media/protocol/img/logos/firefox/browser/logo.svg",
+      "category": "Browsers",
+      "launch_type": "container",
+      "container_image": "jlesage/firefox:latest"
+    },
+    {
+      "id": "chromium",
+      "name": "Chromium Browser",
+      "description": "Chromium browser in a secure container",
+      "url": "",
+      "icon": "https://www.chromium.org/_assets/icon-chromium-48x48.png",
+      "category": "Browsers",
+      "launch_type": "container",
+      "container_image": "jlesage/chromium:latest"
+    },
+    {
+      "id": "libreoffice",
+      "name": "LibreOffice",
+      "description": "Full office suite in a container",
+      "url": "",
+      "icon": "https://www.libreoffice.org/themes/libreofficenew/favicon.ico",
+      "category": "Productivity",
+      "launch_type": "container",
+      "container_image": "jlesage/libreoffice:latest"
+    },
+    {
+      "id": "gimp",
+      "name": "GIMP",
+      "description": "GNU Image Manipulation Program",
+      "url": "",
+      "icon": "https://www.gimp.org/images/frontpage/wilber-big.png",
+      "category": "Creative",
+      "launch_type": "container",
+      "container_image": "jlesage/gimp:latest"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "Team communication platform",
+      "url": "https://slack.com",
+      "icon": "https://a.slack-edge.com/80588/marketing/img/meta/favicon-32.png",
+      "category": "Communication",
+      "launch_type": "url"
+    },
+    {
+      "id": "jira",
+      "name": "Jira",
+      "description": "Project tracking and management",
+      "url": "https://www.atlassian.com/software/jira",
+      "icon": "https://wac-cdn.atlassian.com/assets/img/favicons/atlassian/favicon.png",
+      "category": "Project Management",
+      "launch_type": "url"
+    }
+  ]
+}

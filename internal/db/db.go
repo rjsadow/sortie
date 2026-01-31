@@ -10,14 +10,24 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// LaunchType represents how an application is launched
+type LaunchType string
+
+const (
+	LaunchTypeURL       LaunchType = "url"
+	LaunchTypeContainer LaunchType = "container"
+)
+
 // Application represents an app in the launchpad
 type Application struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	URL         string `json:"url"`
-	Icon        string `json:"icon"`
-	Category    string `json:"category"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	URL            string     `json:"url"`
+	Icon           string     `json:"icon"`
+	Category       string     `json:"category"`
+	LaunchType     LaunchType `json:"launch_type"`
+	ContainerImage string     `json:"container_image,omitempty"`
 }
 
 // AppConfig is the JSON structure for apps.json
@@ -32,6 +42,30 @@ type AuditLog struct {
 	User      string    `json:"user"`
 	Action    string    `json:"action"`
 	Details   string    `json:"details"`
+}
+
+// SessionStatus represents the status of a container session
+type SessionStatus string
+
+const (
+	SessionStatusPending     SessionStatus = "pending"
+	SessionStatusCreating    SessionStatus = "creating"
+	SessionStatusRunning     SessionStatus = "running"
+	SessionStatusTerminating SessionStatus = "terminating"
+	SessionStatusTerminated  SessionStatus = "terminated"
+	SessionStatusFailed      SessionStatus = "failed"
+)
+
+// Session represents an active container session
+type Session struct {
+	ID        string        `json:"id"`
+	UserID    string        `json:"user_id"`
+	AppID     string        `json:"app_id"`
+	PodName   string        `json:"pod_name"`
+	PodIP     string        `json:"pod_ip,omitempty"`
+	Status    SessionStatus `json:"status"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
 }
 
 // DB wraps the sql.DB connection
@@ -69,7 +103,9 @@ func (db *DB) migrate() error {
 		description TEXT NOT NULL,
 		url TEXT NOT NULL,
 		icon TEXT NOT NULL,
-		category TEXT NOT NULL
+		category TEXT NOT NULL,
+		launch_type TEXT NOT NULL DEFAULT 'url',
+		container_image TEXT DEFAULT ''
 	);
 
 	CREATE TABLE IF NOT EXISTS audit_log (
@@ -87,12 +123,41 @@ func (db *DB) migrate() error {
 		FOREIGN KEY (app_id) REFERENCES applications(id)
 	);
 
+	CREATE TABLE IF NOT EXISTS sessions (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		app_id TEXT NOT NULL,
+		pod_name TEXT NOT NULL,
+		pod_ip TEXT DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'pending',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (app_id) REFERENCES applications(id)
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
 	CREATE INDEX IF NOT EXISTS idx_analytics_app_id ON analytics(app_id);
 	CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON analytics(timestamp);
+	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+	CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 	`
 	_, err := db.conn.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Run migrations for existing databases (add new columns if they don't exist)
+	migrations := []string{
+		"ALTER TABLE applications ADD COLUMN launch_type TEXT NOT NULL DEFAULT 'url'",
+		"ALTER TABLE applications ADD COLUMN container_image TEXT DEFAULT ''",
+	}
+
+	for _, migration := range migrations {
+		// Ignore errors - column may already exist
+		db.conn.Exec(migration)
+	}
+
+	return nil
 }
 
 // SeedFromJSON loads initial apps from a JSON file if the database is empty
@@ -131,7 +196,7 @@ func (db *DB) SeedFromJSON(jsonPath string) error {
 
 // ListApps returns all applications
 func (db *DB) ListApps() ([]Application, error) {
-	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category FROM applications ORDER BY category, name")
+	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, container_image FROM applications ORDER BY category, name")
 	if err != nil {
 		return nil, err
 	}
@@ -140,9 +205,15 @@ func (db *DB) ListApps() ([]Application, error) {
 	var apps []Application
 	for rows.Next() {
 		var app Application
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category); err != nil {
+		var launchType, containerImage string
+		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage); err != nil {
 			return nil, err
 		}
+		app.LaunchType = LaunchType(launchType)
+		if app.LaunchType == "" {
+			app.LaunchType = LaunchTypeURL
+		}
+		app.ContainerImage = containerImage
 		apps = append(apps, app)
 	}
 
@@ -152,10 +223,11 @@ func (db *DB) ListApps() ([]Application, error) {
 // GetApp returns a single application by ID
 func (db *DB) GetApp(id string) (*Application, error) {
 	var app Application
+	var launchType, containerImage string
 	err := db.conn.QueryRow(
-		"SELECT id, name, description, url, icon, category FROM applications WHERE id = ?",
+		"SELECT id, name, description, url, icon, category, launch_type, container_image FROM applications WHERE id = ?",
 		id,
-	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category)
+	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -163,23 +235,36 @@ func (db *DB) GetApp(id string) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+	app.LaunchType = LaunchType(launchType)
+	if app.LaunchType == "" {
+		app.LaunchType = LaunchTypeURL
+	}
+	app.ContainerImage = containerImage
 	return &app, nil
 }
 
 // CreateApp inserts a new application
 func (db *DB) CreateApp(app Application) error {
+	launchType := string(app.LaunchType)
+	if launchType == "" {
+		launchType = string(LaunchTypeURL)
+	}
 	_, err := db.conn.Exec(
-		"INSERT INTO applications (id, name, description, url, icon, category) VALUES (?, ?, ?, ?, ?, ?)",
-		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category,
+		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, container_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage,
 	)
 	return err
 }
 
 // UpdateApp updates an existing application
 func (db *DB) UpdateApp(app Application) error {
+	launchType := string(app.LaunchType)
+	if launchType == "" {
+		launchType = string(LaunchTypeURL)
+	}
 	result, err := db.conn.Exec(
-		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ? WHERE id = ?",
-		app.Name, app.Description, app.URL, app.Icon, app.Category, app.ID,
+		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, container_image = ? WHERE id = ?",
+		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, app.ID,
 	)
 	if err != nil {
 		return err
@@ -302,4 +387,164 @@ func (db *DB) GetAnalyticsStats() (*AnalyticsStats, error) {
 		TotalLaunches: totalLaunches,
 		AppStats:      appStats,
 	}, nil
+}
+
+// CreateSession creates a new session
+func (db *DB) CreateSession(session Session) error {
+	_, err := db.conn.Exec(
+		"INSERT INTO sessions (id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		session.ID, session.UserID, session.AppID, session.PodName, session.PodIP, string(session.Status), session.CreatedAt, session.UpdatedAt,
+	)
+	return err
+}
+
+// GetSession returns a session by ID
+func (db *DB) GetSession(id string) (*Session, error) {
+	var session Session
+	var status string
+	err := db.conn.QueryRow(
+		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE id = ?",
+		id,
+	).Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	session.Status = SessionStatus(status)
+	return &session, nil
+}
+
+// ListSessions returns all active sessions
+func (db *DB) ListSessions() ([]Session, error) {
+	rows, err := db.conn.Query(
+		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE status NOT IN ('terminated', 'failed') ORDER BY created_at DESC",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var session Session
+		var status string
+		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt); err != nil {
+			return nil, err
+		}
+		session.Status = SessionStatus(status)
+		sessions = append(sessions, session)
+	}
+
+	return sessions, rows.Err()
+}
+
+// ListSessionsByUser returns all sessions for a specific user
+func (db *DB) ListSessionsByUser(userID string) ([]Session, error) {
+	rows, err := db.conn.Query(
+		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE user_id = ? AND status NOT IN ('terminated', 'failed') ORDER BY created_at DESC",
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var session Session
+		var status string
+		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt); err != nil {
+			return nil, err
+		}
+		session.Status = SessionStatus(status)
+		sessions = append(sessions, session)
+	}
+
+	return sessions, rows.Err()
+}
+
+// UpdateSessionStatus updates the status of a session
+func (db *DB) UpdateSessionStatus(id string, status SessionStatus) error {
+	result, err := db.conn.Exec(
+		"UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
+		string(status), time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// UpdateSessionPodIP updates the pod IP of a session
+func (db *DB) UpdateSessionPodIP(id string, podIP string) error {
+	result, err := db.conn.Exec(
+		"UPDATE sessions SET pod_ip = ?, updated_at = ? WHERE id = ?",
+		podIP, time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// DeleteSession removes a session by ID
+func (db *DB) DeleteSession(id string) error {
+	result, err := db.conn.Exec("DELETE FROM sessions WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// GetStaleSessions returns sessions that have been in a non-terminal state for longer than the timeout
+func (db *DB) GetStaleSessions(timeout time.Duration) ([]Session, error) {
+	cutoff := time.Now().Add(-timeout)
+	rows, err := db.conn.Query(
+		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE status NOT IN ('terminated', 'failed') AND updated_at < ?",
+		cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var session Session
+		var status string
+		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt); err != nil {
+			return nil, err
+		}
+		session.Status = SessionStatus(status)
+		sessions = append(sessions, session)
+	}
+
+	return sessions, rows.Err()
 }

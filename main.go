@@ -13,12 +13,15 @@ import (
 	"strings"
 
 	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/launchpad/internal/websocket"
 )
 
 //go:embed web/dist/*
 var embeddedFiles embed.FS
 
 var database *db.DB
+var sessionManager *sessions.Manager
 
 func main() {
 	port := flag.Int("port", 8080, "Port to listen on")
@@ -41,6 +44,14 @@ func main() {
 		}
 	}
 
+	// Initialize session manager
+	sessionManager = sessions.NewManager(database)
+	sessionManager.Start()
+	defer sessionManager.Stop()
+
+	// Initialize WebSocket handler
+	wsHandler := websocket.NewHandler(sessionManager)
+
 	// Get the subdirectory from the embedded filesystem
 	distFS, err := fs.Sub(embeddedFiles, "web/dist")
 	if err != nil {
@@ -57,6 +68,13 @@ func main() {
 	http.HandleFunc("/api/analytics/launch", handleAnalyticsLaunch)
 	http.HandleFunc("/api/analytics/stats", handleAnalyticsStats)
 	http.HandleFunc("/api/config", handleConfig)
+
+	// Session API routes
+	http.HandleFunc("/api/sessions", handleSessions)
+	http.HandleFunc("/api/sessions/", handleSessionByID)
+
+	// WebSocket route for session VNC streams
+	http.Handle("/ws/sessions/", wsHandler)
 
 	// Serve apps.json from database (for frontend compatibility)
 	http.HandleFunc("/apps.json", handleAppsJSON)
@@ -377,4 +395,158 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(config)
+}
+
+// handleSessions handles GET (list) and POST (create) for /api/sessions
+func handleSessions(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		// Optional filter by user_id
+		userID := r.URL.Query().Get("user_id")
+		var sessionList []db.Session
+		var err error
+
+		if userID != "" {
+			sessionList, err = sessionManager.ListSessionsByUser(r.Context(), userID)
+		} else {
+			sessionList, err = sessionManager.ListSessions(r.Context())
+		}
+
+		if err != nil {
+			log.Printf("Error listing sessions: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		if sessionList == nil {
+			sessionList = []db.Session{}
+		}
+
+		// Convert to response format with WebSocket URLs
+		responses := make([]sessions.SessionResponse, len(sessionList))
+		for i, s := range sessionList {
+			app, _ := database.GetApp(s.AppID)
+			appName := ""
+			if app != nil {
+				appName = app.Name
+			}
+			responses[i] = *sessions.SessionFromDB(&s, appName, sessionManager.GetSessionWebSocketURL(&s))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(responses)
+
+	case http.MethodPost:
+		var req sessions.CreateSessionRequest
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if req.AppID == "" {
+			http.Error(w, "Missing required field: app_id", http.StatusBadRequest)
+			return
+		}
+
+		// Default user ID if not provided
+		if req.UserID == "" {
+			req.UserID = "anonymous"
+		}
+
+		session, err := sessionManager.CreateSession(r.Context(), &req)
+		if err != nil {
+			log.Printf("Error creating session: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Get app name for response
+		app, _ := database.GetApp(session.AppID)
+		appName := ""
+		if app != nil {
+			appName = app.Name
+		}
+
+		response := sessions.SessionFromDB(session, appName, sessionManager.GetSessionWebSocketURL(session))
+
+		// Log the action
+		details := fmt.Sprintf("Created session %s for app %s", session.ID, session.AppID)
+		database.LogAudit(req.UserID, "CREATE_SESSION", details)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(response)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleSessionByID handles GET and DELETE for /api/sessions/{id}
+func handleSessionByID(w http.ResponseWriter, r *http.Request) {
+	// Extract ID from path
+	id := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
+	if id == "" {
+		http.Error(w, "Missing session ID", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		session, err := sessionManager.GetSession(r.Context(), id)
+		if err != nil {
+			log.Printf("Error getting session: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if session == nil {
+			http.Error(w, "Session not found", http.StatusNotFound)
+			return
+		}
+
+		// Get app name for response
+		app, _ := database.GetApp(session.AppID)
+		appName := ""
+		if app != nil {
+			appName = app.Name
+		}
+
+		response := sessions.SessionFromDB(session, appName, sessionManager.GetSessionWebSocketURL(session))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	case http.MethodDelete:
+		session, err := sessionManager.GetSession(r.Context(), id)
+		if err != nil {
+			log.Printf("Error getting session: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if session == nil {
+			http.Error(w, "Session not found", http.StatusNotFound)
+			return
+		}
+
+		if err := sessionManager.TerminateSession(r.Context(), id); err != nil {
+			log.Printf("Error terminating session: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Log the action
+		details := fmt.Sprintf("Terminated session %s", id)
+		database.LogAudit("admin", "TERMINATE_SESSION", details)
+
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }

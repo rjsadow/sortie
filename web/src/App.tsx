@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Application, AppConfig } from './types';
+import { SessionModal } from './components/SessionModal';
 
 function App() {
   const [apps, setApps] = useState<Application[]>([]);
@@ -15,7 +16,8 @@ function App() {
     return stored ? new Set(JSON.parse(stored)) : new Set();
   });
   const [focusedIndex, setFocusedIndex] = useState(-1);
-  const appRefs = useRef<(HTMLAnchorElement | null)[]>([]);
+  const [selectedContainerApp, setSelectedContainerApp] = useState<Application | null>(null);
+  const appRefs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
 
   useEffect(() => {
     fetch('/apps.json')
@@ -109,7 +111,12 @@ function App() {
         case 'Enter':
           if (focusedIndex >= 0 && focusedIndex < visibleApps.length) {
             e.preventDefault();
-            window.open(visibleApps[focusedIndex].url, '_blank', 'noopener,noreferrer');
+            const app = visibleApps[focusedIndex];
+            if (app.launch_type === 'container') {
+              setSelectedContainerApp(app);
+            } else {
+              window.open(app.url, '_blank', 'noopener,noreferrer');
+            }
           }
           break;
         case 'Escape':
@@ -281,6 +288,86 @@ function App() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {categoryApps.map((app) => {
                           const currentIndex = appIndex++;
+                          const isContainerApp = app.launch_type === 'container';
+                          const cardClassName = `group bg-gray-50 dark:bg-gray-700 rounded-lg border p-4 hover:shadow-md transition-all duration-200 text-left w-full ${
+                            focusedIndex === currentIndex
+                              ? 'ring-2 ring-brand-primary border-brand-primary'
+                              : 'border-gray-200 dark:border-gray-600 hover:border-brand-secondary'
+                          }`;
+
+                          const cardContent = (
+                            <div className="flex items-start gap-3">
+                              <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
+                                <img
+                                  src={app.icon}
+                                  alt={`${app.name} icon`}
+                                  className="w-8 h-8 object-contain"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src =
+                                      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
+                                      app.name.charAt(0) +
+                                      '</text></svg>';
+                                  }}
+                                />
+                                {isContainerApp && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center" title="Container App">
+                                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-primary truncate">
+                                  {app.name}
+                                </h3>
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                                  {app.description}
+                                </p>
+                              </div>
+                              <svg
+                                className="w-4 h-4 text-gray-400 group-hover:text-brand-primary flex-shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                {isContainerApp ? (
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                  />
+                                ) : (
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                  />
+                                )}
+                              </svg>
+                            </div>
+                          );
+
+                          if (isContainerApp) {
+                            return (
+                              <button
+                                key={app.id}
+                                ref={(el) => { appRefs.current[currentIndex] = el; }}
+                                tabIndex={focusedIndex === currentIndex ? 0 : -1}
+                                onClick={() => {
+                                  setFocusedIndex(currentIndex);
+                                  setSelectedContainerApp(app);
+                                }}
+                                onFocus={() => setFocusedIndex(currentIndex)}
+                                className={cardClassName}
+                              >
+                                {cardContent}
+                              </button>
+                            );
+                          }
+
                           return (
                             <a
                               key={app.id}
@@ -291,48 +378,9 @@ function App() {
                               tabIndex={focusedIndex === currentIndex ? 0 : -1}
                               onClick={() => setFocusedIndex(currentIndex)}
                               onFocus={() => setFocusedIndex(currentIndex)}
-                              className={`group bg-gray-50 dark:bg-gray-700 rounded-lg border p-4 hover:shadow-md transition-all duration-200 ${
-                                focusedIndex === currentIndex
-                                  ? 'ring-2 ring-brand-primary border-brand-primary'
-                                  : 'border-gray-200 dark:border-gray-600 hover:border-brand-secondary'
-                              }`}
+                              className={cardClassName}
                             >
-                              <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden">
-                                  <img
-                                    src={app.icon}
-                                    alt={`${app.name} icon`}
-                                    className="w-8 h-8 object-contain"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src =
-                                        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
-                                        app.name.charAt(0) +
-                                        '</text></svg>';
-                                    }}
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-primary truncate">
-                                    {app.name}
-                                  </h3>
-                                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
-                                    {app.description}
-                                  </p>
-                                </div>
-                                <svg
-                                  className="w-4 h-4 text-gray-400 group-hover:text-brand-primary flex-shrink-0"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                                  />
-                                </svg>
-                              </div>
+                              {cardContent}
                             </a>
                           );
                         })}
@@ -354,6 +402,16 @@ function App() {
           </p>
         </div>
       </footer>
+
+      {/* Session Modal for container apps */}
+      {selectedContainerApp && (
+        <SessionModal
+          app={selectedContainerApp}
+          isOpen={!!selectedContainerApp}
+          onClose={() => setSelectedContainerApp(null)}
+          darkMode={darkMode}
+        />
+      )}
     </div>
   );
 }

@@ -19,5 +19,11 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Allow setState in effects for legitimate patterns like:
+      // - Triggering actions when props change (modal open)
+      // - Resetting state when props change (modal close)
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])

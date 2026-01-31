@@ -1,0 +1,55 @@
+---
+# ResourceQuota to limit namespace resource usage
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: launchpad-quota
+  namespace: launchpad
+  labels:
+    app.kubernetes.io/name: launchpad
+spec:
+  hard:
+    # Limit total pods (server + sessions)
+    pods: "50"
+    # Limit compute resources
+    requests.cpu: "20"
+    requests.memory: "40Gi"
+    limits.cpu: "40"
+    limits.memory: "80Gi"
+    # Limit persistent volume claims (if needed)
+    persistentvolumeclaims: "10"
+    # Limit services
+    services: "5"
+    services.loadbalancers: "1"
+    services.nodeports: "2"
+
+---
+# LimitRange to set default resource limits for pods
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: launchpad-limits
+  namespace: launchpad
+  labels:
+    app.kubernetes.io/name: launchpad
+spec:
+  limits:
+    # Default limits for containers
+    - type: Container
+      default:
+        cpu: "1"
+        memory: "1Gi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "256Mi"
+      max:
+        cpu: "4"
+        memory: "4Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+    # Limits for pods
+    - type: Pod
+      max:
+        cpu: "8"
+        memory: "8Gi"

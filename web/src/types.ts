@@ -1,3 +1,5 @@
+export type LaunchType = 'url' | 'container';
+
 export interface Application {
   id: string;
   name: string;
@@ -5,8 +7,29 @@ export interface Application {
   url: string;
   icon: string;
   category: string;
+  launch_type: LaunchType;
+  container_image?: string;
 }
 
 export interface AppConfig {
   applications: Application[];
+}
+
+export type SessionStatus = 'pending' | 'creating' | 'running' | 'terminating' | 'terminated' | 'failed';
+
+export interface Session {
+  id: string;
+  user_id: string;
+  app_id: string;
+  app_name?: string;
+  pod_name: string;
+  status: SessionStatus;
+  websocket_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSessionRequest {
+  app_id: string;
+  user_id?: string;
 }
