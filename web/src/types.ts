@@ -53,3 +53,28 @@ export interface User {
   username: string;
   displayName?: string;
 }
+
+// Template types for the Template Marketplace
+export type TemplateCategory =
+  | 'development'
+  | 'productivity'
+  | 'communication'
+  | 'browsers'
+  | 'monitoring'
+  | 'databases'
+  | 'creative';
+
+export interface ApplicationTemplate extends Omit<Application, 'id'> {
+  template_id: string;
+  template_version: string;
+  template_category: TemplateCategory;
+  tags: string[];
+  maintainer?: string;
+  documentation_url?: string;
+  recommended_limits?: ResourceLimits;
+}
+
+export interface TemplateCatalog {
+  version: string;
+  templates: ApplicationTemplate[];
+}

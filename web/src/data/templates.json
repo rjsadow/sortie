@@ -1,0 +1,383 @@
+{
+  "version": "1.0.0",
+  "templates": [
+    {
+      "template_id": "vscode-server",
+      "template_version": "1.0.0",
+      "template_category": "development",
+      "name": "VS Code Server",
+      "description": "Browser-based Visual Studio Code with full IDE features",
+      "url": "",
+      "icon": "https://code.visualstudio.com/favicon.ico",
+      "category": "Development",
+      "launch_type": "container",
+      "container_image": "lscr.io/linuxserver/code-server:latest",
+      "tags": ["ide", "editor", "code", "typescript", "javascript"],
+      "maintainer": "LinuxServer.io",
+      "documentation_url": "https://docs.linuxserver.io/images/docker-code-server",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "gitlab-ce",
+      "template_version": "1.0.0",
+      "template_category": "development",
+      "name": "GitLab CE",
+      "description": "Self-hosted Git repository management and CI/CD platform",
+      "url": "",
+      "icon": "https://about.gitlab.com/ico/favicon.ico",
+      "category": "Development",
+      "launch_type": "container",
+      "container_image": "gitlab/gitlab-ce:latest",
+      "tags": ["git", "repository", "ci-cd", "devops"],
+      "maintainer": "GitLab Inc.",
+      "documentation_url": "https://docs.gitlab.com/ee/install/docker.html",
+      "recommended_limits": {
+        "cpu_request": "1",
+        "cpu_limit": "4",
+        "memory_request": "2Gi",
+        "memory_limit": "8Gi"
+      }
+    },
+    {
+      "template_id": "jenkins",
+      "template_version": "1.0.0",
+      "template_category": "development",
+      "name": "Jenkins",
+      "description": "Open source automation server for CI/CD pipelines",
+      "url": "",
+      "icon": "https://www.jenkins.io/favicon.ico",
+      "category": "Development",
+      "launch_type": "container",
+      "container_image": "jenkins/jenkins:lts",
+      "tags": ["ci-cd", "automation", "pipelines", "devops"],
+      "maintainer": "Jenkins Community",
+      "documentation_url": "https://www.jenkins.io/doc/book/installing/docker/",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "1Gi",
+        "memory_limit": "4Gi"
+      }
+    },
+    {
+      "template_id": "gitea",
+      "template_version": "1.0.0",
+      "template_category": "development",
+      "name": "Gitea",
+      "description": "Lightweight self-hosted Git service",
+      "url": "",
+      "icon": "https://gitea.io/images/gitea.png",
+      "category": "Development",
+      "launch_type": "container",
+      "container_image": "gitea/gitea:latest",
+      "tags": ["git", "repository", "lightweight"],
+      "maintainer": "Gitea Community",
+      "documentation_url": "https://docs.gitea.io/en-us/install-with-docker/",
+      "recommended_limits": {
+        "cpu_request": "250m",
+        "cpu_limit": "1",
+        "memory_request": "256Mi",
+        "memory_limit": "1Gi"
+      }
+    },
+    {
+      "template_id": "jupyterlab",
+      "template_version": "1.0.0",
+      "template_category": "development",
+      "name": "JupyterLab",
+      "description": "Interactive development environment for notebooks and code",
+      "url": "",
+      "icon": "https://jupyter.org/favicon.ico",
+      "category": "Development",
+      "launch_type": "container",
+      "container_image": "jupyter/datascience-notebook:latest",
+      "tags": ["notebook", "python", "data-science", "machine-learning"],
+      "maintainer": "Jupyter Project",
+      "documentation_url": "https://jupyter-docker-stacks.readthedocs.io/en/latest/",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "1Gi",
+        "memory_limit": "4Gi"
+      }
+    },
+    {
+      "template_id": "libreoffice",
+      "template_version": "1.0.0",
+      "template_category": "productivity",
+      "name": "LibreOffice",
+      "description": "Full-featured office suite with documents, spreadsheets, and presentations",
+      "url": "",
+      "icon": "https://www.libreoffice.org/themes/libreofficenew/favicon.ico",
+      "category": "Productivity",
+      "launch_type": "container",
+      "container_image": "lscr.io/linuxserver/libreoffice:latest",
+      "tags": ["office", "documents", "spreadsheets", "presentations"],
+      "maintainer": "LinuxServer.io",
+      "documentation_url": "https://docs.linuxserver.io/images/docker-libreoffice",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "nextcloud",
+      "template_version": "1.0.0",
+      "template_category": "productivity",
+      "name": "Nextcloud",
+      "description": "Self-hosted file sync and share platform with collaboration tools",
+      "url": "",
+      "icon": "https://nextcloud.com/wp-content/uploads/2022/03/favicon.ico",
+      "category": "Productivity",
+      "launch_type": "container",
+      "container_image": "nextcloud:latest",
+      "tags": ["files", "sync", "collaboration", "storage"],
+      "maintainer": "Nextcloud GmbH",
+      "documentation_url": "https://docs.nextcloud.com/server/latest/admin_manual/installation/docker.html",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "onlyoffice",
+      "template_version": "1.0.0",
+      "template_category": "productivity",
+      "name": "OnlyOffice",
+      "description": "Online office suite for documents, spreadsheets, and presentations",
+      "url": "",
+      "icon": "https://www.onlyoffice.com/favicon.ico",
+      "category": "Productivity",
+      "launch_type": "container",
+      "container_image": "onlyoffice/documentserver:latest",
+      "tags": ["office", "documents", "collaboration", "editing"],
+      "maintainer": "ONLYOFFICE",
+      "documentation_url": "https://helpcenter.onlyoffice.com/installation/docs-community-install-docker.aspx",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "1Gi",
+        "memory_limit": "4Gi"
+      }
+    },
+    {
+      "template_id": "mattermost",
+      "template_version": "1.0.0",
+      "template_category": "communication",
+      "name": "Mattermost",
+      "description": "Open source messaging platform for team collaboration",
+      "url": "",
+      "icon": "https://mattermost.com/wp-content/uploads/2022/02/favicon.ico",
+      "category": "Communication",
+      "launch_type": "container",
+      "container_image": "mattermost/mattermost-team-edition:latest",
+      "tags": ["chat", "messaging", "team", "collaboration"],
+      "maintainer": "Mattermost Inc.",
+      "documentation_url": "https://docs.mattermost.com/install/install-docker.html",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "rocketchat",
+      "template_version": "1.0.0",
+      "template_category": "communication",
+      "name": "Rocket.Chat",
+      "description": "Open source team communication platform with chat and video",
+      "url": "",
+      "icon": "https://rocket.chat/favicon.ico",
+      "category": "Communication",
+      "launch_type": "container",
+      "container_image": "rocket.chat:latest",
+      "tags": ["chat", "messaging", "video", "team"],
+      "maintainer": "Rocket.Chat Technologies",
+      "documentation_url": "https://docs.rocket.chat/deploy/deploy-rocket.chat/deploy-with-docker-and-docker-compose",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "firefox",
+      "template_version": "1.0.0",
+      "template_category": "browsers",
+      "name": "Firefox",
+      "description": "Privacy-focused web browser in a secure container",
+      "url": "",
+      "icon": "https://www.mozilla.org/media/img/favicons/firefox/browser/favicon.ico",
+      "category": "Browsers",
+      "launch_type": "container",
+      "container_image": "lscr.io/linuxserver/firefox:latest",
+      "tags": ["browser", "web", "privacy", "mozilla"],
+      "maintainer": "LinuxServer.io",
+      "documentation_url": "https://docs.linuxserver.io/images/docker-firefox",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "chromium",
+      "template_version": "1.0.0",
+      "template_category": "browsers",
+      "name": "Chromium",
+      "description": "Open-source web browser in a secure container",
+      "url": "",
+      "icon": "https://www.chromium.org/favicon.ico",
+      "category": "Browsers",
+      "launch_type": "container",
+      "container_image": "lscr.io/linuxserver/chromium:latest",
+      "tags": ["browser", "web", "chromium", "google"],
+      "maintainer": "LinuxServer.io",
+      "documentation_url": "https://docs.linuxserver.io/images/docker-chromium",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "grafana",
+      "template_version": "1.0.0",
+      "template_category": "monitoring",
+      "name": "Grafana",
+      "description": "Analytics and interactive visualization platform",
+      "url": "",
+      "icon": "https://grafana.com/static/assets/img/fav32.png",
+      "category": "Monitoring",
+      "launch_type": "container",
+      "container_image": "grafana/grafana:latest",
+      "tags": ["monitoring", "visualization", "dashboards", "metrics"],
+      "maintainer": "Grafana Labs",
+      "documentation_url": "https://grafana.com/docs/grafana/latest/setup-grafana/installation/docker/",
+      "recommended_limits": {
+        "cpu_request": "250m",
+        "cpu_limit": "1",
+        "memory_request": "256Mi",
+        "memory_limit": "1Gi"
+      }
+    },
+    {
+      "template_id": "prometheus",
+      "template_version": "1.0.0",
+      "template_category": "monitoring",
+      "name": "Prometheus",
+      "description": "Open source monitoring and alerting toolkit",
+      "url": "",
+      "icon": "https://prometheus.io/assets/favicons/favicon.ico",
+      "category": "Monitoring",
+      "launch_type": "container",
+      "container_image": "prom/prometheus:latest",
+      "tags": ["monitoring", "metrics", "alerting", "time-series"],
+      "maintainer": "Prometheus Authors",
+      "documentation_url": "https://prometheus.io/docs/prometheus/latest/installation/",
+      "recommended_limits": {
+        "cpu_request": "250m",
+        "cpu_limit": "1",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "template_id": "uptime-kuma",
+      "template_version": "1.0.0",
+      "template_category": "monitoring",
+      "name": "Uptime Kuma",
+      "description": "Self-hosted monitoring tool for websites and services",
+      "url": "",
+      "icon": "https://uptime.kuma.pet/img/icon.svg",
+      "category": "Monitoring",
+      "launch_type": "container",
+      "container_image": "louislam/uptime-kuma:latest",
+      "tags": ["monitoring", "uptime", "status", "alerts"],
+      "maintainer": "Louis Lam",
+      "documentation_url": "https://github.com/louislam/uptime-kuma/wiki/Installation",
+      "recommended_limits": {
+        "cpu_request": "100m",
+        "cpu_limit": "500m",
+        "memory_request": "128Mi",
+        "memory_limit": "512Mi"
+      }
+    },
+    {
+      "template_id": "pgadmin",
+      "template_version": "1.0.0",
+      "template_category": "databases",
+      "name": "pgAdmin",
+      "description": "PostgreSQL administration and development platform",
+      "url": "",
+      "icon": "https://www.pgadmin.org/static/COMPILED/assets/img/favicon.ico",
+      "category": "Databases",
+      "launch_type": "container",
+      "container_image": "dpage/pgadmin4:latest",
+      "tags": ["database", "postgresql", "admin", "sql"],
+      "maintainer": "pgAdmin Development Team",
+      "documentation_url": "https://www.pgadmin.org/docs/pgadmin4/latest/container_deployment.html",
+      "recommended_limits": {
+        "cpu_request": "250m",
+        "cpu_limit": "1",
+        "memory_request": "256Mi",
+        "memory_limit": "1Gi"
+      }
+    },
+    {
+      "template_id": "adminer",
+      "template_version": "1.0.0",
+      "template_category": "databases",
+      "name": "Adminer",
+      "description": "Full-featured database management tool in a single file",
+      "url": "",
+      "icon": "https://www.adminer.org/static/favicon.ico",
+      "category": "Databases",
+      "launch_type": "container",
+      "container_image": "adminer:latest",
+      "tags": ["database", "mysql", "postgresql", "sqlite", "admin"],
+      "maintainer": "Adminer",
+      "documentation_url": "https://hub.docker.com/_/adminer",
+      "recommended_limits": {
+        "cpu_request": "100m",
+        "cpu_limit": "500m",
+        "memory_request": "128Mi",
+        "memory_limit": "512Mi"
+      }
+    },
+    {
+      "template_id": "gimp",
+      "template_version": "1.0.0",
+      "template_category": "creative",
+      "name": "GIMP",
+      "description": "GNU Image Manipulation Program for photo editing",
+      "url": "",
+      "icon": "https://www.gimp.org/images/frontpage/wilber-big.png",
+      "category": "Creative",
+      "launch_type": "container",
+      "container_image": "lscr.io/linuxserver/gimp:latest",
+      "tags": ["image", "editing", "graphics", "design"],
+      "maintainer": "LinuxServer.io",
+      "documentation_url": "https://docs.linuxserver.io/images/docker-gimp",
+      "recommended_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    }
+  ]
+}

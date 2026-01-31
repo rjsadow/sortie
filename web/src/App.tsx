@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Application, AppConfig, User } from './types';
 import { SessionModal } from './components/SessionModal';
 import { Login } from './components/Login';
+import { TemplateBrowser } from './components/templates/TemplateBrowser';
 
 function App() {
   const [user, setUser] = useState<User | null>(() => {
@@ -22,6 +23,7 @@ function App() {
   });
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [selectedContainerApp, setSelectedContainerApp] = useState<Application | null>(null);
+  const [isTemplateBrowserOpen, setIsTemplateBrowserOpen] = useState(false);
   const appRefs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
 
   useEffect(() => {
@@ -157,6 +159,20 @@ function App() {
     setUser(null);
   };
 
+  const handleAddApp = async (app: Application) => {
+    const response = await fetch('/api/apps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(app),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to add application');
+    }
+    const addedApp = await response.json();
+    setApps((prev) => [...prev, addedApp]);
+  };
+
   // Show login screen if not authenticated
   if (!user) {
     return <Login onLogin={handleLogin} darkMode={darkMode} />;
@@ -212,6 +228,22 @@ function App() {
                   />
                 </svg>
               </div>
+              {/* Templates button */}
+              <button
+                onClick={() => setIsTemplateBrowserOpen(true)}
+                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                aria-label="Browse templates"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Templates</span>
+              </button>
               {/* Dark mode toggle */}
               <button
                 onClick={() => setDarkMode(!darkMode)}
@@ -450,6 +482,14 @@ function App() {
           darkMode={darkMode}
         />
       )}
+
+      {/* Template Browser Modal */}
+      <TemplateBrowser
+        isOpen={isTemplateBrowserOpen}
+        onClose={() => setIsTemplateBrowserOpen(false)}
+        onAddApp={handleAddApp}
+        darkMode={darkMode}
+      />
     </div>
   );
 }
