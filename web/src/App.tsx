@@ -21,6 +21,10 @@ function App() {
     const stored = localStorage.getItem('launchpad-collapsed');
     return stored ? new Set(JSON.parse(stored)) : new Set();
   });
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(() => {
+    const stored = localStorage.getItem('launchpad-category-filter');
+    return stored && stored !== 'null' ? stored : null;
+  });
   const [favorites, setFavorites] = useState<Set<string>>(() => {
     const stored = localStorage.getItem('launchpad-favorites');
     return stored ? new Set(JSON.parse(stored)) : new Set();
@@ -57,6 +61,10 @@ function App() {
   }, [collapsedCategories]);
 
   useEffect(() => {
+    localStorage.setItem('launchpad-category-filter', selectedCategory || 'null');
+  }, [selectedCategory]);
+
+  useEffect(() => {
     localStorage.setItem('launchpad-favorites', JSON.stringify([...favorites]));
   }, [favorites]);
 
@@ -64,12 +72,21 @@ function App() {
     localStorage.setItem('launchpad-recents', JSON.stringify(recentApps));
   }, [recentApps]);
 
-  const filteredApps = apps.filter(
-    (app) =>
+  // Get all unique categories from all apps (before search filtering)
+  const allCategories = [...new Set(apps.map((app) => app.category))].sort();
+
+  const filteredApps = apps.filter((app) => {
+    // First apply search filter
+    const matchesSearch =
       app.name.toLowerCase().includes(search.toLowerCase()) ||
       app.description.toLowerCase().includes(search.toLowerCase()) ||
-      app.category.toLowerCase().includes(search.toLowerCase())
-  );
+      app.category.toLowerCase().includes(search.toLowerCase());
+
+    // Then apply category filter
+    const matchesCategory = selectedCategory === null || app.category === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   const categories = [...new Set(filteredApps.map((app) => app.category))];
 
@@ -346,6 +363,42 @@ function App() {
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
           Use arrow keys to navigate, Enter to launch, Escape to clear focus
         </p>
+
+        {/* Category filter tabs */}
+        {allCategories.length > 1 && (
+          <div className="mb-6">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  selectedCategory === null
+                    ? 'bg-brand-primary text-white shadow-md'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                All
+                <span className="ml-1.5 text-xs opacity-75">({apps.length})</span>
+              </button>
+              {allCategories.map((category) => {
+                const count = apps.filter((app) => app.category === category).length;
+                return (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                      selectedCategory === category
+                        ? 'bg-brand-primary text-white shadow-md'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {category}
+                    <span className="ml-1.5 text-xs opacity-75">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center items-center h-64">
