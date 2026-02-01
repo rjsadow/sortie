@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps
+.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-teardown
 
 all: build
 
@@ -70,3 +70,11 @@ lint:
 # Run Go tests
 test:
 	go test -v ./...
+
+# Setup Kind cluster and deploy with Helm
+kind:
+	@./scripts/kind-setup.sh
+
+# Teardown Kind cluster
+kind-teardown:
+	@./scripts/kind-setup.sh teardown
