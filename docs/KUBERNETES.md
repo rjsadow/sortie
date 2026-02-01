@@ -264,20 +264,80 @@ kubectl describe pod -n launchpad launchpad-session-xxx
 2. Check image pull status: `kubectl describe pod`
 3. Verify the VNC sidecar image is accessible
 
-## Local Development
+## Helm Chart
 
-For local development with kind or minikube:
+A Helm chart is provided for easier deployment and customization.
+
+### Quick Start with Helm
 
 ```bash
-# Create a kind cluster
-kind create cluster --name launchpad
+# Install with default values
+helm install launchpad charts/launchpad --namespace launchpad --create-namespace
 
-# Load images into kind
+# Install with custom values
+helm install launchpad charts/launchpad \
+  --namespace launchpad \
+  --create-namespace \
+  --set ingress.enabled=true \
+  --set ingress.host=launchpad.mycompany.com
+
+# Upgrade an existing installation
+helm upgrade launchpad charts/launchpad --namespace launchpad
+```
+
+### Helm Values
+
+Key configuration options in `values.yaml`:
+
+| Value | Default | Description |
+| ----- | ------- | ----------- |
+| `image.repository` | `ghcr.io/rjsadow/launchpad` | Launchpad image |
+| `image.tag` | `latest` | Image tag |
+| `replicaCount` | `1` | Number of replicas |
+| `ingress.enabled` | `false` | Enable ingress |
+| `ingress.host` | `launchpad.example.com` | Ingress hostname |
+| `networkPolicy.enabled` | `true` | Enable network policies |
+| `resourceQuota.enabled` | `true` | Enable resource quotas |
+
+## Local Development
+
+### Quick Start with Kind
+
+Use the provided setup script for one-command local development:
+
+```bash
+# Create Kind cluster and deploy Launchpad
+./scripts/kind-setup.sh
+
+# Access Launchpad
+kubectl port-forward -n launchpad svc/launchpad 8080:80
+# Open http://localhost:8080
+
+# Teardown when done
+./scripts/kind-setup.sh teardown
+```
+
+### Manual Kind Setup
+
+For manual setup with kind or minikube:
+
+```bash
+# Create a kind cluster with port mappings
+kind create cluster --name launchpad --config deploy/kind/kind-config.yaml
+
+# Build and load images into kind
+docker build -t ghcr.io/rjsadow/launchpad:latest .
 kind load docker-image ghcr.io/rjsadow/launchpad:latest --name launchpad
 kind load docker-image ghcr.io/rjsadow/launchpad-vnc-sidecar:latest \
   --name launchpad
 
-# Apply manifests
+# Deploy with Helm
+helm install launchpad charts/launchpad \
+  --namespace launchpad \
+  --create-namespace \
+  --set image.pullPolicy=Never
+
+# Or apply raw manifests
 kubectl apply -f deploy/kubernetes/
 
 # Port forward to access locally

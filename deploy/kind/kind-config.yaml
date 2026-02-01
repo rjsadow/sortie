@@ -1,0 +1,26 @@
+# Kind cluster configuration for Launchpad local development
+# Usage: kind create cluster --name launchpad --config deploy/kind/kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: launchpad
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # HTTP for ingress controller
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      # HTTPS for ingress controller
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+      # NodePort range for direct service access
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP

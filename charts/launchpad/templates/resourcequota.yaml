@@ -1,0 +1,21 @@
+{{- if .Values.resourceQuota.enabled }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "launchpad.fullname" . }}-quota
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+spec:
+  hard:
+    pods: {{ .Values.resourceQuota.pods | quote }}
+    requests.cpu: {{ .Values.resourceQuota.requestsCpu | quote }}
+    requests.memory: {{ .Values.resourceQuota.requestsMemory | quote }}
+    limits.cpu: {{ .Values.resourceQuota.limitsCpu | quote }}
+    limits.memory: {{ .Values.resourceQuota.limitsMemory | quote }}
+    persistentvolumeclaims: "10"
+    services: "5"
+    services.loadbalancers: "1"
+    services.nodeports: "2"
+{{- end }}

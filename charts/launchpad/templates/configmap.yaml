@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "launchpad.fullname" . }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "launchpad.labels" . | nindent 4 }}
+data:
+  SESSION_TIMEOUT: {{ .Values.session.timeout | quote }}
+  SESSION_CLEANUP_INTERVAL: {{ .Values.session.cleanupInterval | quote }}
+  POD_READY_TIMEOUT: {{ .Values.session.podReadyTimeout | quote }}
+  LAUNCHPAD_VNC_SIDECAR_IMAGE: {{ .Values.vncSidecar.image | quote }}

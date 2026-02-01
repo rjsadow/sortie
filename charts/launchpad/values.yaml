@@ -1,0 +1,60 @@
+# Default values for launchpad
+
+# Namespace configuration
+namespace: launchpad
+
+# Image configuration
+image:
+  repository: ghcr.io/rjsadow/launchpad
+  tag: latest
+  pullPolicy: Always
+
+# VNC sidecar image for container sessions
+vncSidecar:
+  image: ghcr.io/rjsadow/launchpad-vnc-sidecar:latest
+
+# Replica count
+replicaCount: 1
+
+# Session configuration
+session:
+  timeout: "120"           # Session timeout in minutes
+  cleanupInterval: "5"     # Cleanup interval in minutes
+  podReadyTimeout: "120"   # Pod ready timeout in seconds
+
+# Resource limits for the launchpad server
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+
+# Ingress configuration
+ingress:
+  enabled: false
+  host: launchpad.example.com
+  annotations: {}
+
+# Network policies
+networkPolicy:
+  enabled: true
+
+# Resource quota
+resourceQuota:
+  enabled: true
+  pods: "50"
+  requestsCpu: "20"
+  requestsMemory: "40Gi"
+  limitsCpu: "40"
+  limitsMemory: "80Gi"
+
+# Limit range
+limitRange:
+  enabled: true
