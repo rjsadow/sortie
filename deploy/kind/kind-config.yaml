@@ -12,13 +12,13 @@ nodes:
           kubeletExtraArgs:
             node-labels: "ingress-ready=true"
     extraPortMappings:
-      # HTTP for ingress controller
+      # HTTP for ingress controller (using 8080 to avoid conflicts with other clusters)
       - containerPort: 80
-        hostPort: 80
+        hostPort: 8080
         protocol: TCP
-      # HTTPS for ingress controller
+      # HTTPS for ingress controller (using 8443 to avoid conflicts with other clusters)
       - containerPort: 443
-        hostPort: 443
+        hostPort: 8443
         protocol: TCP
       # NodePort range for direct service access
       - containerPort: 30080

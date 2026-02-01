@@ -18,6 +18,9 @@ spec:
         {{- include "launchpad.serverLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "launchpad.fullname" . }}
+      # Disable automatic service environment variables to avoid collision
+      # with LAUNCHPAD_PORT (K8s injects SERVICE_PORT for services named "launchpad")
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
