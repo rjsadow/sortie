@@ -18,6 +18,7 @@ var upgrader = websocket.Upgrader{
 		// In production, this should be restricted
 		return true
 	},
+	Subprotocols: []string{"binary"}, // VNC/noVNC requires binary subprotocol
 }
 
 // Proxy handles bidirectional WebSocket proxying
@@ -49,10 +50,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Connect to the target WebSocket server
+	// Connect to the target WebSocket server with VNC subprotocol
 	dialer := websocket.Dialer{
 		ReadBufferSize:  4096,
 		WriteBufferSize: 4096,
+		Subprotocols:    []string{"binary"},
 	}
 
 	targetConn, _, err := dialer.Dial(targetURL.String(), nil)

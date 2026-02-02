@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -58,8 +59,17 @@ func DefaultPodConfig(sessionID, appID, appName, containerImage string) *PodConf
 	}
 }
 
+// isJlesageImage returns true if the container image is a jlesage image
+// jlesage images have their own VNC server and don't need a sidecar
+func isJlesageImage(image string) bool {
+	return strings.HasPrefix(image, "jlesage/")
+}
+
 // BuildPodSpec creates a Kubernetes Pod specification for a session
 func BuildPodSpec(config *PodConfig) *corev1.Pod {
+	// Detect if this is a jlesage image (has built-in VNC on port 5800)
+	jlesageImage := isJlesageImage(config.ContainerImage)
+
 	// Get VNC sidecar image from centralized config
 	vncImage := GetVNCSidecarImage()
 
@@ -67,8 +77,9 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 	podName := fmt.Sprintf("launchpad-session-%s", config.SessionID)
 
 	// Build environment variables for app container
-	appEnv := []corev1.EnvVar{
-		{Name: "DISPLAY", Value: ":99"},
+	var appEnv []corev1.EnvVar
+	if !jlesageImage {
+		appEnv = append(appEnv, corev1.EnvVar{Name: "DISPLAY", Value: ":99"})
 	}
 	for key, value := range config.EnvVars {
 		appEnv = append(appEnv, corev1.EnvVar{Name: key, Value: value})
@@ -80,6 +91,12 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 	cpuRequest := resource.MustParse(config.CPURequest)
 	memoryRequest := resource.MustParse(config.MemoryRequest)
 
+	// Determine websocket port based on image type
+	websocketPort := "6080"
+	if jlesageImage {
+		websocketPort = "5800"
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
@@ -90,116 +107,148 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 				ComponentLabelKey: "session",
 			},
 			Annotations: map[string]string{
-				"launchpad.io/app-name":   config.AppName,
-				"launchpad.io/created-at": time.Now().UTC().Format(time.RFC3339),
+				"launchpad.io/app-name":      config.AppName,
+				"launchpad.io/created-at":    time.Now().UTC().Format(time.RFC3339),
+				"launchpad.io/websocket-port": websocketPort,
 			},
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
-			// Security context for the pod
-			SecurityContext: &corev1.PodSecurityContext{
-				RunAsNonRoot: boolPtr(true),
-				RunAsUser:    int64Ptr(1000),
-				RunAsGroup:   int64Ptr(1000),
-				FSGroup:      int64Ptr(1000),
-			},
-			// Shared volumes
-			Volumes: []corev1.Volume{
-				{
-					Name: X11SocketVolumeName,
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-			},
-			Containers: []corev1.Container{
-				// VNC Sidecar container (runs first to set up X11)
-				{
-					Name:  "vnc-sidecar",
-					Image: vncImage,
-					Ports: []corev1.ContainerPort{
-						{Name: "vnc", ContainerPort: 5900, Protocol: corev1.ProtocolTCP},
-						{Name: "websocket", ContainerPort: 6080, Protocol: corev1.ProtocolTCP},
-					},
-					Env: []corev1.EnvVar{
-						{Name: "DISPLAY", Value: ":99"},
-						{Name: "VNC_PASSWORD", Value: ""}, // No password for internal use
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: X11SocketVolumeName, MountPath: "/tmp/.X11-unix"},
-					},
-					Resources: corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("500m"),
-							corev1.ResourceMemory: resource.MustParse("512Mi"),
-						},
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("128Mi"),
-						},
-					},
-					SecurityContext: &corev1.SecurityContext{
-						AllowPrivilegeEscalation: boolPtr(false),
-						ReadOnlyRootFilesystem:   boolPtr(false),
-						Capabilities: &corev1.Capabilities{
-							Drop: []corev1.Capability{"ALL"},
-						},
-					},
-					ReadinessProbe: &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							TCPSocket: &corev1.TCPSocketAction{
-								Port: intstr.FromInt(6080),
-							},
-						},
-						InitialDelaySeconds: 2,
-						PeriodSeconds:       5,
-						TimeoutSeconds:      2,
-						SuccessThreshold:    1,
-						FailureThreshold:    6,
-					},
-					LivenessProbe: &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							TCPSocket: &corev1.TCPSocketAction{
-								Port: intstr.FromInt(6080),
-							},
-						},
-						InitialDelaySeconds: 10,
-						PeriodSeconds:       30,
-						TimeoutSeconds:      5,
-						SuccessThreshold:    1,
-						FailureThreshold:    3,
-					},
-				},
-				// Application container
-				{
-					Name:    "app",
-					Image:   config.ContainerImage,
-					Command: config.Command,
-					Args:    config.Args,
-					Env:     appEnv,
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: X11SocketVolumeName, MountPath: "/tmp/.X11-unix"},
-					},
-					Resources: corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    cpuLimit,
-							corev1.ResourceMemory: memoryLimit,
-						},
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    cpuRequest,
-							corev1.ResourceMemory: memoryRequest,
-						},
-					},
-					SecurityContext: &corev1.SecurityContext{
-						AllowPrivilegeEscalation: boolPtr(false),
-						ReadOnlyRootFilesystem:   boolPtr(false),
-						Capabilities: &corev1.Capabilities{
-							Drop: []corev1.Capability{"ALL"},
-						},
-					},
-				},
-			},
 		},
+	}
+
+	// For jlesage images: single container with built-in VNC on port 5800
+	if jlesageImage {
+		pod.Spec.Containers = []corev1.Container{
+			{
+				Name:            "app",
+				Image:           config.ContainerImage,
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Command:         config.Command,
+				Args:            config.Args,
+				Env:             appEnv,
+				Ports: []corev1.ContainerPort{
+					{Name: "http", ContainerPort: 5800, Protocol: corev1.ProtocolTCP},
+					{Name: "vnc", ContainerPort: 5900, Protocol: corev1.ProtocolTCP},
+				},
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    cpuLimit,
+						corev1.ResourceMemory: memoryLimit,
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    cpuRequest,
+						corev1.ResourceMemory: memoryRequest,
+					},
+				},
+				ReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(5800),
+						},
+					},
+					InitialDelaySeconds: 5,
+					PeriodSeconds:       5,
+					TimeoutSeconds:      2,
+					SuccessThreshold:    1,
+					FailureThreshold:    12,
+				},
+			},
+		}
+	} else {
+		// For other images: use VNC sidecar with shared X11 socket
+		pod.Spec.Volumes = []corev1.Volume{
+			{
+				Name: X11SocketVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}
+		pod.Spec.Containers = []corev1.Container{
+			// VNC Sidecar container
+			{
+				Name:            "vnc-sidecar",
+				Image:           vncImage,
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Ports: []corev1.ContainerPort{
+					{Name: "vnc", ContainerPort: 5900, Protocol: corev1.ProtocolTCP},
+					{Name: "websocket", ContainerPort: 6080, Protocol: corev1.ProtocolTCP},
+				},
+				Env: []corev1.EnvVar{
+					{Name: "DISPLAY", Value: ":99"},
+					{Name: "VNC_PASSWORD", Value: ""},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: X11SocketVolumeName, MountPath: "/tmp/.X11-unix"},
+				},
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+				},
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:                int64Ptr(1000),
+					RunAsGroup:               int64Ptr(1000),
+					AllowPrivilegeEscalation: boolPtr(false),
+					ReadOnlyRootFilesystem:   boolPtr(false),
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				},
+				ReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(6080),
+						},
+					},
+					InitialDelaySeconds: 2,
+					PeriodSeconds:       5,
+					TimeoutSeconds:      2,
+					SuccessThreshold:    1,
+					FailureThreshold:    6,
+				},
+				LivenessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(6080),
+						},
+					},
+					InitialDelaySeconds: 10,
+					PeriodSeconds:       30,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    3,
+				},
+			},
+			// Application container
+			{
+				Name:            "app",
+				Image:           config.ContainerImage,
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Command:         config.Command,
+				Args:            config.Args,
+				Env:             appEnv,
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: X11SocketVolumeName, MountPath: "/tmp/.X11-unix"},
+				},
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    cpuLimit,
+						corev1.ResourceMemory: memoryLimit,
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    cpuRequest,
+						corev1.ResourceMemory: memoryRequest,
+					},
+				},
+			},
+		}
 	}
 
 	return pod

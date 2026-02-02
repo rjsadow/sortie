@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -334,5 +335,17 @@ func (m *Manager) GetPodWebSocketEndpoint(session *db.Session) string {
 	if session.PodIP == "" {
 		return ""
 	}
-	return fmt.Sprintf("ws://%s:6080", session.PodIP)
+
+	// Determine websocket port and path based on container image
+	// jlesage images have built-in VNC on port 5800 with /websockify path
+	port := 6080
+	path := ""
+	if app, err := m.db.GetApp(session.AppID); err == nil && app != nil {
+		if strings.HasPrefix(app.ContainerImage, "jlesage/") {
+			port = 5800
+			path = "/websockify"
+		}
+	}
+
+	return fmt.Sprintf("ws://%s:%d%s", session.PodIP, port, path)
 }

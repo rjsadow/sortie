@@ -183,8 +183,19 @@ func handleApps(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if app.ID == "" || app.Name == "" || app.URL == "" {
-			http.Error(w, "Missing required fields: id, name, url", http.StatusBadRequest)
+		if app.ID == "" || app.Name == "" {
+			http.Error(w, "Missing required fields: id, name", http.StatusBadRequest)
+			return
+		}
+
+		// URL is required for non-container apps, container_image is required for container apps
+		if app.LaunchType == db.LaunchTypeContainer {
+			if app.ContainerImage == "" {
+				http.Error(w, "Missing required field for container app: container_image", http.StatusBadRequest)
+				return
+			}
+		} else if app.URL == "" {
+			http.Error(w, "Missing required field: url", http.StatusBadRequest)
 			return
 		}
 
@@ -252,8 +263,19 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 		// Use ID from URL path
 		app.ID = id
 
-		if app.Name == "" || app.URL == "" {
-			http.Error(w, "Missing required fields: name, url", http.StatusBadRequest)
+		if app.Name == "" {
+			http.Error(w, "Missing required field: name", http.StatusBadRequest)
+			return
+		}
+
+		// URL is required for non-container apps, container_image is required for container apps
+		if app.LaunchType == db.LaunchTypeContainer {
+			if app.ContainerImage == "" {
+				http.Error(w, "Missing required field for container app: container_image", http.StatusBadRequest)
+				return
+			}
+		} else if app.URL == "" {
+			http.Error(w, "Missing required field: url", http.StatusBadRequest)
 			return
 		}
 

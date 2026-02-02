@@ -40,6 +40,43 @@ export function VNCViewer({
     onError?.(reason);
   }, [onError]);
 
+  // Handle clipboard from remote VNC -> local
+  const handleClipboard = useCallback((e: unknown) => {
+    const event = e as { detail?: { text?: string } };
+    const text = event?.detail?.text;
+    if (text && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch((err) => {
+        console.warn('Failed to write to clipboard:', err);
+      });
+    }
+  }, []);
+
+  // Sync local clipboard to remote VNC when container is focused
+  const syncClipboardToRemote = useCallback(async () => {
+    if (!rfbRef.current || viewOnly) return;
+    try {
+      if (navigator.clipboard) {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          rfbRef.current.clipboardPasteFrom(text);
+        }
+      }
+    } catch (err) {
+      // Clipboard access may be denied - that's ok
+      console.debug('Clipboard read not available:', err);
+    }
+  }, [viewOnly]);
+
+  // Handle paste event (Ctrl+V / Cmd+V) - more reliable than clipboard API
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    if (!rfbRef.current || viewOnly) return;
+    const text = e.clipboardData.getData('text/plain');
+    if (text) {
+      e.preventDefault();
+      rfbRef.current.clipboardPasteFrom(text);
+    }
+  }, [viewOnly]);
+
   useEffect(() => {
     if (!containerRef.current || !wsUrl) {
       return;
@@ -72,8 +109,12 @@ export function VNCViewer({
         rfb.addEventListener('connect', handleConnect);
         rfb.addEventListener('disconnect', handleDisconnect);
         rfb.addEventListener('securityfailure', handleSecurityFailure);
+        rfb.addEventListener('clipboard', handleClipboard);
 
         rfbRef.current = rfb;
+
+        // Sync local clipboard to remote when focused
+        syncClipboardToRemote();
       } catch (err) {
         console.error('Failed to load or initialize noVNC:', err);
         onError?.(err instanceof Error ? err.message : 'Failed to load VNC viewer');
@@ -88,17 +129,22 @@ export function VNCViewer({
         rfbRef.current.removeEventListener('connect', handleConnect);
         rfbRef.current.removeEventListener('disconnect', handleDisconnect);
         rfbRef.current.removeEventListener('securityfailure', handleSecurityFailure);
+        rfbRef.current.removeEventListener('clipboard', handleClipboard);
         rfbRef.current.disconnect();
         rfbRef.current = null;
       }
     };
-  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleSecurityFailure, onError]);
+  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleSecurityFailure, handleClipboard, syncClipboardToRemote, onError]);
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full bg-black"
       style={{ minHeight: '400px' }}
+      onFocus={syncClipboardToRemote}
+      onClick={syncClipboardToRemote}
+      onPaste={handlePaste}
+      tabIndex={0}
     />
   );
 }

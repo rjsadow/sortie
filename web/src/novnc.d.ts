@@ -14,6 +14,7 @@ declare module '@novnc/novnc/lib/rfb.js' {
     clipViewport: boolean;
     addEventListener(event: string, handler: (e: unknown) => void): void;
     removeEventListener(event: string, handler: (e: unknown) => void): void;
+    clipboardPasteFrom(text: string): void;
   }
 
   export default RFB;
