@@ -21,10 +21,20 @@ spec:
             matchLabels:
               {{- include "launchpad.serverLabels" . | nindent 14 }}
       ports:
+        # VNC ports for container apps
         - protocol: TCP
           port: 6080
         - protocol: TCP
           port: 5900
+        # Web proxy ports for web_proxy apps
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 5000
   egress:
     - to:
         - namespaceSelector: {}
@@ -81,10 +91,20 @@ spec:
             matchLabels:
               app.kubernetes.io/component: session
       ports:
+        # VNC ports for container apps
         - protocol: TCP
           port: 6080
         - protocol: TCP
           port: 5900
+        # Web proxy ports for web_proxy apps
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 5000
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

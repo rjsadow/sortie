@@ -28,7 +28,7 @@ auth:
   refreshExpiry: "24"
   # Initial admin credentials
   adminUsername: "admin"
-  adminPassword: ""
+  adminPassword: "admin123"
   # Allow user self-registration (can be changed by admin in UI)
   allowRegistration: false
   # Use existing secret instead of creating one

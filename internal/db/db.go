@@ -16,6 +16,7 @@ type LaunchType string
 const (
 	LaunchTypeURL       LaunchType = "url"
 	LaunchTypeContainer LaunchType = "container"
+	LaunchTypeWebProxy  LaunchType = "web_proxy"
 )
 
 // ResourceLimits defines CPU and memory resource constraints for container applications
@@ -36,6 +37,8 @@ type Application struct {
 	Category       string          `json:"category"`
 	LaunchType     LaunchType      `json:"launch_type"`
 	ContainerImage string          `json:"container_image,omitempty"`
+	ContainerPort  int             `json:"container_port,omitempty"`  // Port web app listens on (default: 8080)
+	ContainerArgs  []string        `json:"container_args,omitempty"`  // Extra arguments to pass to the container
 	ResourceLimits *ResourceLimits `json:"resource_limits,omitempty"` // Resource limits for container apps
 }
 
@@ -107,6 +110,19 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Configure SQLite for better concurrency
+	// busy_timeout waits up to 5 seconds for locks to clear
+	if _, err := conn.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to set busy_timeout: %w", err)
+	}
+
+	// WAL mode allows concurrent reads while writing
+	if _, err := conn.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
 	db := &DB{conn: conn}
 	if err := db.migrate(); err != nil {
 		conn.Close()
@@ -133,6 +149,8 @@ func (db *DB) migrate() error {
 		category TEXT NOT NULL,
 		launch_type TEXT NOT NULL DEFAULT 'url',
 		container_image TEXT DEFAULT '',
+		container_port INTEGER DEFAULT 0,
+		container_args TEXT DEFAULT '[]',
 		cpu_request TEXT DEFAULT '',
 		cpu_limit TEXT DEFAULT '',
 		memory_request TEXT DEFAULT '',
@@ -199,6 +217,8 @@ func (db *DB) migrate() error {
 	migrations := []string{
 		"ALTER TABLE applications ADD COLUMN launch_type TEXT NOT NULL DEFAULT 'url'",
 		"ALTER TABLE applications ADD COLUMN container_image TEXT DEFAULT ''",
+		"ALTER TABLE applications ADD COLUMN container_port INTEGER DEFAULT 0",
+		"ALTER TABLE applications ADD COLUMN container_args TEXT DEFAULT '[]'",
 		"ALTER TABLE applications ADD COLUMN cpu_request TEXT DEFAULT ''",
 		"ALTER TABLE applications ADD COLUMN cpu_limit TEXT DEFAULT ''",
 		"ALTER TABLE applications ADD COLUMN memory_request TEXT DEFAULT ''",
@@ -249,7 +269,7 @@ func (db *DB) SeedFromJSON(jsonPath string) error {
 
 // ListApps returns all applications
 func (db *DB) ListApps() ([]Application, error) {
-	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, container_image, cpu_request, cpu_limit, memory_request, memory_limit FROM applications ORDER BY category, name")
+	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications ORDER BY category, name")
 	if err != nil {
 		return nil, err
 	}
@@ -259,8 +279,10 @@ func (db *DB) ListApps() ([]Application, error) {
 	for rows.Next() {
 		var app Application
 		var launchType, containerImage string
+		var containerPort int
+		var containerArgsJSON string
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit); err != nil {
+		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit); err != nil {
 			return nil, err
 		}
 		app.LaunchType = LaunchType(launchType)
@@ -268,6 +290,11 @@ func (db *DB) ListApps() ([]Application, error) {
 			app.LaunchType = LaunchTypeURL
 		}
 		app.ContainerImage = containerImage
+		app.ContainerPort = containerPort
+		// Parse container args from JSON
+		if containerArgsJSON != "" && containerArgsJSON != "[]" {
+			json.Unmarshal([]byte(containerArgsJSON), &app.ContainerArgs)
+		}
 		// Set resource limits if any are specified
 		if cpuRequest != "" || cpuLimit != "" || memoryRequest != "" || memoryLimit != "" {
 			app.ResourceLimits = &ResourceLimits{
@@ -287,11 +314,13 @@ func (db *DB) ListApps() ([]Application, error) {
 func (db *DB) GetApp(id string) (*Application, error) {
 	var app Application
 	var launchType, containerImage string
+	var containerPort int
+	var containerArgsJSON string
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 	err := db.conn.QueryRow(
-		"SELECT id, name, description, url, icon, category, launch_type, container_image, cpu_request, cpu_limit, memory_request, memory_limit FROM applications WHERE id = ?",
+		"SELECT id, name, description, url, icon, category, launch_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications WHERE id = ?",
 		id,
-	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit)
+	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -304,6 +333,11 @@ func (db *DB) GetApp(id string) (*Application, error) {
 		app.LaunchType = LaunchTypeURL
 	}
 	app.ContainerImage = containerImage
+	app.ContainerPort = containerPort
+	// Parse container args from JSON
+	if containerArgsJSON != "" && containerArgsJSON != "[]" {
+		json.Unmarshal([]byte(containerArgsJSON), &app.ContainerArgs)
+	}
 	// Set resource limits if any are specified
 	if cpuRequest != "" || cpuLimit != "" || memoryRequest != "" || memoryLimit != "" {
 		app.ResourceLimits = &ResourceLimits{
@@ -322,6 +356,13 @@ func (db *DB) CreateApp(app Application) error {
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
 	}
+	// Serialize container args to JSON
+	containerArgsJSON := "[]"
+	if len(app.ContainerArgs) > 0 {
+		if argsBytes, err := json.Marshal(app.ContainerArgs); err == nil {
+			containerArgsJSON = string(argsBytes)
+		}
+	}
 	// Extract resource limits (use empty strings if not specified)
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 	if app.ResourceLimits != nil {
@@ -331,8 +372,8 @@ func (db *DB) CreateApp(app Application) error {
 		memoryLimit = app.ResourceLimits.MemoryLimit
 	}
 	_, err := db.conn.Exec(
-		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, container_image, cpu_request, cpu_limit, memory_request, memory_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
+		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
 	)
 	return err
 }
@@ -343,6 +384,13 @@ func (db *DB) UpdateApp(app Application) error {
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
 	}
+	// Serialize container args to JSON
+	containerArgsJSON := "[]"
+	if len(app.ContainerArgs) > 0 {
+		if argsBytes, err := json.Marshal(app.ContainerArgs); err == nil {
+			containerArgsJSON = string(argsBytes)
+		}
+	}
 	// Extract resource limits (use empty strings if not specified)
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 	if app.ResourceLimits != nil {
@@ -352,8 +400,8 @@ func (db *DB) UpdateApp(app Application) error {
 		memoryLimit = app.ResourceLimits.MemoryLimit
 	}
 	result, err := db.conn.Exec(
-		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, container_image = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ? WHERE id = ?",
-		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, cpuRequest, cpuLimit, memoryRequest, memoryLimit, app.ID,
+		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, container_image = ?, container_port = ?, container_args = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ? WHERE id = ?",
+		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, app.ID,
 	)
 	if err != nil {
 		return err
@@ -580,6 +628,26 @@ func (db *DB) UpdateSessionPodIP(id string, podIP string) error {
 	result, err := db.conn.Exec(
 		"UPDATE sessions SET pod_ip = ?, updated_at = ? WHERE id = ?",
 		podIP, time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// UpdateSessionPodIPAndStatus updates both pod IP and status in a single operation
+func (db *DB) UpdateSessionPodIPAndStatus(id string, podIP string, status SessionStatus) error {
+	result, err := db.conn.Exec(
+		"UPDATE sessions SET pod_ip = ?, status = ?, updated_at = ? WHERE id = ?",
+		podIP, string(status), time.Now(), id,
 	)
 	if err != nil {
 		return err

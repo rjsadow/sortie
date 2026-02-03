@@ -151,8 +151,9 @@ func main() {
 
 	// Handle static files and SPA routing
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Try to serve the file directly
 		path := r.URL.Path
+
+		// Try to serve the file directly
 		if path == "/" {
 			path = "/index.html"
 		}
@@ -250,10 +251,10 @@ func handleApps(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// URL is required for non-container apps, container_image is required for container apps
-		if app.LaunchType == db.LaunchTypeContainer {
+		// URL is required for url apps, container_image is required for container/web_proxy apps
+		if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
 			if app.ContainerImage == "" {
-				http.Error(w, "Missing required field for container app: container_image", http.StatusBadRequest)
+				http.Error(w, "Missing required field for container/web_proxy app: container_image", http.StatusBadRequest)
 				return
 			}
 		} else if app.URL == "" {
@@ -330,10 +331,10 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// URL is required for non-container apps, container_image is required for container apps
-		if app.LaunchType == db.LaunchTypeContainer {
+		// URL is required for url apps, container_image is required for container/web_proxy apps
+		if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
 			if app.ContainerImage == "" {
-				http.Error(w, "Missing required field for container app: container_image", http.StatusBadRequest)
+				http.Error(w, "Missing required field for container/web_proxy app: container_image", http.StatusBadRequest)
 				return
 			}
 		} else if app.URL == "" {
@@ -527,15 +528,21 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 			sessionList = []db.Session{}
 		}
 
-		// Convert to response format with WebSocket URLs
+		// Convert to response format with WebSocket/Proxy URLs
 		responses := make([]sessions.SessionResponse, len(sessionList))
 		for i, s := range sessionList {
 			app, _ := database.GetApp(s.AppID)
 			appName := ""
+			wsURL := ""
+			proxyURL := ""
 			if app != nil {
 				appName = app.Name
+				if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
+					// Both container and web_proxy apps use VNC streaming
+					wsURL = sessionManager.GetSessionWebSocketURL(&s)
+				}
 			}
-			responses[i] = *sessions.SessionFromDB(&s, appName, sessionManager.GetSessionWebSocketURL(&s))
+			responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, proxyURL)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -571,14 +578,20 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Get app name for response
+		// Get app name and URL for response
 		app, _ := database.GetApp(session.AppID)
 		appName := ""
+		wsURL := ""
+		proxyURL := ""
 		if app != nil {
 			appName = app.Name
+			if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
+				// Both container and web_proxy apps use VNC streaming
+				wsURL = sessionManager.GetSessionWebSocketURL(session)
+			}
 		}
 
-		response := sessions.SessionFromDB(session, appName, sessionManager.GetSessionWebSocketURL(session))
+		response := sessions.SessionFromDB(session, appName, wsURL, proxyURL)
 
 		// Log the action
 		details := fmt.Sprintf("Created session %s for app %s", session.ID, session.AppID)
@@ -615,14 +628,20 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Get app name for response
+		// Get app name and URL for response
 		app, _ := database.GetApp(session.AppID)
 		appName := ""
+		wsURL := ""
+		proxyURL := ""
 		if app != nil {
 			appName = app.Name
+			if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
+				// Both container and web_proxy apps use VNC streaming
+				wsURL = sessionManager.GetSessionWebSocketURL(session)
+			}
 		}
 
-		response := sessions.SessionFromDB(session, appName, sessionManager.GetSessionWebSocketURL(session))
+		response := sessions.SessionFromDB(session, appName, wsURL, proxyURL)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
@@ -699,6 +718,17 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Log the login
 	database.LogAudit(req.Username, "LOGIN", "User logged in")
 
+	// Set access token cookie for iframe/proxy requests
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.AccessTokenCookieName,
+		Value:    result.AccessToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(result.ExpiresIn),
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
@@ -709,6 +739,15 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Clear the access token cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.AccessTokenCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   -1, // Delete the cookie
+	})
 
 	// For JWT, logout is client-side (discard tokens)
 	// We just return success
@@ -753,6 +792,17 @@ func handleRefreshToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
 	}
+
+	// Update the access token cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.AccessTokenCookieName,
+		Value:    result.AccessToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(result.ExpiresIn),
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)

@@ -14,6 +14,9 @@ type contextKey string
 const (
 	// UserContextKey is the key used to store the authenticated user in the request context
 	UserContextKey contextKey = "user"
+
+	// AccessTokenCookieName is the name of the cookie used to store the access token
+	AccessTokenCookieName = "launchpad_access_token"
 )
 
 // AuthMiddleware creates middleware that validates JWT tokens from the Authorization header

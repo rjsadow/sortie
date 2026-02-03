@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rjsadow/launchpad/internal/db"
 	"github.com/rjsadow/launchpad/internal/k8s"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -131,8 +132,8 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 	if app == nil {
 		return nil, fmt.Errorf("application not found: %s", req.AppID)
 	}
-	if app.LaunchType != db.LaunchTypeContainer {
-		return nil, fmt.Errorf("application %s is not a container application", req.AppID)
+	if app.LaunchType != db.LaunchTypeContainer && app.LaunchType != db.LaunchTypeWebProxy {
+		return nil, fmt.Errorf("application %s is not a container or web_proxy application", req.AppID)
 	}
 	if app.ContainerImage == "" {
 		return nil, fmt.Errorf("application %s has no container image configured", req.AppID)
@@ -143,6 +144,8 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 
 	// Create pod configuration
 	podConfig := k8s.DefaultPodConfig(sessionID, app.ID, app.Name, app.ContainerImage)
+	podConfig.ContainerPort = app.ContainerPort
+	podConfig.Args = app.ContainerArgs
 
 	// Apply app-specific resource limits if configured
 	if app.ResourceLimits != nil {
@@ -160,8 +163,17 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		}
 	}
 
-	// Build and create the pod
-	pod := k8s.BuildPodSpec(podConfig)
+	// Build and create the pod based on launch type
+	var pod *corev1.Pod
+	switch app.LaunchType {
+	case db.LaunchTypeContainer:
+		pod = k8s.BuildPodSpec(podConfig)
+	case db.LaunchTypeWebProxy:
+		pod = k8s.BuildWebProxyPodSpec(podConfig)
+	default:
+		return nil, fmt.Errorf("unsupported launch type: %s", app.LaunchType)
+	}
+
 	createdPod, err := k8s.CreatePod(ctx, pod)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pod: %w", err)
@@ -216,14 +228,10 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 		return
 	}
 
-	// Update session with pod IP and running status
-	if err := m.db.UpdateSessionPodIP(sessionID, podIP); err != nil {
-		log.Printf("Failed to update pod IP for session %s: %v", sessionID, err)
-	}
-
+	// Update session with pod IP and running status in a single operation
 	LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusRunning, "pod ready")
-	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusRunning); err != nil {
-		log.Printf("Failed to update session status for %s: %v", sessionID, err)
+	if err := m.db.UpdateSessionPodIPAndStatus(sessionID, podIP, db.SessionStatusRunning); err != nil {
+		log.Printf("Failed to update session for %s: %v", sessionID, err)
 	}
 
 	// Update cache
@@ -348,4 +356,35 @@ func (m *Manager) GetPodWebSocketEndpoint(session *db.Session) string {
 	}
 
 	return fmt.Sprintf("ws://%s:%d%s", session.PodIP, port, path)
+}
+
+// GetPodProxyEndpoint returns the internal HTTP endpoint for web_proxy sessions
+func (m *Manager) GetPodProxyEndpoint(session *db.Session) string {
+	if session.PodIP == "" {
+		return ""
+	}
+
+	// Get the container port from the app configuration
+	port := 8080 // default
+	scheme := "http"
+	if app, err := m.db.GetApp(session.AppID); err == nil && app != nil {
+		if app.ContainerPort > 0 {
+			port = app.ContainerPort
+		}
+		// Use HTTPS for common HTTPS ports (code-server uses 8443)
+		if port == 443 || port == 8443 {
+			scheme = "https"
+		}
+	}
+
+	return fmt.Sprintf("%s://%s:%d", scheme, session.PodIP, port)
+}
+
+// GetSessionProxyURL returns the proxy URL for web_proxy sessions
+func (m *Manager) GetSessionProxyURL(session *db.Session) string {
+	if session.PodIP == "" || session.Status != db.SessionStatusRunning {
+		return ""
+	}
+	// The HTTP proxy endpoint on the server
+	return fmt.Sprintf("/api/sessions/%s/proxy/", session.ID)
 }

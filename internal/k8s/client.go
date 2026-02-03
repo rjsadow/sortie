@@ -18,9 +18,10 @@ var (
 	namespace  string
 
 	// Configuration set via Configure()
-	configuredNamespace       string
-	configuredKubeconfig      string
-	configuredVNCSidecarImage string
+	configuredNamespace           string
+	configuredKubeconfig          string
+	configuredVNCSidecarImage     string
+	configuredBrowserSidecarImage string
 )
 
 // Configure sets the Kubernetes configuration from the application config.
@@ -31,12 +32,25 @@ func Configure(ns, kubeconfig, vncSidecarImage string) {
 	configuredVNCSidecarImage = vncSidecarImage
 }
 
+// ConfigureBrowserSidecar sets the browser sidecar image.
+func ConfigureBrowserSidecar(browserSidecarImage string) {
+	configuredBrowserSidecarImage = browserSidecarImage
+}
+
 // GetVNCSidecarImage returns the configured VNC sidecar image.
 func GetVNCSidecarImage() string {
 	if configuredVNCSidecarImage != "" {
 		return configuredVNCSidecarImage
 	}
 	return VNCSidecarImage
+}
+
+// GetBrowserSidecarImage returns the configured browser sidecar image.
+func GetBrowserSidecarImage() string {
+	if configuredBrowserSidecarImage != "" {
+		return configuredBrowserSidecarImage
+	}
+	return BrowserSidecarImage
 }
 
 // GetNamespace returns the Kubernetes namespace to use for sessions.

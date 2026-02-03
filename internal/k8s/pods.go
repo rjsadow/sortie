@@ -17,6 +17,10 @@ const (
 	// VNCSidecarImage is the default VNC sidecar container image
 	VNCSidecarImage = "ghcr.io/rjsadow/launchpad-vnc-sidecar:latest"
 
+	// BrowserSidecarImage is the default browser sidecar container image
+	// Used for web_proxy apps - provides VNC + browser that connects to the web app
+	BrowserSidecarImage = "ghcr.io/rjsadow/launchpad-browser-sidecar:latest"
+
 	// X11SocketVolumeName is the name of the shared X11 socket volume
 	X11SocketVolumeName = "x11-socket"
 
@@ -36,6 +40,7 @@ type PodConfig struct {
 	AppID          string
 	AppName        string
 	ContainerImage string
+	ContainerPort  int // Port web app listens on (default: 8080 for web_proxy)
 	Command        []string
 	Args           []string
 	EnvVars        map[string]string
@@ -337,6 +342,146 @@ func ListSessionPods(ctx context.Context) (*corev1.PodList, error) {
 	return client.CoreV1().Pods(GetNamespace()).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s,%s=session", SessionLabelKey, ComponentLabelKey),
 	})
+}
+
+// BuildWebProxyPodSpec creates a Kubernetes Pod specification for a web proxy session.
+// Web proxy apps use a browser sidecar that connects to the web app via localhost.
+// The user views the browser through VNC streaming (same as container apps).
+func BuildWebProxyPodSpec(config *PodConfig) *corev1.Pod {
+	// Default port to 8080 if not specified
+	port := config.ContainerPort
+	if port == 0 {
+		port = 8080
+	}
+
+	// Get browser sidecar image from centralized config
+	browserImage := GetBrowserSidecarImage()
+
+	// Sanitize pod name (must be DNS-1123 compliant)
+	podName := fmt.Sprintf("launchpad-session-%s", config.SessionID)
+
+	// Build environment variables for app container
+	var appEnv []corev1.EnvVar
+	for key, value := range config.EnvVars {
+		appEnv = append(appEnv, corev1.EnvVar{Name: key, Value: value})
+	}
+
+	// Parse resource limits
+	cpuLimit := resource.MustParse(config.CPULimit)
+	memoryLimit := resource.MustParse(config.MemoryLimit)
+	cpuRequest := resource.MustParse(config.CPURequest)
+	memoryRequest := resource.MustParse(config.MemoryRequest)
+
+	// Build the browser URL - localhost since containers share network namespace
+	browserURL := fmt.Sprintf("http://localhost:%d", port)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: GetNamespace(),
+			Labels: map[string]string{
+				SessionLabelKey:   config.SessionID,
+				AppLabelKey:       config.AppID,
+				ComponentLabelKey: "session",
+			},
+			Annotations: map[string]string{
+				"launchpad.io/app-name":       config.AppName,
+				"launchpad.io/created-at":     time.Now().UTC().Format(time.RFC3339),
+				"launchpad.io/container-port": fmt.Sprintf("%d", port),
+				"launchpad.io/websocket-port": "6080",
+			},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				// Browser sidecar - provides VNC + Firefox browser
+				{
+					Name:            "browser-sidecar",
+					Image:           browserImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Ports: []corev1.ContainerPort{
+						{Name: "vnc", ContainerPort: 5900, Protocol: corev1.ProtocolTCP},
+						{Name: "websocket", ContainerPort: 6080, Protocol: corev1.ProtocolTCP},
+					},
+					Env: []corev1.EnvVar{
+						{Name: "DISPLAY", Value: ":99"},
+						{Name: "BROWSER_URL", Value: browserURL},
+					},
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("1"),
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("200m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						RunAsUser:                int64Ptr(1000),
+						RunAsGroup:               int64Ptr(1000),
+						AllowPrivilegeEscalation: boolPtr(false),
+						ReadOnlyRootFilesystem:   boolPtr(false),
+						Capabilities: &corev1.Capabilities{
+							Drop: []corev1.Capability{"ALL"},
+						},
+					},
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							TCPSocket: &corev1.TCPSocketAction{
+								Port: intstr.FromInt(6080),
+							},
+						},
+						InitialDelaySeconds: 5,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      2,
+						SuccessThreshold:    1,
+						FailureThreshold:    12,
+					},
+				},
+				// Application container (web app)
+				{
+					Name:            "app",
+					Image:           config.ContainerImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         config.Command,
+					Args:            config.Args,
+					Env:             appEnv,
+					Ports: []corev1.ContainerPort{
+						{
+							Name:          "http",
+							ContainerPort: int32(port),
+							Protocol:      corev1.ProtocolTCP,
+						},
+					},
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    cpuLimit,
+							corev1.ResourceMemory: memoryLimit,
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    cpuRequest,
+							corev1.ResourceMemory: memoryRequest,
+						},
+					},
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							TCPSocket: &corev1.TCPSocketAction{
+								Port: intstr.FromInt(port),
+							},
+						},
+						InitialDelaySeconds: 5,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      2,
+						SuccessThreshold:    1,
+						FailureThreshold:    12,
+					},
+				},
+			},
+		},
+	}
+
+	return pod
 }
 
 // Helper functions

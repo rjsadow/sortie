@@ -235,7 +235,8 @@ function App() {
             e.preventDefault();
             const app = visibleApps[focusedIndex];
             trackRecentApp(app.id);
-            if (app.launch_type === 'container') {
+            if (app.launch_type === 'container' || app.launch_type === 'web_proxy') {
+              // Both container and web_proxy apps use VNC streaming (browser sidecar for web_proxy)
               setSelectedContainerApp(app);
             } else {
               window.open(app.url, '_blank', 'noopener,noreferrer');
@@ -549,14 +550,14 @@ function App() {
                 <div className="p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {favoriteApps.map((app) => {
-                      const isContainerApp = app.launch_type === 'container';
+                      const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
                       const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-secondary p-4 hover:shadow-md transition-all duration-200 text-left w-full";
                       const cardContent = (
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
                             <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
                             {isContainerApp && (
-                              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center" title="Container App">
+                              <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
                                 <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
                               </div>
                             )}
@@ -581,11 +582,11 @@ function App() {
                           </div>
                         </div>
                       );
-                      return isContainerApp ? (
-                        <button key={app.id} onClick={() => { trackRecentApp(app.id); setSelectedContainerApp(app); }} className={cardClassName}>{cardContent}</button>
-                      ) : (
-                        <a key={app.id} href={app.url} target="_blank" rel="noopener noreferrer" onClick={() => trackRecentApp(app.id)} className={cardClassName}>{cardContent}</a>
-                      );
+                      if (app.launch_type === 'container' || app.launch_type === 'web_proxy') {
+                        // Both container and web_proxy apps use VNC streaming
+                        return <button key={app.id} onClick={() => { trackRecentApp(app.id); setSelectedContainerApp(app); }} className={cardClassName}>{cardContent}</button>;
+                      }
+                      return <a key={app.id} href={app.url} target="_blank" rel="noopener noreferrer" onClick={() => trackRecentApp(app.id)} className={cardClassName}>{cardContent}</a>;
                     })}
                   </div>
                 </div>
@@ -605,7 +606,7 @@ function App() {
                 <div className="p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {recentAppsList.map((app) => {
-                      const isContainerApp = app.launch_type === 'container';
+                      const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
                       const isFavorited = favorites.has(app.id);
                       const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-secondary p-4 hover:shadow-md transition-all duration-200 text-left w-full";
                       const cardContent = (
@@ -613,7 +614,7 @@ function App() {
                           <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
                             <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
                             {isContainerApp && (
-                              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center" title="Container App">
+                              <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
                                 <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
                               </div>
                             )}
@@ -638,11 +639,11 @@ function App() {
                           </div>
                         </div>
                       );
-                      return isContainerApp ? (
-                        <button key={app.id} onClick={() => { trackRecentApp(app.id); setSelectedContainerApp(app); }} className={cardClassName}>{cardContent}</button>
-                      ) : (
-                        <a key={app.id} href={app.url} target="_blank" rel="noopener noreferrer" onClick={() => trackRecentApp(app.id)} className={cardClassName}>{cardContent}</a>
-                      );
+                      if (app.launch_type === 'container' || app.launch_type === 'web_proxy') {
+                        // Both container and web_proxy apps use VNC streaming
+                        return <button key={app.id} onClick={() => { trackRecentApp(app.id); setSelectedContainerApp(app); }} className={cardClassName}>{cardContent}</button>;
+                      }
+                      return <a key={app.id} href={app.url} target="_blank" rel="noopener noreferrer" onClick={() => trackRecentApp(app.id)} className={cardClassName}>{cardContent}</a>;
                     })}
                   </div>
                 </div>
@@ -658,7 +659,7 @@ function App() {
                   {/* Category header - clickable to collapse */}
                   <button
                     onClick={() => toggleCategory(category)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <svg
@@ -680,7 +681,7 @@ function App() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {categoryApps.map((app) => {
                           const currentIndex = appIndex++;
-                          const isContainerApp = app.launch_type === 'container';
+                          const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
                           const cardClassName = `group bg-gray-50 dark:bg-gray-700 rounded-lg border p-4 hover:shadow-md transition-all duration-200 text-left w-full ${
                             focusedIndex === currentIndex
                               ? 'ring-2 ring-brand-primary border-brand-primary'
@@ -703,7 +704,7 @@ function App() {
                                   }}
                                 />
                                 {isContainerApp && (
-                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center" title="Container App">
+                                  <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
                                     <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                                       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                                     </svg>
@@ -765,7 +766,8 @@ function App() {
                             </div>
                           );
 
-                          if (isContainerApp) {
+                          if (app.launch_type === 'container' || app.launch_type === 'web_proxy') {
+                            // Both container and web_proxy apps use VNC streaming (browser sidecar for web_proxy)
                             return (
                               <button
                                 key={app.id}
@@ -822,7 +824,7 @@ function App() {
         </div>
       </footer>
 
-      {/* Session Modal for container apps */}
+      {/* Session Modal for container and web_proxy apps (both use VNC streaming) */}
       {selectedContainerApp && (
         <SessionModal
           app={selectedContainerApp}

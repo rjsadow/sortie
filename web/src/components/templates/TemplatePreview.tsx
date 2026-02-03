@@ -29,6 +29,8 @@ export function TemplatePreview({
       category: template.category,
       launch_type: template.launch_type,
       container_image: template.container_image,
+      container_port: template.container_port,
+      container_args: template.container_args,
       resource_limits: template.recommended_limits,
     };
   }, [customId, template]);

@@ -1,0 +1,8 @@
+# Openbox autostart configuration
+# This runs when openbox starts
+
+# Set a solid background color (dark gray)
+xsetroot -solid "#2d2d2d" &
+
+# Configure openbox to maximize new windows
+# This is handled by openbox's rc.xml, but we ensure Firefox starts maximized

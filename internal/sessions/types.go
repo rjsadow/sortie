@@ -20,13 +20,14 @@ type SessionResponse struct {
 	AppName      string           `json:"app_name,omitempty"`
 	PodName      string           `json:"pod_name"`
 	Status       db.SessionStatus `json:"status"`
-	WebSocketURL string           `json:"websocket_url,omitempty"`
+	WebSocketURL string           `json:"websocket_url,omitempty"` // For container apps (VNC)
+	ProxyURL     string           `json:"proxy_url,omitempty"`     // For web_proxy apps
 	CreatedAt    time.Time        `json:"created_at"`
 	UpdatedAt    time.Time        `json:"updated_at"`
 }
 
 // SessionFromDB converts a database session to an API response
-func SessionFromDB(session *db.Session, appName string, wsURL string) *SessionResponse {
+func SessionFromDB(session *db.Session, appName string, wsURL string, proxyURL string) *SessionResponse {
 	return &SessionResponse{
 		ID:           session.ID,
 		UserID:       session.UserID,
@@ -35,6 +36,7 @@ func SessionFromDB(session *db.Session, appName string, wsURL string) *SessionRe
 		PodName:      session.PodName,
 		Status:       session.Status,
 		WebSocketURL: wsURL,
+		ProxyURL:     proxyURL,
 		CreatedAt:    session.CreatedAt,
 		UpdatedAt:    session.UpdatedAt,
 	}
