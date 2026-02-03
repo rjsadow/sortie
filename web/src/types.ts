@@ -50,8 +50,19 @@ export interface CreateSessionRequest {
 }
 
 export interface User {
+  id?: string;
   username: string;
+  email?: string;
+  name?: string;
   displayName?: string;
+  roles?: string[];
+}
+
+export interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  user: User;
 }
 
 // Template types for the Template Marketplace

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Session, CreateSessionRequest } from '../types';
+import { fetchWithAuth } from '../services/auth';
 
 interface UseSessionReturn {
   session: Session | null;
@@ -41,7 +42,7 @@ export function useSession(): UseSessionReturn {
   // Poll session status until ready
   const pollSessionStatus = useCallback(async (sessionId: string): Promise<Session | null> => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`);
+      const response = await fetchWithAuth(`/api/sessions/${sessionId}`);
       if (!response.ok) {
         throw new Error(`Failed to get session: ${response.statusText}`);
       }
@@ -85,7 +86,7 @@ export function useSession(): UseSessionReturn {
         app_id: appId,
       };
 
-      const response = await fetch('/api/sessions', {
+      const response = await fetchWithAuth('/api/sessions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -125,7 +126,7 @@ export function useSession(): UseSessionReturn {
     setError(null);
 
     try {
-      const response = await fetch(`/api/sessions/${session.id}`, {
+      const response = await fetchWithAuth(`/api/sessions/${session.id}`, {
         method: 'DELETE',
       });
 

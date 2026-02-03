@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -11,11 +12,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
 	"github.com/rjsadow/launchpad/internal/k8s"
 	"github.com/rjsadow/launchpad/internal/middleware"
+	"github.com/rjsadow/launchpad/internal/plugins/auth"
 	"github.com/rjsadow/launchpad/internal/sessions"
 	"github.com/rjsadow/launchpad/internal/websocket"
 )
@@ -26,6 +29,7 @@ var embeddedFiles embed.FS
 var database *db.DB
 var sessionManager *sessions.Manager
 var appConfig *config.Config
+var jwtAuthProvider *auth.JWTAuthProvider
 
 func main() {
 	// Parse command-line flags (can override env vars)
@@ -58,6 +62,35 @@ func main() {
 		}
 	}
 
+	// Initialize JWT auth provider
+	jwtAuthProvider = auth.NewJWTAuthProvider()
+	if appConfig.JWTSecret != "" {
+		authConfig := map[string]string{
+			"jwt_secret":     appConfig.JWTSecret,
+			"access_expiry":  appConfig.JWTAccessExpiry.String(),
+			"refresh_expiry": appConfig.JWTRefreshExpiry.String(),
+		}
+		if err := jwtAuthProvider.Initialize(context.Background(), authConfig); err != nil {
+			log.Fatalf("Failed to initialize JWT auth provider: %v", err)
+		}
+		jwtAuthProvider.SetDatabase(database)
+
+		// Seed admin user if password is configured
+		if appConfig.AdminPassword != "" {
+			passwordHash, err := auth.HashPassword(appConfig.AdminPassword)
+			if err != nil {
+				log.Fatalf("Failed to hash admin password: %v", err)
+			}
+			if err := database.SeedAdminUser(appConfig.AdminUsername, passwordHash); err != nil {
+				log.Printf("Warning: failed to seed admin user: %v", err)
+			} else {
+				log.Printf("Admin user '%s' ready", appConfig.AdminUsername)
+			}
+		}
+	} else {
+		log.Println("Warning: LAUNCHPAD_JWT_SECRET not set - authentication disabled")
+	}
+
 	// Initialize session manager with config
 	sessionManager = sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
 		SessionTimeout:  appConfig.SessionTimeout,
@@ -79,30 +112,58 @@ func main() {
 	// Create file server handler
 	fileServer := http.FileServer(http.FS(distFS))
 
-	// API routes
-	http.HandleFunc("/api/apps", handleApps)
-	http.HandleFunc("/api/apps/", handleAppByID)
-	http.HandleFunc("/api/audit", handleAuditLogs)
-	http.HandleFunc("/api/analytics/launch", handleAnalyticsLaunch)
-	http.HandleFunc("/api/analytics/stats", handleAnalyticsStats)
-	http.HandleFunc("/api/config", handleConfig)
+	// Create a custom mux for better control
+	mux := http.NewServeMux()
 
-	// Session API routes
-	http.HandleFunc("/api/sessions", handleSessions)
-	http.HandleFunc("/api/sessions/", handleSessionByID)
+	// Auth routes (public - no authentication required)
+	mux.HandleFunc("/api/auth/login", handleLogin)
+	mux.HandleFunc("/api/auth/logout", handleLogout)
+	mux.HandleFunc("/api/auth/refresh", handleRefreshToken)
+	mux.HandleFunc("/api/auth/me", handleAuthMe)
+	mux.HandleFunc("/api/auth/register", handleRegister)
+
+	// Config route (public - needed before login for branding)
+	mux.HandleFunc("/api/config", handleConfig)
+
+	// Protected API routes - wrapped with auth middleware
+	authMiddleware := middleware.AuthMiddleware(jwtAuthProvider)
+
+	// Admin routes (protected, admin-only checked in handlers)
+	mux.Handle("/api/admin/settings", authMiddleware(http.HandlerFunc(handleAdminSettings)))
+	mux.Handle("/api/admin/users", authMiddleware(http.HandlerFunc(handleAdminUsers)))
+	mux.Handle("/api/admin/users/", authMiddleware(http.HandlerFunc(handleAdminUserByID)))
+
+	mux.Handle("/api/apps", authMiddleware(http.HandlerFunc(handleApps)))
+	mux.Handle("/api/apps/", authMiddleware(http.HandlerFunc(handleAppByID)))
+	mux.Handle("/api/audit", authMiddleware(http.HandlerFunc(handleAuditLogs)))
+	mux.Handle("/api/analytics/launch", authMiddleware(http.HandlerFunc(handleAnalyticsLaunch)))
+	mux.Handle("/api/analytics/stats", authMiddleware(http.HandlerFunc(handleAnalyticsStats)))
+
+	// Session API routes (protected)
+	mux.Handle("/api/sessions", authMiddleware(http.HandlerFunc(handleSessions)))
+	mux.Handle("/api/sessions/", authMiddleware(http.HandlerFunc(handleSessionByID)))
 
 	// WebSocket route for session VNC streams
-	http.Handle("/ws/sessions/", wsHandler)
+	mux.Handle("/ws/sessions/", wsHandler)
 
 	// Serve apps.json from database (for frontend compatibility)
-	http.HandleFunc("/apps.json", handleAppsJSON)
+	mux.HandleFunc("/apps.json", handleAppsJSON)
 
 	// Handle static files and SPA routing
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Try to serve the file directly
 		path := r.URL.Path
 		if path == "/" {
 			path = "/index.html"
+		}
+
+		// Set cache headers based on file type
+		// HTML files: no-cache to ensure fresh content
+		// Hashed assets (JS, CSS): cache for 1 year (immutable via filename hash)
+		if strings.HasSuffix(path, ".html") || path == "/" {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		} else if strings.HasPrefix(path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 
 		// Check if file exists
@@ -112,6 +173,7 @@ func main() {
 		}
 
 		// For SPA routing, serve index.html for non-existent paths
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		r.URL.Path = "/"
 		fileServer.ServeHTTP(w, r)
 	})
@@ -119,8 +181,8 @@ func main() {
 	addr := fmt.Sprintf(":%d", appConfig.Port)
 	log.Printf("Launchpad server starting on http://localhost%s", addr)
 
-	// Wrap default mux with security headers middleware
-	handler := middleware.SecurityHeaders(http.DefaultServeMux)
+	// Wrap mux with security headers middleware
+	handler := middleware.SecurityHeaders(mux)
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatal("Server error:", err)
@@ -405,10 +467,11 @@ func handleAnalyticsStats(w http.ResponseWriter, r *http.Request) {
 
 // BrandingConfig represents tenant branding configuration
 type BrandingConfig struct {
-	LogoURL        string `json:"logo_url"`
-	PrimaryColor   string `json:"primary_color"`
-	SecondaryColor string `json:"secondary_color"`
-	TenantName     string `json:"tenant_name"`
+	LogoURL           string `json:"logo_url"`
+	PrimaryColor      string `json:"primary_color"`
+	SecondaryColor    string `json:"secondary_color"`
+	TenantName        string `json:"tenant_name"`
+	AllowRegistration bool   `json:"allow_registration"`
 }
 
 // handleConfig returns tenant-specific branding configuration
@@ -420,16 +483,20 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Use centralized config for branding
 	brandingCfg := BrandingConfig{
-		LogoURL:        appConfig.LogoURL,
-		PrimaryColor:   appConfig.PrimaryColor,
-		SecondaryColor: appConfig.SecondaryColor,
-		TenantName:     appConfig.TenantName,
+		LogoURL:           appConfig.LogoURL,
+		PrimaryColor:      appConfig.PrimaryColor,
+		SecondaryColor:    appConfig.SecondaryColor,
+		TenantName:        appConfig.TenantName,
+		AllowRegistration: isRegistrationAllowed(),
 	}
 
 	// Try to load overrides from config file if it exists
 	if data, err := os.ReadFile(appConfig.BrandingConfigPath); err == nil {
 		json.Unmarshal(data, &brandingCfg)
 	}
+
+	// Always use dynamic registration check (may be overridden in DB)
+	brandingCfg.AllowRegistration = isRegistrationAllowed()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(brandingCfg)
@@ -581,6 +648,513 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		// Log the action
 		details := fmt.Sprintf("Terminated session %s", id)
 		database.LogAudit("admin", "TERMINATE_SESSION", details)
+
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleLogin handles POST /api/auth/login
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if jwtAuthProvider == nil || appConfig.JWTSecret == "" {
+		http.Error(w, "Authentication not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, "Username and password are required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := jwtAuthProvider.LoginWithCredentials(r.Context(), req.Username, req.Password)
+	if err != nil {
+		log.Printf("Login failed for user %s: %v", req.Username, err)
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	// Log the login
+	database.LogAudit(req.Username, "LOGIN", "User logged in")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleLogout handles POST /api/auth/logout
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// For JWT, logout is client-side (discard tokens)
+	// We just return success
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRefreshToken handles POST /api/auth/refresh
+func handleRefreshToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if jwtAuthProvider == nil || appConfig.JWTSecret == "" {
+		http.Error(w, "Authentication not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.RefreshToken == "" {
+		http.Error(w, "Refresh token is required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := jwtAuthProvider.RefreshAccessToken(r.Context(), req.RefreshToken)
+	if err != nil {
+		log.Printf("Token refresh failed: %v", err)
+		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleAuthMe handles GET /api/auth/me
+func handleAuthMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if jwtAuthProvider == nil || appConfig.JWTSecret == "" {
+		http.Error(w, "Authentication not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Extract and validate token
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, "Authorization header required", http.StatusUnauthorized)
+		return
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		http.Error(w, "Invalid authorization header format", http.StatusUnauthorized)
+		return
+	}
+
+	token := parts[1]
+	result, err := jwtAuthProvider.Authenticate(r.Context(), token)
+	if err != nil || !result.Authenticated {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result.User)
+}
+
+// isRegistrationAllowed checks if user registration is currently allowed
+func isRegistrationAllowed() bool {
+	// Check database setting first (admin override)
+	if dbSetting, err := database.GetSetting("allow_registration"); err == nil && dbSetting != "" {
+		return strings.EqualFold(dbSetting, "true") || dbSetting == "1"
+	}
+	// Fall back to config
+	return appConfig.AllowRegistration
+}
+
+// handleRegister handles POST /api/auth/register
+func handleRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if jwtAuthProvider == nil || appConfig.JWTSecret == "" {
+		http.Error(w, "Authentication not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	if !isRegistrationAllowed() {
+		http.Error(w, "Registration is not enabled", http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		Email       string `json:"email"`
+		DisplayName string `json:"display_name"`
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, "Username and password are required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" {
+		http.Error(w, "Email is required", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Password) < 6 {
+		http.Error(w, "Password must be at least 6 characters", http.StatusBadRequest)
+		return
+	}
+
+	// Check if username already exists
+	existing, err := database.GetUserByUsername(req.Username)
+	if err != nil {
+		log.Printf("Error checking username: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if existing != nil {
+		http.Error(w, "Username already taken", http.StatusConflict)
+		return
+	}
+
+	// Hash password
+	passwordHash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		log.Printf("Error hashing password: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Create user
+	user := db.User{
+		ID:           fmt.Sprintf("user-%s-%d", req.Username, time.Now().UnixNano()),
+		Username:     req.Username,
+		Email:        req.Email,
+		DisplayName:  req.DisplayName,
+		PasswordHash: passwordHash,
+		Roles:        []string{"user"},
+	}
+
+	if err := database.CreateUser(user); err != nil {
+		log.Printf("Error creating user: %v", err)
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		return
+	}
+
+	// Log the registration
+	database.LogAudit(req.Username, "REGISTER", "User registered")
+
+	// Auto-login: generate tokens
+	result, err := jwtAuthProvider.LoginWithCredentials(r.Context(), req.Username, req.Password)
+	if err != nil {
+		log.Printf("Error generating tokens after registration: %v", err)
+		// Registration succeeded, but login failed - still return success
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Registration successful, please login"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(result)
+}
+
+// isAdmin checks if the user from context has admin role
+func isAdmin(r *http.Request) bool {
+	user := middleware.GetUserFromContext(r.Context())
+	if user == nil {
+		return false
+	}
+	for _, role := range user.Roles {
+		if role == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
+// handleAdminSettings handles GET/PUT /api/admin/settings
+func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
+	if !isAdmin(r) {
+		http.Error(w, "Admin access required", http.StatusForbidden)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		settings, err := database.GetAllSettings()
+		if err != nil {
+			log.Printf("Error getting settings: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Include default values for settings not in DB
+		response := map[string]interface{}{
+			"allow_registration": isRegistrationAllowed(),
+		}
+
+		// Override with DB settings
+		for k, v := range settings {
+			response[k] = v
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	case http.MethodPut:
+		var req map[string]string
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Update each setting
+		for key, value := range req {
+			if err := database.SetSetting(key, value); err != nil {
+				log.Printf("Error setting %s: %v", key, err)
+				http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// Log the action
+		user := middleware.GetUserFromContext(r.Context())
+		database.LogAudit(user.Username, "UPDATE_SETTINGS", fmt.Sprintf("Updated settings: %v", req))
+
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleAdminUsers handles GET/POST /api/admin/users
+func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if !isAdmin(r) {
+		http.Error(w, "Admin access required", http.StatusForbidden)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		users, err := database.ListUsers()
+		if err != nil {
+			log.Printf("Error listing users: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		if users == nil {
+			users = []db.User{}
+		}
+
+		// Remove password hashes from response
+		type userResponse struct {
+			ID          string    `json:"id"`
+			Username    string    `json:"username"`
+			Email       string    `json:"email,omitempty"`
+			DisplayName string    `json:"display_name,omitempty"`
+			Roles       []string  `json:"roles"`
+			CreatedAt   time.Time `json:"created_at"`
+		}
+
+		response := make([]userResponse, len(users))
+		for i, u := range users {
+			response[i] = userResponse{
+				ID:          u.ID,
+				Username:    u.Username,
+				Email:       u.Email,
+				DisplayName: u.DisplayName,
+				Roles:       u.Roles,
+				CreatedAt:   u.CreatedAt,
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	case http.MethodPost:
+		var req struct {
+			Username    string   `json:"username"`
+			Password    string   `json:"password"`
+			Email       string   `json:"email"`
+			DisplayName string   `json:"display_name"`
+			Roles       []string `json:"roles"`
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if req.Username == "" || req.Password == "" {
+			http.Error(w, "Username and password are required", http.StatusBadRequest)
+			return
+		}
+
+		// Check if username already exists
+		existing, err := database.GetUserByUsername(req.Username)
+		if err != nil {
+			log.Printf("Error checking username: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if existing != nil {
+			http.Error(w, "Username already exists", http.StatusConflict)
+			return
+		}
+
+		// Hash password
+		passwordHash, err := auth.HashPassword(req.Password)
+		if err != nil {
+			log.Printf("Error hashing password: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Default roles
+		roles := req.Roles
+		if len(roles) == 0 {
+			roles = []string{"user"}
+		}
+
+		// Create user
+		user := db.User{
+			ID:           fmt.Sprintf("user-%s-%d", req.Username, time.Now().UnixNano()),
+			Username:     req.Username,
+			Email:        req.Email,
+			DisplayName:  req.DisplayName,
+			PasswordHash: passwordHash,
+			Roles:        roles,
+		}
+
+		if err := database.CreateUser(user); err != nil {
+			log.Printf("Error creating user: %v", err)
+			http.Error(w, "Failed to create user", http.StatusInternalServerError)
+			return
+		}
+
+		// Log the action
+		adminUser := middleware.GetUserFromContext(r.Context())
+		database.LogAudit(adminUser.Username, "CREATE_USER", fmt.Sprintf("Created user: %s", req.Username))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{
+			"id":       user.ID,
+			"username": user.Username,
+			"message":  "User created successfully",
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleAdminUserByID handles DELETE /api/admin/users/{id}
+func handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
+	if !isAdmin(r) {
+		http.Error(w, "Admin access required", http.StatusForbidden)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
+	if id == "" {
+		http.Error(w, "User ID required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodDelete:
+		// Prevent deleting self
+		currentUser := middleware.GetUserFromContext(r.Context())
+		if currentUser != nil && currentUser.ID == id {
+			http.Error(w, "Cannot delete your own account", http.StatusBadRequest)
+			return
+		}
+
+		// Get user info for audit log
+		user, err := database.GetUserByID(id)
+		if err != nil {
+			log.Printf("Error getting user: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if user == nil {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+
+		if err := database.DeleteUser(id); err != nil {
+			log.Printf("Error deleting user: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Log the action
+		database.LogAudit(currentUser.Username, "DELETE_USER", fmt.Sprintf("Deleted user: %s (%s)", user.Username, id))
 
 		w.WriteHeader(http.StatusNoContent)
 

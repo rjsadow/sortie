@@ -1,14 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Application, AppConfig, User } from './types';
+import type { Application, User } from './types';
 import { SessionModal } from './components/SessionModal';
 import { Login } from './components/Login';
+import { Register } from './components/Register';
+import { Admin } from './components/Admin';
 import { TemplateBrowser } from './components/templates/TemplateBrowser';
+import {
+  getStoredUser,
+  setStoredUser,
+  logout as authLogout,
+  getCurrentUser,
+  isAuthenticated,
+  fetchWithAuth
+} from './services/auth';
 
 function App() {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('launchpad-user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState<User | null>(() => getStoredUser());
+  const [authLoading, setAuthLoading] = useState(true);
   const [apps, setApps] = useState<Application[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -36,20 +44,65 @@ function App() {
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [selectedContainerApp, setSelectedContainerApp] = useState<Application | null>(null);
   const [isTemplateBrowserOpen, setIsTemplateBrowserOpen] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [allowRegistration, setAllowRegistration] = useState(false);
   const appRefs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
 
+  // Validate token on app load and fetch config
   useEffect(() => {
-    fetch('/apps.json')
-      .then((res) => res.json())
-      .then((data: AppConfig) => {
-        setApps(data.applications);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to load apps:', err);
-        setLoading(false);
-      });
+    const validateAuth = async () => {
+      // Fetch config for registration setting
+      try {
+        const configRes = await fetch('/api/config');
+        if (configRes.ok) {
+          const config = await configRes.json();
+          setAllowRegistration(config.allow_registration === true);
+        }
+      } catch {
+        // Ignore config fetch errors
+      }
+
+      if (isAuthenticated()) {
+        try {
+          const currentUser = await getCurrentUser();
+          if (currentUser) {
+            setUser(currentUser);
+          } else {
+            setUser(null);
+          }
+        } catch {
+          setUser(null);
+        }
+      }
+      setAuthLoading(false);
+    };
+
+    validateAuth();
   }, []);
+
+  // Fetch apps after authentication is validated
+  useEffect(() => {
+    if (authLoading || !user) return;
+
+    const loadApps = async () => {
+      try {
+        const response = await fetchWithAuth('/api/apps');
+        if (response.ok) {
+          const data = await response.json();
+          setApps(data);
+        } else {
+          console.error('Failed to load apps:', response.statusText);
+        }
+      } catch (err) {
+        console.error('Failed to load apps:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadApps();
+  }, [authLoading, user]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -214,16 +267,29 @@ function App() {
   }, [search]);
 
   const handleLogin = (loggedInUser: User) => {
+    setStoredUser(loggedInUser);
     setUser(loggedInUser);
+    setShowRegister(false);
+    setLoading(true); // Trigger app reload
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('launchpad-user');
+  const handleRegister = (registeredUser: User) => {
+    setStoredUser(registeredUser);
+    setUser(registeredUser);
+    setShowRegister(false);
+    setLoading(true); // Trigger app reload
+  };
+
+  const isAdmin = user?.roles?.includes('admin') ?? false;
+
+  const handleLogout = async () => {
+    await authLogout();
     setUser(null);
+    setApps([]);
   };
 
   const handleAddApp = async (app: Application) => {
-    const response = await fetch('/api/apps', {
+    const response = await fetchWithAuth('/api/apps', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(app),
@@ -236,9 +302,34 @@ function App() {
     setApps((prev) => [...prev, addedApp]);
   };
 
-  // Show login screen if not authenticated
+  // Show loading spinner while validating auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary"></div>
+      </div>
+    );
+  }
+
+  // Show login or register screen if not authenticated
   if (!user) {
-    return <Login onLogin={handleLogin} darkMode={darkMode} />;
+    if (showRegister) {
+      return (
+        <Register
+          onRegister={handleRegister}
+          onBackToLogin={() => setShowRegister(false)}
+          darkMode={darkMode}
+        />
+      );
+    }
+    return (
+      <Login
+        onLogin={handleLogin}
+        onShowRegister={() => setShowRegister(true)}
+        allowRegistration={allowRegistration}
+        darkMode={darkMode}
+      />
+    );
   }
 
   // Build a flat list for keyboard navigation while maintaining category order
@@ -307,6 +398,25 @@ function App() {
                 </svg>
                 <span className="hidden sm:inline">Templates</span>
               </button>
+              {/* Admin button (only for admins) */}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAdmin(true)}
+                  className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                  aria-label="Admin settings"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="hidden sm:inline">Admin</span>
+                </button>
+              )}
               {/* Dark mode toggle */}
               <button
                 onClick={() => setDarkMode(!darkMode)}
@@ -729,6 +839,14 @@ function App() {
         onAddApp={handleAddApp}
         darkMode={darkMode}
       />
+
+      {/* Admin Panel */}
+      {showAdmin && isAdmin && (
+        <Admin
+          darkMode={darkMode}
+          onClose={() => setShowAdmin(false)}
+        />
+      )}
     </div>
   );
 }

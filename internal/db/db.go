@@ -53,6 +53,18 @@ type AuditLog struct {
 	Details   string    `json:"details"`
 }
 
+// User represents a user account
+type User struct {
+	ID           string    `json:"id"`
+	Username     string    `json:"username"`
+	Email        string    `json:"email,omitempty"`
+	DisplayName  string    `json:"display_name,omitempty"`
+	PasswordHash string    `json:"-"`
+	Roles        []string  `json:"roles"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 // SessionStatus represents the status of a container session.
 // Valid states: creating, running, failed, stopped, expired
 // State machine:
@@ -159,6 +171,24 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON analytics(timestamp);
 	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 	CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+
+	CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		username TEXT NOT NULL UNIQUE,
+		email TEXT,
+		display_name TEXT,
+		password_hash TEXT NOT NULL,
+		roles TEXT DEFAULT '["user"]',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+	CREATE TABLE IF NOT EXISTS settings (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 	_, err := db.conn.Exec(schema)
 	if err != nil {
@@ -606,4 +636,196 @@ func (db *DB) GetStaleSessions(timeout time.Duration) ([]Session, error) {
 	}
 
 	return sessions, rows.Err()
+}
+
+// CreateUser creates a new user in the database
+func (db *DB) CreateUser(user User) error {
+	rolesJSON, err := json.Marshal(user.Roles)
+	if err != nil {
+		return fmt.Errorf("failed to marshal roles: %w", err)
+	}
+
+	now := time.Now()
+	_, err = db.conn.Exec(
+		"INSERT INTO users (id, username, email, display_name, password_hash, roles, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		user.ID, user.Username, user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), now, now,
+	)
+	return err
+}
+
+// GetUserByID retrieves a user by their ID
+func (db *DB) GetUserByID(id string) (*User, error) {
+	var user User
+	var rolesJSON string
+	err := db.conn.QueryRow(
+		"SELECT id, username, email, display_name, password_hash, roles, created_at, updated_at FROM users WHERE id = ?",
+		id,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &user.CreatedAt, &user.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal roles: %w", err)
+	}
+
+	return &user, nil
+}
+
+// GetUserByUsername retrieves a user by their username
+func (db *DB) GetUserByUsername(username string) (*User, error) {
+	var user User
+	var rolesJSON string
+	err := db.conn.QueryRow(
+		"SELECT id, username, email, display_name, password_hash, roles, created_at, updated_at FROM users WHERE username = ?",
+		username,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &user.CreatedAt, &user.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal roles: %w", err)
+	}
+
+	return &user, nil
+}
+
+// UpdateUser updates an existing user
+func (db *DB) UpdateUser(user User) error {
+	rolesJSON, err := json.Marshal(user.Roles)
+	if err != nil {
+		return fmt.Errorf("failed to marshal roles: %w", err)
+	}
+
+	result, err := db.conn.Exec(
+		"UPDATE users SET email = ?, display_name = ?, password_hash = ?, roles = ?, updated_at = ? WHERE id = ?",
+		user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), time.Now(), user.ID,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// SeedAdminUser creates the admin user if it doesn't exist
+func (db *DB) SeedAdminUser(username, passwordHash string) error {
+	// Check if admin user already exists
+	existing, err := db.GetUserByUsername(username)
+	if err != nil {
+		return fmt.Errorf("failed to check for existing admin: %w", err)
+	}
+	if existing != nil {
+		return nil // Already exists
+	}
+
+	user := User{
+		ID:           "admin-" + username,
+		Username:     username,
+		DisplayName:  "Administrator",
+		PasswordHash: passwordHash,
+		Roles:        []string{"admin", "user"},
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	return db.CreateUser(user)
+}
+
+// ListUsers returns all users
+func (db *DB) ListUsers() ([]User, error) {
+	rows, err := db.conn.Query(
+		"SELECT id, username, email, display_name, password_hash, roles, created_at, updated_at FROM users ORDER BY created_at DESC",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var user User
+		var rolesJSON string
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &user.CreatedAt, &user.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
+			user.Roles = []string{"user"}
+		}
+		users = append(users, user)
+	}
+
+	return users, rows.Err()
+}
+
+// DeleteUser removes a user by ID
+func (db *DB) DeleteUser(id string) error {
+	result, err := db.conn.Exec("DELETE FROM users WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// GetSetting retrieves a setting value by key
+func (db *DB) GetSetting(key string) (string, error) {
+	var value string
+	err := db.conn.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
+}
+
+// SetSetting creates or updates a setting
+func (db *DB) SetSetting(key, value string) error {
+	_, err := db.conn.Exec(
+		"INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?",
+		key, value, time.Now(), value, time.Now(),
+	)
+	return err
+}
+
+// GetAllSettings retrieves all settings
+func (db *DB) GetAllSettings() (map[string]string, error) {
+	rows, err := db.conn.Query("SELECT key, value FROM settings")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	settings := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		settings[key] = value
+	}
+
+	return settings, rows.Err()
 }

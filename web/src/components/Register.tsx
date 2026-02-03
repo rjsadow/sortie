@@ -1,17 +1,19 @@
 import { useState, type FormEvent } from 'react';
 import type { User } from '../types';
-import { login as authLogin } from '../services/auth';
+import { register as authRegister } from '../services/auth';
 
-interface LoginProps {
-  onLogin: (user: User) => void;
-  onShowRegister?: () => void;
-  allowRegistration?: boolean;
+interface RegisterProps {
+  onRegister: (user: User) => void;
+  onBackToLogin: () => void;
   darkMode: boolean;
 }
 
-export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: LoginProps) {
+export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -29,10 +31,30 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
       return;
     }
 
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Email is required');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await authLogin(username.trim(), password);
+      const response = await authRegister(
+        username.trim(),
+        password,
+        email.trim() || undefined,
+        displayName.trim() || undefined
+      );
 
       const user: User = {
         id: response.user.id,
@@ -42,10 +64,10 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
         roles: response.user.roles,
       };
 
-      onLogin(user);
+      onRegister(user);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed';
-      setError(message === 'Invalid credentials' ? 'Invalid username or password' : message);
+      const message = err instanceof Error ? err.message : 'Registration failed';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -80,16 +102,16 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
         </div>
 
         <h1 className={`text-2xl font-bold text-center mb-2 ${textColor}`}>
-          Launchpad
+          Create Account
         </h1>
-        <p className={`text-center mb-8 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-          Sign in to access your applications
+        <p className={`text-center mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+          Register to access Launchpad
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="username" className={`block text-sm font-medium mb-1 ${textColor}`}>
-              Username
+              Username *
             </label>
             <input
               id="username"
@@ -97,15 +119,44 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-primary`}
-              placeholder="Enter your username"
+              placeholder="Choose a username"
               autoComplete="username"
               autoFocus
             />
           </div>
 
           <div>
+            <label htmlFor="email" className={`block text-sm font-medium mb-1 ${textColor}`}>
+              Email *
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-primary`}
+              placeholder="your@email.com"
+              autoComplete="email"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="displayName" className={`block text-sm font-medium mb-1 ${textColor}`}>
+              Display Name
+            </label>
+            <input
+              id="displayName"
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-primary`}
+              placeholder="Your display name (optional)"
+            />
+          </div>
+
+          <div>
             <label htmlFor="password" className={`block text-sm font-medium mb-1 ${textColor}`}>
-              Password
+              Password *
             </label>
             <input
               id="password"
@@ -113,8 +164,23 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-primary`}
-              placeholder="Enter your password"
-              autoComplete="current-password"
+              placeholder="At least 6 characters"
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="confirmPassword" className={`block text-sm font-medium mb-1 ${textColor}`}>
+              Confirm Password *
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-primary`}
+              placeholder="Confirm your password"
+              autoComplete="new-password"
             />
           </div>
 
@@ -127,20 +193,18 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
             disabled={loading}
             className="w-full py-2 px-4 bg-brand-primary text-white font-medium rounded-lg hover:bg-brand-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Creating account...' : 'Create Account'}
           </button>
         </form>
 
-        {allowRegistration && onShowRegister && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={onShowRegister}
-              className={`text-sm ${darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-800'}`}
-            >
-              Don't have an account? <span className="text-brand-primary font-medium">Register</span>
-            </button>
-          </div>
-        )}
+        <div className="mt-6 text-center">
+          <button
+            onClick={onBackToLogin}
+            className={`text-sm ${darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            Already have an account? <span className="text-brand-primary font-medium">Sign in</span>
+          </button>
+        </div>
       </div>
     </div>
   );

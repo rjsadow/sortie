@@ -35,6 +35,14 @@ type Config struct {
 	SessionTimeout         time.Duration
 	SessionCleanupInterval time.Duration
 	PodReadyTimeout        time.Duration
+
+	// JWT Authentication configuration
+	JWTSecret            string
+	JWTAccessExpiry      time.Duration
+	JWTRefreshExpiry     time.Duration
+	AdminUsername        string
+	AdminPassword        string
+	AllowRegistration    bool
 }
 
 // ValidationError represents a configuration validation error.
@@ -74,6 +82,9 @@ const (
 	DefaultSessionTimeout         = 2 * time.Hour
 	DefaultSessionCleanupInterval = 5 * time.Minute
 	DefaultPodReadyTimeout        = 2 * time.Minute
+	DefaultJWTAccessExpiry        = 15 * time.Minute
+	DefaultJWTRefreshExpiry       = 24 * time.Hour
+	DefaultAdminUsername          = "admin"
 )
 
 // Load reads configuration from environment variables and returns a Config.
@@ -99,6 +110,11 @@ func Load() (*Config, error) {
 		SessionTimeout:         DefaultSessionTimeout,
 		SessionCleanupInterval: DefaultSessionCleanupInterval,
 		PodReadyTimeout:        DefaultPodReadyTimeout,
+
+		// JWT defaults
+		JWTAccessExpiry:  DefaultJWTAccessExpiry,
+		JWTRefreshExpiry: DefaultJWTRefreshExpiry,
+		AdminUsername:    DefaultAdminUsername,
 	}
 
 	// Load from environment variables
@@ -223,6 +239,57 @@ func (c *Config) loadFromEnv() error {
 		} else {
 			c.PodReadyTimeout = time.Duration(seconds) * time.Second
 		}
+	}
+
+	// JWT configuration
+	if v := os.Getenv("LAUNCHPAD_JWT_SECRET"); v != "" {
+		c.JWTSecret = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_JWT_ACCESS_EXPIRY"); v != "" {
+		minutes, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_JWT_ACCESS_EXPIRY",
+				Message: fmt.Sprintf("invalid expiry: %q (must be an integer representing minutes)", v),
+			})
+		} else if minutes <= 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_JWT_ACCESS_EXPIRY",
+				Message: fmt.Sprintf("expiry must be positive: %d", minutes),
+			})
+		} else {
+			c.JWTAccessExpiry = time.Duration(minutes) * time.Minute
+		}
+	}
+
+	if v := os.Getenv("LAUNCHPAD_JWT_REFRESH_EXPIRY"); v != "" {
+		hours, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_JWT_REFRESH_EXPIRY",
+				Message: fmt.Sprintf("invalid expiry: %q (must be an integer representing hours)", v),
+			})
+		} else if hours <= 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_JWT_REFRESH_EXPIRY",
+				Message: fmt.Sprintf("expiry must be positive: %d", hours),
+			})
+		} else {
+			c.JWTRefreshExpiry = time.Duration(hours) * time.Hour
+		}
+	}
+
+	if v := os.Getenv("LAUNCHPAD_ADMIN_USERNAME"); v != "" {
+		c.AdminUsername = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_ADMIN_PASSWORD"); v != "" {
+		c.AdminPassword = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_ALLOW_REGISTRATION"); v != "" {
+		c.AllowRegistration = strings.EqualFold(v, "true") || v == "1"
 	}
 
 	if len(parseErrors) > 0 {

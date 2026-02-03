@@ -37,6 +37,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "launchpad.fullname" . }}-config
+            {{- if .Values.auth.enabled }}
+            - secretRef:
+                name: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "launchpad.fullname" .)) }}
+            {{- end }}
           env:
             - name: LAUNCHPAD_NAMESPACE
               valueFrom:

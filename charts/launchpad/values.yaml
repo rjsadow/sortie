@@ -16,6 +16,24 @@ vncSidecar:
 # Replica count
 replicaCount: 1
 
+# JWT Authentication configuration
+auth:
+  enabled: true
+  # JWT signing secret (minimum 32 characters)
+  # Generate with: openssl rand -base64 32
+  jwtSecret: ""
+  # Access token expiry in minutes
+  accessExpiry: "15"
+  # Refresh token expiry in hours
+  refreshExpiry: "24"
+  # Initial admin credentials
+  adminUsername: "admin"
+  adminPassword: ""
+  # Allow user self-registration (can be changed by admin in UI)
+  allowRegistration: false
+  # Use existing secret instead of creating one
+  existingSecret: ""
+
 # Session configuration
 session:
   timeout: "120"           # Session timeout in minutes
