@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Application, User } from './types';
-import { SessionModal } from './components/SessionModal';
+import { SessionPage } from './components/SessionPage';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
 import { Admin } from './components/Admin';
@@ -328,6 +328,17 @@ function App() {
         onLogin={handleLogin}
         onShowRegister={() => setShowRegister(true)}
         allowRegistration={allowRegistration}
+        darkMode={darkMode}
+      />
+    );
+  }
+
+  // Show full-page session view for container/web_proxy apps
+  if (selectedContainerApp) {
+    return (
+      <SessionPage
+        app={selectedContainerApp}
+        onClose={() => setSelectedContainerApp(null)}
         darkMode={darkMode}
       />
     );
@@ -823,16 +834,6 @@ function App() {
           </p>
         </div>
       </footer>
-
-      {/* Session Modal for container and web_proxy apps (both use VNC streaming) */}
-      {selectedContainerApp && (
-        <SessionModal
-          app={selectedContainerApp}
-          isOpen={!!selectedContainerApp}
-          onClose={() => setSelectedContainerApp(null)}
-          darkMode={darkMode}
-        />
-      )}
 
       {/* Template Browser Modal */}
       <TemplateBrowser
