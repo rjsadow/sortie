@@ -5,7 +5,12 @@ import {
   listUsers,
   createUser,
   deleteUser,
+  listTemplates,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
   type AdminUser,
+  type AdminTemplate,
 } from '../services/auth';
 
 interface AdminProps {
@@ -13,8 +18,44 @@ interface AdminProps {
   onClose: () => void;
 }
 
+const TEMPLATE_CATEGORIES = [
+  'development',
+  'productivity',
+  'communication',
+  'browsers',
+  'monitoring',
+  'databases',
+  'creative',
+] as const;
+
+const LAUNCH_TYPES = ['url', 'container', 'web_proxy'] as const;
+
+const emptyTemplate: Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'> = {
+  template_id: '',
+  template_version: '1.0.0',
+  template_category: 'development',
+  name: '',
+  description: '',
+  url: '',
+  icon: '',
+  category: 'Development',
+  launch_type: 'container',
+  container_image: '',
+  container_port: 8080,
+  container_args: [],
+  tags: [],
+  maintainer: '',
+  documentation_url: '',
+  recommended_limits: {
+    cpu_request: '',
+    cpu_limit: '',
+    memory_request: '',
+    memory_limit: '',
+  },
+};
+
 export function Admin({ darkMode, onClose }: AdminProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'templates'>('settings');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -33,6 +74,14 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     isAdmin: false,
   });
 
+  // Templates state
+  const [templates, setTemplates] = useState<AdminTemplate[]>([]);
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<AdminTemplate | null>(null);
+  const [templateForm, setTemplateForm] = useState<Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'>>(emptyTemplate);
+  const [tagsInput, setTagsInput] = useState('');
+  const [containerArgsInput, setContainerArgsInput] = useState('');
+
   useEffect(() => {
     loadData();
   }, []);
@@ -41,12 +90,14 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     setLoading(true);
     setError('');
     try {
-      const [settings, userList] = await Promise.all([
+      const [settings, userList, templateList] = await Promise.all([
         getAdminSettings(),
         listUsers(),
+        listTemplates(),
       ]);
       setAllowRegistration(settings.allow_registration === true || settings.allow_registration === 'true');
       setUsers(userList);
+      setTemplates(templateList);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -107,6 +158,103 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     }
   };
 
+  const handleOpenTemplateForm = (template?: AdminTemplate) => {
+    if (template) {
+      setEditingTemplate(template);
+      setTemplateForm({
+        template_id: template.template_id,
+        template_version: template.template_version,
+        template_category: template.template_category,
+        name: template.name,
+        description: template.description,
+        url: template.url || '',
+        icon: template.icon || '',
+        category: template.category,
+        launch_type: template.launch_type,
+        container_image: template.container_image || '',
+        container_port: template.container_port || 8080,
+        container_args: template.container_args || [],
+        tags: template.tags || [],
+        maintainer: template.maintainer || '',
+        documentation_url: template.documentation_url || '',
+        recommended_limits: template.recommended_limits || {
+          cpu_request: '',
+          cpu_limit: '',
+          memory_request: '',
+          memory_limit: '',
+        },
+      });
+      setTagsInput((template.tags || []).join(', '));
+      setContainerArgsInput((template.container_args || []).join(', '));
+    } else {
+      setEditingTemplate(null);
+      setTemplateForm(emptyTemplate);
+      setTagsInput('');
+      setContainerArgsInput('');
+    }
+    setShowTemplateForm(true);
+  };
+
+  const handleCloseTemplateForm = () => {
+    setShowTemplateForm(false);
+    setEditingTemplate(null);
+    setTemplateForm(emptyTemplate);
+    setTagsInput('');
+    setContainerArgsInput('');
+  };
+
+  const handleSaveTemplate = async () => {
+    setError('');
+    if (!templateForm.template_id || !templateForm.name) {
+      setError('Template ID and Name are required');
+      return;
+    }
+    if (!templateForm.template_category || !templateForm.category) {
+      setError('Template Category and Display Category are required');
+      return;
+    }
+
+    // Parse tags and container args from comma-separated strings
+    const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
+    const containerArgs = containerArgsInput.split(',').map(a => a.trim()).filter(a => a);
+
+    const templateData = {
+      ...templateForm,
+      tags,
+      container_args: containerArgs,
+    };
+
+    try {
+      if (editingTemplate) {
+        await updateTemplate(editingTemplate.template_id, templateData);
+        setSuccess('Template updated successfully');
+      } else {
+        await createTemplate(templateData);
+        setSuccess('Template created successfully');
+      }
+      handleCloseTemplateForm();
+      await loadData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save template');
+    }
+  };
+
+  const handleDeleteTemplate = async (template: AdminTemplate) => {
+    if (!confirm(`Are you sure you want to delete template "${template.name}"?`)) {
+      return;
+    }
+    setError('');
+    try {
+      await deleteTemplate(template.template_id);
+      await loadData();
+      setSuccess('Template deleted successfully');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete template');
+    }
+  };
+
   const bgColor = darkMode ? 'bg-gray-900' : 'bg-gray-100';
   const cardBg = darkMode ? 'bg-gray-800' : 'bg-white';
   const textColor = darkMode ? 'text-gray-100' : 'text-gray-900';
@@ -147,6 +295,14 @@ export function Admin({ darkMode, onClose }: AdminProps) {
               : mutedText}`}
           >
             Users
+          </button>
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`pb-2 px-1 ${activeTab === 'templates'
+              ? 'border-b-2 border-brand-primary text-brand-primary'
+              : mutedText}`}
+          >
+            Templates
           </button>
         </div>
 
@@ -323,6 +479,405 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                   </table>
                   {users.length === 0 && (
                     <p className={`text-center py-8 ${mutedText}`}>No users found</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Templates Tab */}
+            {activeTab === 'templates' && (
+              <div className={`${cardBg} rounded-lg p-6`}>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className={`text-lg font-semibold ${textColor}`}>Template Management</h2>
+                  <button
+                    onClick={() => handleOpenTemplateForm()}
+                    className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                  >
+                    Create Template
+                  </button>
+                </div>
+
+                {/* Template Form Modal */}
+                {showTemplateForm && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className={`${cardBg} rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto`}>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className={`text-lg font-semibold ${textColor}`}>
+                          {editingTemplate ? 'Edit Template' : 'Create New Template'}
+                        </h3>
+                        <button
+                          onClick={handleCloseTemplateForm}
+                          className={`p-1 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
+                        >
+                          <svg className={`w-5 h-5 ${textColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Template ID - readonly when editing */}
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Template ID *</label>
+                          <input
+                            type="text"
+                            value={templateForm.template_id}
+                            onChange={(e) => setTemplateForm({ ...templateForm, template_id: e.target.value })}
+                            disabled={!!editingTemplate}
+                            placeholder="e.g., my-app"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText} ${editingTemplate ? 'opacity-50' : ''}`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Name *</label>
+                          <input
+                            type="text"
+                            value={templateForm.name}
+                            onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                            placeholder="e.g., My Application"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div className="col-span-2">
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Description *</label>
+                          <textarea
+                            value={templateForm.description}
+                            onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                            placeholder="Brief description of the application"
+                            rows={2}
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Template Category *</label>
+                          <select
+                            value={templateForm.template_category}
+                            onChange={(e) => setTemplateForm({ ...templateForm, template_category: e.target.value })}
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          >
+                            {TEMPLATE_CATEGORIES.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Display Category *</label>
+                          <input
+                            type="text"
+                            value={templateForm.category}
+                            onChange={(e) => setTemplateForm({ ...templateForm, category: e.target.value })}
+                            placeholder="e.g., Development"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Launch Type *</label>
+                          <select
+                            value={templateForm.launch_type}
+                            onChange={(e) => setTemplateForm({ ...templateForm, launch_type: e.target.value })}
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          >
+                            {LAUNCH_TYPES.map((type) => (
+                              <option key={type} value={type}>
+                                {type === 'url' ? 'URL' : type === 'container' ? 'Container (VNC)' : 'Web Proxy'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Version</label>
+                          <input
+                            type="text"
+                            value={templateForm.template_version}
+                            onChange={(e) => setTemplateForm({ ...templateForm, template_version: e.target.value })}
+                            placeholder="1.0.0"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        {/* Container-specific fields */}
+                        {(templateForm.launch_type === 'container' || templateForm.launch_type === 'web_proxy') && (
+                          <>
+                            <div>
+                              <label className={`block text-sm mb-1 ${mutedText}`}>Container Image *</label>
+                              <input
+                                type="text"
+                                value={templateForm.container_image}
+                                onChange={(e) => setTemplateForm({ ...templateForm, container_image: e.target.value })}
+                                placeholder="e.g., nginx:latest"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+
+                            <div>
+                              <label className={`block text-sm mb-1 ${mutedText}`}>Container Port</label>
+                              <input
+                                type="number"
+                                value={templateForm.container_port}
+                                onChange={(e) => setTemplateForm({ ...templateForm, container_port: parseInt(e.target.value) || 8080 })}
+                                placeholder="8080"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+
+                            <div className="col-span-2">
+                              <label className={`block text-sm mb-1 ${mutedText}`}>Container Args (comma-separated)</label>
+                              <input
+                                type="text"
+                                value={containerArgsInput}
+                                onChange={(e) => setContainerArgsInput(e.target.value)}
+                                placeholder="e.g., --auth, none, --bind-addr, 0.0.0.0:8080"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {/* URL for url launch type */}
+                        {templateForm.launch_type === 'url' && (
+                          <div className="col-span-2">
+                            <label className={`block text-sm mb-1 ${mutedText}`}>URL *</label>
+                            <input
+                              type="text"
+                              value={templateForm.url}
+                              onChange={(e) => setTemplateForm({ ...templateForm, url: e.target.value })}
+                              placeholder="https://example.com"
+                              className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Icon URL</label>
+                          <input
+                            type="text"
+                            value={templateForm.icon}
+                            onChange={(e) => setTemplateForm({ ...templateForm, icon: e.target.value })}
+                            placeholder="https://example.com/icon.png"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Maintainer</label>
+                          <input
+                            type="text"
+                            value={templateForm.maintainer}
+                            onChange={(e) => setTemplateForm({ ...templateForm, maintainer: e.target.value })}
+                            placeholder="e.g., My Organization"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div className="col-span-2">
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Documentation URL</label>
+                          <input
+                            type="text"
+                            value={templateForm.documentation_url}
+                            onChange={(e) => setTemplateForm({ ...templateForm, documentation_url: e.target.value })}
+                            placeholder="https://docs.example.com"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div className="col-span-2">
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Tags (comma-separated)</label>
+                          <input
+                            type="text"
+                            value={tagsInput}
+                            onChange={(e) => setTagsInput(e.target.value)}
+                            placeholder="e.g., web, development, tools"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        {/* Resource Limits */}
+                        <div className="col-span-2">
+                          <label className={`block text-sm mb-2 ${mutedText}`}>Resource Limits</label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className={`block text-xs mb-1 ${mutedText}`}>CPU Request</label>
+                              <input
+                                type="text"
+                                value={templateForm.recommended_limits?.cpu_request || ''}
+                                onChange={(e) => setTemplateForm({
+                                  ...templateForm,
+                                  recommended_limits: {
+                                    ...templateForm.recommended_limits,
+                                    cpu_request: e.target.value,
+                                  },
+                                })}
+                                placeholder="e.g., 100m"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-xs mb-1 ${mutedText}`}>CPU Limit</label>
+                              <input
+                                type="text"
+                                value={templateForm.recommended_limits?.cpu_limit || ''}
+                                onChange={(e) => setTemplateForm({
+                                  ...templateForm,
+                                  recommended_limits: {
+                                    ...templateForm.recommended_limits,
+                                    cpu_limit: e.target.value,
+                                  },
+                                })}
+                                placeholder="e.g., 1"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-xs mb-1 ${mutedText}`}>Memory Request</label>
+                              <input
+                                type="text"
+                                value={templateForm.recommended_limits?.memory_request || ''}
+                                onChange={(e) => setTemplateForm({
+                                  ...templateForm,
+                                  recommended_limits: {
+                                    ...templateForm.recommended_limits,
+                                    memory_request: e.target.value,
+                                  },
+                                })}
+                                placeholder="e.g., 256Mi"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-xs mb-1 ${mutedText}`}>Memory Limit</label>
+                              <input
+                                type="text"
+                                value={templateForm.recommended_limits?.memory_limit || ''}
+                                onChange={(e) => setTemplateForm({
+                                  ...templateForm,
+                                  recommended_limits: {
+                                    ...templateForm.recommended_limits,
+                                    memory_limit: e.target.value,
+                                  },
+                                })}
+                                placeholder="e.g., 1Gi"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-3 mt-6">
+                        <button
+                          onClick={handleCloseTemplateForm}
+                          className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} ${textColor}`}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveTemplate}
+                          className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                        >
+                          {editingTemplate ? 'Update Template' : 'Create Template'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Templates List */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <th className={`text-left py-2 ${mutedText}`}>Name</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Category</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Launch Type</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Tags</th>
+                        <th className={`text-right py-2 ${mutedText}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {templates.map((template) => (
+                        <tr
+                          key={template.template_id}
+                          className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}
+                        >
+                          <td className={`py-3 ${textColor}`}>
+                            <div className="flex items-center gap-2">
+                              {template.icon && (
+                                <img
+                                  src={template.icon}
+                                  alt=""
+                                  className="w-6 h-6 rounded"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              )}
+                              <div>
+                                <div className="font-medium">{template.name}</div>
+                                <div className={`text-xs ${mutedText}`}>{template.template_id}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className={`py-3 ${mutedText}`}>
+                            <span className="inline-block px-2 py-0.5 text-xs rounded bg-blue-500/20 text-blue-400">
+                              {template.template_category}
+                            </span>
+                          </td>
+                          <td className={`py-3 ${mutedText}`}>
+                            <span className={`inline-block px-2 py-0.5 text-xs rounded ${
+                              template.launch_type === 'url'
+                                ? 'bg-green-500/20 text-green-400'
+                                : template.launch_type === 'web_proxy'
+                                ? 'bg-purple-500/20 text-purple-400'
+                                : 'bg-orange-500/20 text-orange-400'
+                            }`}>
+                              {template.launch_type}
+                            </span>
+                          </td>
+                          <td className="py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {(template.tags || []).slice(0, 3).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className={`inline-block px-2 py-0.5 text-xs rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-200'} ${mutedText}`}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                              {(template.tags || []).length > 3 && (
+                                <span className={`text-xs ${mutedText}`}>
+                                  +{template.tags.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 text-right">
+                            <button
+                              onClick={() => handleOpenTemplateForm(template)}
+                              className="text-blue-500 hover:text-blue-400 text-sm mr-3"
+                              title="Edit template"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTemplate(template)}
+                              className="text-red-500 hover:text-red-400 text-sm"
+                              title="Delete template"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {templates.length === 0 && (
+                    <p className={`text-center py-8 ${mutedText}`}>No templates found. Click "Create Template" to add one.</p>
                   )}
                 </div>
               </div>

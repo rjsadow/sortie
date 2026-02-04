@@ -68,6 +68,13 @@ load_images() {
         docker build -t ghcr.io/rjsadow/launchpad-vnc-sidecar:latest "${ROOT_DIR}/docker/vnc-sidecar"
         kind load docker-image ghcr.io/rjsadow/launchpad-vnc-sidecar:latest --name "$CLUSTER_NAME"
     fi
+
+    # Build VNC browser sidecar if it exists
+    if [ -d "${ROOT_DIR}/docker/browser-sidecar" ]; then
+        log_info "Building VNC sidecar image..."
+        docker build -t ghcr.io/rjsadow/launchpad-browser-sidecar:latest "${ROOT_DIR}/docker/browser-sidecar"
+        kind load docker-image ghcr.io/rjsadow/launchpad-browser-sidecar:latest --name "$CLUSTER_NAME"
+    fi
 }
 
 deploy_helm() {

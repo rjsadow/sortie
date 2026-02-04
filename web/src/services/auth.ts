@@ -316,3 +316,97 @@ export async function deleteUser(id: string): Promise<void> {
     throw new Error(error || 'Failed to delete user');
   }
 }
+
+// Template type for admin management
+export interface AdminTemplate {
+  id?: number;
+  template_id: string;
+  template_version: string;
+  template_category: string;
+  name: string;
+  description: string;
+  url: string;
+  icon: string;
+  category: string;
+  launch_type: string;
+  container_image?: string;
+  container_port?: number;
+  container_args?: string[];
+  tags: string[];
+  maintainer?: string;
+  documentation_url?: string;
+  recommended_limits?: {
+    cpu_request?: string;
+    cpu_limit?: string;
+    memory_request?: string;
+    memory_limit?: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Public: List templates (for template marketplace)
+export async function listTemplatesPublic(): Promise<AdminTemplate[]> {
+  const response = await fetch('/api/templates');
+  if (!response.ok) {
+    throw new Error('Failed to fetch templates');
+  }
+  return response.json();
+}
+
+// Admin: List templates
+export async function listTemplates(): Promise<AdminTemplate[]> {
+  const response = await fetchWithAuth('/api/admin/templates');
+  if (!response.ok) {
+    throw new Error('Failed to list templates');
+  }
+  return response.json();
+}
+
+// Admin: Get template by ID
+export async function getTemplate(templateId: string): Promise<AdminTemplate> {
+  const response = await fetchWithAuth(`/api/admin/templates/${templateId}`);
+  if (!response.ok) {
+    throw new Error('Failed to get template');
+  }
+  return response.json();
+}
+
+// Admin: Create template
+export async function createTemplate(template: Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'>): Promise<AdminTemplate> {
+  const response = await fetchWithAuth('/api/admin/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(template),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to create template');
+  }
+  return response.json();
+}
+
+// Admin: Update template
+export async function updateTemplate(templateId: string, template: Partial<AdminTemplate>): Promise<AdminTemplate> {
+  const response = await fetchWithAuth(`/api/admin/templates/${templateId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(template),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to update template');
+  }
+  return response.json();
+}
+
+// Admin: Delete template
+export async function deleteTemplate(templateId: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/admin/templates/${templateId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to delete template');
+  }
+}

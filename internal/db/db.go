@@ -47,6 +47,35 @@ type AppConfig struct {
 	Applications []Application `json:"applications"`
 }
 
+// Template represents an application template in the marketplace
+type Template struct {
+	ID                int             `json:"id"`
+	TemplateID        string          `json:"template_id"`
+	TemplateVersion   string          `json:"template_version"`
+	TemplateCategory  string          `json:"template_category"`
+	Name              string          `json:"name"`
+	Description       string          `json:"description"`
+	URL               string          `json:"url"`
+	Icon              string          `json:"icon"`
+	Category          string          `json:"category"`
+	LaunchType        string          `json:"launch_type"`
+	ContainerImage    string          `json:"container_image,omitempty"`
+	ContainerPort     int             `json:"container_port,omitempty"`
+	ContainerArgs     []string        `json:"container_args,omitempty"`
+	Tags              []string        `json:"tags"`
+	Maintainer        string          `json:"maintainer,omitempty"`
+	DocumentationURL  string          `json:"documentation_url,omitempty"`
+	RecommendedLimits *ResourceLimits `json:"recommended_limits,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+}
+
+// TemplateCatalog is the JSON structure for templates.json
+type TemplateCatalog struct {
+	Version   string     `json:"version"`
+	Templates []Template `json:"templates"`
+}
+
 // AuditLog represents an audit log entry
 type AuditLog struct {
 	ID        int64     `json:"id"`
@@ -207,6 +236,33 @@ func (db *DB) migrate() error {
 		value TEXT NOT NULL,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS templates (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		template_id TEXT UNIQUE NOT NULL,
+		template_version TEXT NOT NULL DEFAULT '1.0.0',
+		template_category TEXT NOT NULL,
+		name TEXT NOT NULL,
+		description TEXT NOT NULL,
+		url TEXT DEFAULT '',
+		icon TEXT DEFAULT '',
+		category TEXT NOT NULL,
+		launch_type TEXT NOT NULL DEFAULT 'container',
+		container_image TEXT,
+		container_port INTEGER DEFAULT 8080,
+		container_args TEXT DEFAULT '[]',
+		tags TEXT DEFAULT '[]',
+		maintainer TEXT,
+		documentation_url TEXT,
+		cpu_request TEXT DEFAULT '',
+		cpu_limit TEXT DEFAULT '',
+		memory_request TEXT DEFAULT '',
+		memory_limit TEXT DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_templates_template_id ON templates(template_id);
+	CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(template_category);
 	`
 	_, err := db.conn.Exec(schema)
 	if err != nil {
@@ -896,4 +952,286 @@ func (db *DB) GetAllSettings() (map[string]string, error) {
 	}
 
 	return settings, rows.Err()
+}
+
+// ListTemplates returns all templates
+func (db *DB) ListTemplates() ([]Template, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, template_id, template_version, template_category, name, description,
+		       url, icon, category, launch_type, container_image, container_port,
+		       container_args, tags, maintainer, documentation_url,
+		       cpu_request, cpu_limit, memory_request, memory_limit, created_at, updated_at
+		FROM templates ORDER BY template_category, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var templates []Template
+	for rows.Next() {
+		var t Template
+		var containerArgsJSON, tagsJSON string
+		var cpuRequest, cpuLimit, memoryRequest, memoryLimit sql.NullString
+		var maintainer, docURL sql.NullString
+		var containerImage sql.NullString
+		var containerPort sql.NullInt64
+
+		if err := rows.Scan(
+			&t.ID, &t.TemplateID, &t.TemplateVersion, &t.TemplateCategory,
+			&t.Name, &t.Description, &t.URL, &t.Icon, &t.Category, &t.LaunchType,
+			&containerImage, &containerPort, &containerArgsJSON, &tagsJSON,
+			&maintainer, &docURL,
+			&cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit,
+			&t.CreatedAt, &t.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		if containerImage.Valid {
+			t.ContainerImage = containerImage.String
+		}
+		if containerPort.Valid {
+			t.ContainerPort = int(containerPort.Int64)
+		}
+		if maintainer.Valid {
+			t.Maintainer = maintainer.String
+		}
+		if docURL.Valid {
+			t.DocumentationURL = docURL.String
+		}
+
+		// Parse JSON arrays
+		if containerArgsJSON != "" && containerArgsJSON != "[]" {
+			json.Unmarshal([]byte(containerArgsJSON), &t.ContainerArgs)
+		}
+		if tagsJSON != "" && tagsJSON != "[]" {
+			json.Unmarshal([]byte(tagsJSON), &t.Tags)
+		}
+
+		// Set resource limits if any are specified
+		if cpuRequest.Valid || cpuLimit.Valid || memoryRequest.Valid || memoryLimit.Valid {
+			t.RecommendedLimits = &ResourceLimits{
+				CPURequest:    cpuRequest.String,
+				CPULimit:      cpuLimit.String,
+				MemoryRequest: memoryRequest.String,
+				MemoryLimit:   memoryLimit.String,
+			}
+		}
+
+		templates = append(templates, t)
+	}
+
+	return templates, rows.Err()
+}
+
+// GetTemplate returns a single template by template_id
+func (db *DB) GetTemplate(templateID string) (*Template, error) {
+	var t Template
+	var containerArgsJSON, tagsJSON string
+	var cpuRequest, cpuLimit, memoryRequest, memoryLimit sql.NullString
+	var maintainer, docURL sql.NullString
+	var containerImage sql.NullString
+	var containerPort sql.NullInt64
+
+	err := db.conn.QueryRow(`
+		SELECT id, template_id, template_version, template_category, name, description,
+		       url, icon, category, launch_type, container_image, container_port,
+		       container_args, tags, maintainer, documentation_url,
+		       cpu_request, cpu_limit, memory_request, memory_limit, created_at, updated_at
+		FROM templates WHERE template_id = ?`, templateID).Scan(
+		&t.ID, &t.TemplateID, &t.TemplateVersion, &t.TemplateCategory,
+		&t.Name, &t.Description, &t.URL, &t.Icon, &t.Category, &t.LaunchType,
+		&containerImage, &containerPort, &containerArgsJSON, &tagsJSON,
+		&maintainer, &docURL,
+		&cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit,
+		&t.CreatedAt, &t.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if containerImage.Valid {
+		t.ContainerImage = containerImage.String
+	}
+	if containerPort.Valid {
+		t.ContainerPort = int(containerPort.Int64)
+	}
+	if maintainer.Valid {
+		t.Maintainer = maintainer.String
+	}
+	if docURL.Valid {
+		t.DocumentationURL = docURL.String
+	}
+
+	// Parse JSON arrays
+	if containerArgsJSON != "" && containerArgsJSON != "[]" {
+		json.Unmarshal([]byte(containerArgsJSON), &t.ContainerArgs)
+	}
+	if tagsJSON != "" && tagsJSON != "[]" {
+		json.Unmarshal([]byte(tagsJSON), &t.Tags)
+	}
+
+	// Set resource limits if any are specified
+	if cpuRequest.Valid || cpuLimit.Valid || memoryRequest.Valid || memoryLimit.Valid {
+		t.RecommendedLimits = &ResourceLimits{
+			CPURequest:    cpuRequest.String,
+			CPULimit:      cpuLimit.String,
+			MemoryRequest: memoryRequest.String,
+			MemoryLimit:   memoryLimit.String,
+		}
+	}
+
+	return &t, nil
+}
+
+// CreateTemplate inserts a new template
+func (db *DB) CreateTemplate(t Template) error {
+	// Serialize arrays to JSON
+	containerArgsJSON := "[]"
+	if len(t.ContainerArgs) > 0 {
+		if argsBytes, err := json.Marshal(t.ContainerArgs); err == nil {
+			containerArgsJSON = string(argsBytes)
+		}
+	}
+	tagsJSON := "[]"
+	if len(t.Tags) > 0 {
+		if tagsBytes, err := json.Marshal(t.Tags); err == nil {
+			tagsJSON = string(tagsBytes)
+		}
+	}
+
+	// Extract resource limits
+	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
+	if t.RecommendedLimits != nil {
+		cpuRequest = t.RecommendedLimits.CPURequest
+		cpuLimit = t.RecommendedLimits.CPULimit
+		memoryRequest = t.RecommendedLimits.MemoryRequest
+		memoryLimit = t.RecommendedLimits.MemoryLimit
+	}
+
+	now := time.Now()
+	_, err := db.conn.Exec(`
+		INSERT INTO templates (template_id, template_version, template_category, name, description,
+		                       url, icon, category, launch_type, container_image, container_port,
+		                       container_args, tags, maintainer, documentation_url,
+		                       cpu_request, cpu_limit, memory_request, memory_limit, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.TemplateID, t.TemplateVersion, t.TemplateCategory, t.Name, t.Description,
+		t.URL, t.Icon, t.Category, t.LaunchType, t.ContainerImage, t.ContainerPort,
+		containerArgsJSON, tagsJSON, t.Maintainer, t.DocumentationURL,
+		cpuRequest, cpuLimit, memoryRequest, memoryLimit, now, now,
+	)
+	return err
+}
+
+// UpdateTemplate updates an existing template
+func (db *DB) UpdateTemplate(t Template) error {
+	// Serialize arrays to JSON
+	containerArgsJSON := "[]"
+	if len(t.ContainerArgs) > 0 {
+		if argsBytes, err := json.Marshal(t.ContainerArgs); err == nil {
+			containerArgsJSON = string(argsBytes)
+		}
+	}
+	tagsJSON := "[]"
+	if len(t.Tags) > 0 {
+		if tagsBytes, err := json.Marshal(t.Tags); err == nil {
+			tagsJSON = string(tagsBytes)
+		}
+	}
+
+	// Extract resource limits
+	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
+	if t.RecommendedLimits != nil {
+		cpuRequest = t.RecommendedLimits.CPURequest
+		cpuLimit = t.RecommendedLimits.CPULimit
+		memoryRequest = t.RecommendedLimits.MemoryRequest
+		memoryLimit = t.RecommendedLimits.MemoryLimit
+	}
+
+	result, err := db.conn.Exec(`
+		UPDATE templates SET template_version = ?, template_category = ?, name = ?, description = ?,
+		                     url = ?, icon = ?, category = ?, launch_type = ?, container_image = ?,
+		                     container_port = ?, container_args = ?, tags = ?, maintainer = ?,
+		                     documentation_url = ?, cpu_request = ?, cpu_limit = ?,
+		                     memory_request = ?, memory_limit = ?, updated_at = ?
+		WHERE template_id = ?`,
+		t.TemplateVersion, t.TemplateCategory, t.Name, t.Description,
+		t.URL, t.Icon, t.Category, t.LaunchType, t.ContainerImage,
+		t.ContainerPort, containerArgsJSON, tagsJSON, t.Maintainer,
+		t.DocumentationURL, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
+		time.Now(), t.TemplateID,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// DeleteTemplate removes a template by template_id
+func (db *DB) DeleteTemplate(templateID string) error {
+	result, err := db.conn.Exec("DELETE FROM templates WHERE template_id = ?", templateID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// SeedTemplatesFromJSON loads templates from a JSON file if the templates table is empty
+func (db *DB) SeedTemplatesFromJSON(jsonPath string) error {
+	// Read JSON file
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		return fmt.Errorf("failed to read templates JSON file: %w", err)
+	}
+
+	return db.SeedTemplatesFromData(data)
+}
+
+// SeedTemplatesFromData loads templates from JSON data if the templates table is empty
+func (db *DB) SeedTemplatesFromData(data []byte) error {
+	// Check if templates table is empty
+	var count int
+	err := db.conn.QueryRow("SELECT COUNT(*) FROM templates").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to count templates: %w", err)
+	}
+
+	if count > 0 {
+		return nil // Already seeded
+	}
+
+	var catalog TemplateCatalog
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		return fmt.Errorf("failed to parse templates JSON: %w", err)
+	}
+
+	// Insert templates
+	for _, t := range catalog.Templates {
+		if err := db.CreateTemplate(t); err != nil {
+			return fmt.Errorf("failed to insert template %s: %w", t.TemplateID, err)
+		}
+	}
+
+	return nil
 }

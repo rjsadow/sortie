@@ -26,6 +26,9 @@ import (
 //go:embed all:web/dist
 var embeddedFiles embed.FS
 
+//go:embed web/src/data/templates.json
+var embeddedTemplates []byte
+
 var database *db.DB
 var sessionManager *sessions.Manager
 var appConfig *config.Config
@@ -60,6 +63,11 @@ func main() {
 		if err := database.SeedFromJSON(appConfig.Seed); err != nil {
 			log.Printf("Warning: failed to seed from JSON: %v", err)
 		}
+	}
+
+	// Seed templates from embedded templates.json if templates table is empty
+	if err := database.SeedTemplatesFromData(embeddedTemplates); err != nil {
+		log.Printf("Warning: failed to seed templates: %v", err)
 	}
 
 	// Initialize JWT auth provider
@@ -132,6 +140,12 @@ func main() {
 	mux.Handle("/api/admin/settings", authMiddleware(http.HandlerFunc(handleAdminSettings)))
 	mux.Handle("/api/admin/users", authMiddleware(http.HandlerFunc(handleAdminUsers)))
 	mux.Handle("/api/admin/users/", authMiddleware(http.HandlerFunc(handleAdminUserByID)))
+	mux.Handle("/api/admin/templates", authMiddleware(http.HandlerFunc(handleAdminTemplates)))
+	mux.Handle("/api/admin/templates/", authMiddleware(http.HandlerFunc(handleAdminTemplateByID)))
+
+	// Public template endpoints (for template marketplace)
+	mux.HandleFunc("/api/templates", handleTemplates)
+	mux.HandleFunc("/api/templates/", handleTemplateByID)
 
 	mux.Handle("/api/apps", authMiddleware(http.HandlerFunc(handleApps)))
 	mux.Handle("/api/apps/", authMiddleware(http.HandlerFunc(handleAppByID)))
@@ -1205,6 +1219,239 @@ func handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 
 		// Log the action
 		database.LogAudit(currentUser.Username, "DELETE_USER", fmt.Sprintf("Deleted user: %s (%s)", user.Username, id))
+
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleTemplates handles GET /api/templates (public)
+func handleTemplates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	templates, err := database.ListTemplates()
+	if err != nil {
+		log.Printf("Error listing templates: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if templates == nil {
+		templates = []db.Template{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(templates)
+}
+
+// handleTemplateByID handles GET /api/templates/{id} (public)
+func handleTemplateByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	templateID := strings.TrimPrefix(r.URL.Path, "/api/templates/")
+	if templateID == "" {
+		http.Error(w, "Template ID required", http.StatusBadRequest)
+		return
+	}
+
+	template, err := database.GetTemplate(templateID)
+	if err != nil {
+		log.Printf("Error getting template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if template == nil {
+		http.Error(w, "Template not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(template)
+}
+
+// handleAdminTemplates handles GET/POST /api/admin/templates (admin only)
+func handleAdminTemplates(w http.ResponseWriter, r *http.Request) {
+	if !isAdmin(r) {
+		http.Error(w, "Admin access required", http.StatusForbidden)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		templates, err := database.ListTemplates()
+		if err != nil {
+			log.Printf("Error listing templates: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		if templates == nil {
+			templates = []db.Template{}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(templates)
+
+	case http.MethodPost:
+		var template db.Template
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		if err := json.Unmarshal(body, &template); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Validate required fields
+		if template.TemplateID == "" {
+			http.Error(w, "Missing required field: template_id", http.StatusBadRequest)
+			return
+		}
+		if template.Name == "" {
+			http.Error(w, "Missing required field: name", http.StatusBadRequest)
+			return
+		}
+		if template.TemplateCategory == "" {
+			http.Error(w, "Missing required field: template_category", http.StatusBadRequest)
+			return
+		}
+		if template.Category == "" {
+			http.Error(w, "Missing required field: category", http.StatusBadRequest)
+			return
+		}
+
+		// Set defaults
+		if template.TemplateVersion == "" {
+			template.TemplateVersion = "1.0.0"
+		}
+		if template.LaunchType == "" {
+			template.LaunchType = "container"
+		}
+
+		if err := database.CreateTemplate(template); err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+				http.Error(w, "Template with this ID already exists", http.StatusConflict)
+				return
+			}
+			log.Printf("Error creating template: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Log the action
+		user := middleware.GetUserFromContext(r.Context())
+		database.LogAudit(user.Username, "CREATE_TEMPLATE", fmt.Sprintf("Created template: %s (%s)", template.Name, template.TemplateID))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(template)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleAdminTemplateByID handles PUT/DELETE /api/admin/templates/{id} (admin only)
+func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
+	if !isAdmin(r) {
+		http.Error(w, "Admin access required", http.StatusForbidden)
+		return
+	}
+
+	templateID := strings.TrimPrefix(r.URL.Path, "/api/admin/templates/")
+	if templateID == "" {
+		http.Error(w, "Template ID required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		template, err := database.GetTemplate(templateID)
+		if err != nil {
+			log.Printf("Error getting template: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if template == nil {
+			http.Error(w, "Template not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(template)
+
+	case http.MethodPut:
+		var template db.Template
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		if err := json.Unmarshal(body, &template); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Use ID from URL path
+		template.TemplateID = templateID
+
+		// Validate required fields
+		if template.Name == "" {
+			http.Error(w, "Missing required field: name", http.StatusBadRequest)
+			return
+		}
+
+		if err := database.UpdateTemplate(template); err != nil {
+			if err.Error() == "sql: no rows in result set" {
+				http.Error(w, "Template not found", http.StatusNotFound)
+				return
+			}
+			log.Printf("Error updating template: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Log the action
+		user := middleware.GetUserFromContext(r.Context())
+		database.LogAudit(user.Username, "UPDATE_TEMPLATE", fmt.Sprintf("Updated template: %s (%s)", template.Name, templateID))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(template)
+
+	case http.MethodDelete:
+		// Get template info for audit log
+		template, err := database.GetTemplate(templateID)
+		if err != nil {
+			log.Printf("Error getting template: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if template == nil {
+			http.Error(w, "Template not found", http.StatusNotFound)
+			return
+		}
+
+		if err := database.DeleteTemplate(templateID); err != nil {
+			log.Printf("Error deleting template: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Log the action
+		user := middleware.GetUserFromContext(r.Context())
+		database.LogAudit(user.Username, "DELETE_TEMPLATE", fmt.Sprintf("Deleted template: %s (%s)", template.Name, templateID))
 
 		w.WriteHeader(http.StatusNoContent)
 
