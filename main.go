@@ -140,6 +140,7 @@ func main() {
 	mux.Handle("/api/admin/settings", authMiddleware(http.HandlerFunc(handleAdminSettings)))
 	mux.Handle("/api/admin/users", authMiddleware(http.HandlerFunc(handleAdminUsers)))
 	mux.Handle("/api/admin/users/", authMiddleware(http.HandlerFunc(handleAdminUserByID)))
+	mux.Handle("/api/admin/sessions", authMiddleware(http.HandlerFunc(handleAdminSessions)))
 	mux.Handle("/api/admin/templates", authMiddleware(http.HandlerFunc(handleAdminTemplates)))
 	mux.Handle("/api/admin/templates/", authMiddleware(http.HandlerFunc(handleAdminTemplateByID)))
 
@@ -1046,6 +1047,49 @@ func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleAdminSessions handles GET /api/admin/sessions (admin only)
+func handleAdminSessions(w http.ResponseWriter, r *http.Request) {
+	if !isAdmin(r) {
+		http.Error(w, "Admin access required", http.StatusForbidden)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionList, err := sessionManager.ListSessions(r.Context())
+	if err != nil {
+		log.Printf("Error listing sessions: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if sessionList == nil {
+		sessionList = []db.Session{}
+	}
+
+	// Convert to response format with WebSocket/Proxy URLs
+	responses := make([]sessions.SessionResponse, len(sessionList))
+	for i, s := range sessionList {
+		app, _ := database.GetApp(s.AppID)
+		appName := ""
+		wsURL := ""
+		proxyURL := ""
+		if app != nil {
+			appName = app.Name
+			if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
+				wsURL = sessionManager.GetSessionWebSocketURL(&s)
+			}
+		}
+		responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, proxyURL)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responses)
 }
 
 // handleAdminUsers handles GET/POST /api/admin/users

@@ -1,4 +1,4 @@
-import type { User } from '../types';
+import type { User, Session } from '../types';
 
 // Auth response types
 export interface AuthResponse {
@@ -242,6 +242,26 @@ export async function register(
   }
 
   return data;
+}
+
+// Admin: List all sessions (system-wide)
+export async function listAdminSessions(): Promise<Session[]> {
+  const response = await fetchWithAuth('/api/admin/sessions');
+  if (!response.ok) {
+    throw new Error('Failed to list sessions');
+  }
+  return response.json();
+}
+
+// Admin: Terminate a session
+export async function terminateAdminSession(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/sessions/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to terminate session');
+  }
 }
 
 // Admin: Get settings

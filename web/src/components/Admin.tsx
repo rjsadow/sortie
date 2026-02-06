@@ -9,9 +9,13 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
+  listAdminSessions,
+  terminateAdminSession,
   type AdminUser,
   type AdminTemplate,
 } from '../services/auth';
+import type { Session, SessionStatus } from '../types';
+import { formatDuration } from '../utils/time';
 
 interface AdminProps {
   darkMode: boolean;
@@ -55,7 +59,7 @@ const emptyTemplate: Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'> = {
 };
 
 export function Admin({ darkMode, onClose }: AdminProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'templates'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'templates' | 'sessions'>('settings');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -74,6 +78,9 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     isAdmin: false,
   });
 
+  // Sessions state
+  const [adminSessions, setAdminSessions] = useState<Session[]>([]);
+
   // Templates state
   const [templates, setTemplates] = useState<AdminTemplate[]>([]);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -90,14 +97,16 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     setLoading(true);
     setError('');
     try {
-      const [settings, userList, templateList] = await Promise.all([
+      const [settings, userList, templateList, sessionList] = await Promise.all([
         getAdminSettings(),
         listUsers(),
         listTemplates(),
+        listAdminSessions(),
       ]);
       setAllowRegistration(settings.allow_registration === true || settings.allow_registration === 'true');
       setUsers(userList);
       setTemplates(templateList);
+      setAdminSessions(sessionList);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -255,6 +264,29 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     }
   };
 
+  const handleTerminateSession = async (session: Session) => {
+    if (!confirm(`Are you sure you want to terminate session "${session.id}"?`)) {
+      return;
+    }
+    setError('');
+    try {
+      await terminateAdminSession(session.id);
+      await loadData();
+      setSuccess('Session terminated successfully');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to terminate session');
+    }
+  };
+
+  const STATUS_COLORS: Record<SessionStatus, { bg: string; text: string; pulse?: boolean }> = {
+    creating: { bg: 'bg-blue-500', text: 'text-blue-500', pulse: true },
+    running: { bg: 'bg-green-500', text: 'text-green-500', pulse: true },
+    failed: { bg: 'bg-red-500', text: 'text-red-500' },
+    stopped: { bg: 'bg-gray-400', text: 'text-gray-400' },
+    expired: { bg: 'bg-gray-400', text: 'text-gray-400' },
+  };
+
   const bgColor = darkMode ? 'bg-gray-900' : 'bg-gray-100';
   const cardBg = darkMode ? 'bg-gray-800' : 'bg-white';
   const textColor = darkMode ? 'text-gray-100' : 'text-gray-900';
@@ -303,6 +335,14 @@ export function Admin({ darkMode, onClose }: AdminProps) {
               : mutedText}`}
           >
             Templates
+          </button>
+          <button
+            onClick={() => setActiveTab('sessions')}
+            className={`pb-2 px-1 ${activeTab === 'sessions'
+              ? 'border-b-2 border-brand-primary text-brand-primary'
+              : mutedText}`}
+          >
+            Sessions
           </button>
         </div>
 
@@ -878,6 +918,70 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                   </table>
                   {templates.length === 0 && (
                     <p className={`text-center py-8 ${mutedText}`}>No templates found. Click "Create Template" to add one.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Sessions Tab */}
+            {activeTab === 'sessions' && (
+              <div className={`${cardBg} rounded-lg p-6`}>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className={`text-lg font-semibold ${textColor}`}>Session Management</h2>
+                  <button
+                    onClick={loadData}
+                    className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <th className={`text-left py-2 ${mutedText}`}>Status</th>
+                        <th className={`text-left py-2 ${mutedText}`}>App Name</th>
+                        <th className={`text-left py-2 ${mutedText}`}>User ID</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Started</th>
+                        <th className={`text-right py-2 ${mutedText}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminSessions.map((session) => {
+                        const statusConfig = STATUS_COLORS[session.status];
+                        return (
+                          <tr
+                            key={session.id}
+                            className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}
+                          >
+                            <td className="py-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-block w-2 h-2 rounded-full ${statusConfig.bg} ${statusConfig.pulse ? 'animate-pulse' : ''}`} />
+                                <span className={`text-sm ${statusConfig.text}`}>{session.status}</span>
+                              </div>
+                            </td>
+                            <td className={`py-3 ${textColor}`}>{session.app_name || session.app_id}</td>
+                            <td className={`py-3 ${mutedText}`}>{session.user_id}</td>
+                            <td className={`py-3 ${mutedText}`}>{formatDuration(session.created_at)}</td>
+                            <td className="py-3 text-right">
+                              {(session.status === 'running' || session.status === 'creating') && (
+                                <button
+                                  onClick={() => handleTerminateSession(session)}
+                                  className="text-red-500 hover:text-red-400 text-sm"
+                                  title="Terminate session"
+                                >
+                                  Terminate
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {adminSessions.length === 0 && (
+                    <p className={`text-center py-8 ${mutedText}`}>No sessions found</p>
                   )}
                 </div>
               </div>
