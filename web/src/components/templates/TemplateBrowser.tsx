@@ -24,7 +24,7 @@ export function TemplateBrowser({ isOpen, onClose, onAddApp, darkMode }: Templat
 
   const [selectedTemplate, setSelectedTemplate] = useState<ApplicationTemplate | null>(null);
 
-  const handleAddToLaunchpad = useCallback(
+  const handleAddToSortie = useCallback(
     async (app: Application) => {
       await onAddApp(app);
       setSelectedTemplate(null);
@@ -80,7 +80,7 @@ export function TemplateBrowser({ isOpen, onClose, onAddApp, darkMode }: Templat
             <TemplatePreview
               template={selectedTemplate}
               onBack={handleBackFromPreview}
-              onAddToLaunchpad={handleAddToLaunchpad}
+              onAddToSortie={handleAddToSortie}
               darkMode={darkMode}
             />
           ) : (
@@ -95,7 +95,7 @@ export function TemplateBrowser({ isOpen, onClose, onAddApp, darkMode }: Templat
                     onClick={() => setSelectedCategory('all')}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                       selectedCategory === 'all'
-                        ? 'bg-brand-primary text-white'
+                        ? 'bg-brand-accent text-white'
                         : darkMode
                         ? 'text-gray-300 hover:bg-gray-700'
                         : 'text-gray-700 hover:bg-gray-200'
@@ -109,7 +109,7 @@ export function TemplateBrowser({ isOpen, onClose, onAddApp, darkMode }: Templat
                       onClick={() => setSelectedCategory(category)}
                       className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                         selectedCategory === category
-                          ? 'bg-brand-primary text-white'
+                          ? 'bg-brand-accent text-white'
                           : darkMode
                           ? 'text-gray-300 hover:bg-gray-700'
                           : 'text-gray-700 hover:bg-gray-200'
@@ -133,7 +133,7 @@ export function TemplateBrowser({ isOpen, onClose, onAddApp, darkMode }: Templat
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className={`w-full px-4 py-2 pl-10 rounded-lg border ${borderColor} ${
                         darkMode ? 'bg-gray-700 text-gray-100' : 'bg-white text-gray-900'
-                      } placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-primary`}
+                      } placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-accent`}
                     />
                     <svg
                       className="absolute left-3 top-2.5 w-5 h-5 text-gray-400"

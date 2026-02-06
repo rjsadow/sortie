@@ -74,9 +74,9 @@ const (
 	DefaultPort                   = 8080
 	DefaultDBPath                 = "launchpad.db"
 	DefaultBrandingConfigPath     = "branding.json"
-	DefaultPrimaryColor           = "#398D9B"
-	DefaultSecondaryColor         = "#4AB7C3"
-	DefaultTenantName             = "Launchpad"
+	DefaultPrimaryColor           = "#1F2A3C"
+	DefaultSecondaryColor         = "#2B3445"
+	DefaultTenantName             = "Sortie"
 	DefaultNamespace              = "default"
 	DefaultVNCSidecarImage        = "ghcr.io/rjsadow/launchpad-vnc-sidecar:latest"
 	DefaultSessionTimeout         = 2 * time.Hour

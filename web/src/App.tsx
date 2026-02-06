@@ -15,6 +15,7 @@ import {
   isAuthenticated,
   fetchWithAuth
 } from './services/auth';
+import sortieIconWhite from './assets/sortie-icon-white.svg';
 
 function App() {
   const [user, setUser] = useState<User | null>(() => getStoredUser());
@@ -316,7 +317,7 @@ function App() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-accent"></div>
       </div>
     );
   }
@@ -367,22 +368,8 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <svg
-                  className="w-6 h-6 text-brand-primary"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                  />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold">Launchpad</h1>
+              <img src={sortieIconWhite} alt="Sortie" className="w-10 h-10" />
+              <h1 className="text-2xl font-bold">Sortie</h1>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -391,7 +378,7 @@ function App() {
                   placeholder="Search applications..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full sm:w-80 px-4 py-2 pl-10 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-secondary"
+                  className="w-full sm:w-80 px-4 py-2 pl-10 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-accent"
                 />
                 <svg
                   className="absolute left-3 top-2.5 w-5 h-5 text-gray-400"
@@ -528,7 +515,7 @@ function App() {
                 onClick={() => setSelectedCategory(null)}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                   selectedCategory === null
-                    ? 'bg-brand-primary text-white shadow-md'
+                    ? 'bg-brand-accent text-white shadow-md'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >
@@ -543,7 +530,7 @@ function App() {
                     onClick={() => setSelectedCategory(category)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       selectedCategory === category
-                        ? 'bg-brand-primary text-white shadow-md'
+                        ? 'bg-brand-accent text-white shadow-md'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
@@ -558,7 +545,7 @@ function App() {
 
         {loading ? (
           <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-accent"></div>
           </div>
         ) : filteredApps.length === 0 ? (
           <div className="text-center py-12">
@@ -596,11 +583,11 @@ function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {favoriteApps.map((app) => {
                       const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
-                      const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-secondary p-4 hover:shadow-md transition-all duration-200 text-left w-full";
+                      const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-accent p-4 hover:shadow-md transition-all duration-200 text-left w-full";
                       const cardContent = (
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
-                            <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
+                            <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
                             {isContainerApp && (
                               <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
                                 <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
@@ -608,7 +595,7 @@ function App() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-primary truncate">{app.name}</h3>
+                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent truncate">{app.name}</h3>
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{app.description}</p>
                           </div>
                           <div className="flex flex-col gap-1 flex-shrink-0">
@@ -617,7 +604,7 @@ function App() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                               </svg>
                             </button>
-                            <svg className="w-4 h-4 text-gray-400 group-hover:text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-gray-400 group-hover:text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               {isContainerApp ? (
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                               ) : (
@@ -653,11 +640,11 @@ function App() {
                     {recentAppsList.map((app) => {
                       const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
                       const isFavorited = favorites.has(app.id);
-                      const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-secondary p-4 hover:shadow-md transition-all duration-200 text-left w-full";
+                      const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-accent p-4 hover:shadow-md transition-all duration-200 text-left w-full";
                       const cardContent = (
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
-                            <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
+                            <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
                             {isContainerApp && (
                               <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
                                 <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
@@ -665,7 +652,7 @@ function App() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-primary truncate">{app.name}</h3>
+                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent truncate">{app.name}</h3>
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{app.description}</p>
                           </div>
                           <div className="flex flex-col gap-1 flex-shrink-0">
@@ -674,7 +661,7 @@ function App() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                               </svg>
                             </button>
-                            <svg className="w-4 h-4 text-gray-400 group-hover:text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-gray-400 group-hover:text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               {isContainerApp ? (
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                               ) : (
@@ -729,8 +716,8 @@ function App() {
                           const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
                           const cardClassName = `group bg-gray-50 dark:bg-gray-700 rounded-lg border p-4 hover:shadow-md transition-all duration-200 text-left w-full ${
                             focusedIndex === currentIndex
-                              ? 'ring-2 ring-brand-primary border-brand-primary'
-                              : 'border-gray-200 dark:border-gray-600 hover:border-brand-secondary'
+                              ? 'ring-2 ring-brand-accent border-brand-accent'
+                              : 'border-gray-200 dark:border-gray-600 hover:border-brand-accent'
                           }`;
 
                           const isFavorited = favorites.has(app.id);
@@ -743,7 +730,7 @@ function App() {
                                   className="w-8 h-8 object-contain"
                                   onError={(e) => {
                                     (e.target as HTMLImageElement).src =
-                                      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
+                                      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
                                       app.name.charAt(0) +
                                       '</text></svg>';
                                   }}
@@ -757,7 +744,7 @@ function App() {
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-primary truncate">
+                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent truncate">
                                   {app.name}
                                 </h3>
                                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
@@ -786,7 +773,7 @@ function App() {
                                   </svg>
                                 </button>
                                 <svg
-                                  className="w-4 h-4 text-gray-400 group-hover:text-brand-primary"
+                                  className="w-4 h-4 text-gray-400 group-hover:text-brand-accent"
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
@@ -864,7 +851,7 @@ function App() {
       <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-            Launchpad — Your centralized application launcher
+            Sortie — Your centralized application launcher
           </p>
         </div>
       </footer>

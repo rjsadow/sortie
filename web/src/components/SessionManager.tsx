@@ -84,7 +84,7 @@ function SessionCard({
         {canReconnect ? (
           <button
             onClick={onReconnect}
-            className="flex-1 px-3 py-2 text-sm font-medium text-white bg-brand-primary hover:bg-brand-secondary rounded-lg transition-colors"
+            className="flex-1 px-3 py-2 text-sm font-medium text-white bg-brand-accent hover:bg-brand-primary rounded-lg transition-colors"
           >
             Reconnect
           </button>
@@ -227,7 +227,7 @@ export function SessionManager({
 
           {isLoading && activeSessions.length === 0 ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-accent"></div>
             </div>
           ) : activeSessions.length === 0 ? (
             <div className="text-center py-12">

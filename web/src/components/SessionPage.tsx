@@ -164,7 +164,7 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
                 className="w-6 h-6 object-contain"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =
-                    'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
+                    'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
                     app.name.charAt(0) +
                     '</text></svg>';
                 }}

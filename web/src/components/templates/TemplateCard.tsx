@@ -12,8 +12,8 @@ export function TemplateCard({ template, onClick, darkMode }: TemplateCardProps)
       onClick={onClick}
       className={`group text-left w-full p-4 rounded-lg border transition-all duration-200 hover:shadow-md ${
         darkMode
-          ? 'bg-gray-700 border-gray-600 hover:border-brand-secondary'
-          : 'bg-gray-50 border-gray-200 hover:border-brand-secondary'
+          ? 'bg-gray-700 border-gray-600 hover:border-brand-accent'
+          : 'bg-gray-50 border-gray-200 hover:border-brand-accent'
       }`}
     >
       <div className="flex items-start gap-3">
@@ -28,7 +28,7 @@ export function TemplateCard({ template, onClick, darkMode }: TemplateCardProps)
             className="w-8 h-8 object-contain"
             onError={(e) => {
               (e.target as HTMLImageElement).src =
-                'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23398D9B"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
+                'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' +
                 template.name.charAt(0) +
                 '</text></svg>';
             }}
@@ -46,7 +46,7 @@ export function TemplateCard({ template, onClick, darkMode }: TemplateCardProps)
 
         <div className="flex-1 min-w-0">
           <h3
-            className={`text-sm font-medium truncate group-hover:text-brand-primary ${
+            className={`text-sm font-medium truncate group-hover:text-brand-accent ${
               darkMode ? 'text-gray-100' : 'text-gray-900'
             }`}
           >
@@ -89,7 +89,7 @@ export function TemplateCard({ template, onClick, darkMode }: TemplateCardProps)
         </div>
 
         <svg
-          className={`w-4 h-4 flex-shrink-0 group-hover:text-brand-primary ${
+          className={`w-4 h-4 flex-shrink-0 group-hover:text-brand-accent ${
             darkMode ? 'text-gray-500' : 'text-gray-400'
           }`}
           fill="none"

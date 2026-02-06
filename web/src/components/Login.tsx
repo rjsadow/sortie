@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { User } from '../types';
 import { login as authLogin } from '../services/auth';
+import sortieIconFull from '../assets/sortie-icon-full.svg';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -62,25 +63,11 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
       <div className={`w-full max-w-md ${cardBg} rounded-xl shadow-lg p-8`}>
         {/* Logo */}
         <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 bg-brand-primary rounded-xl flex items-center justify-center">
-            <svg
-              className="w-10 h-10 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-              />
-            </svg>
-          </div>
+          <img src={sortieIconFull} alt="Sortie" className="w-16 h-16" />
         </div>
 
         <h1 className={`text-2xl font-bold text-center mb-2 ${textColor}`}>
-          Launchpad
+          Sortie
         </h1>
         <p className={`text-center mb-8 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
           Sign in to access your applications
@@ -96,7 +83,7 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-primary`}
+              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
               placeholder="Enter your username"
               autoComplete="username"
               autoFocus
@@ -112,7 +99,7 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-primary`}
+              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
               placeholder="Enter your password"
               autoComplete="current-password"
             />
@@ -125,7 +112,7 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 px-4 bg-brand-primary text-white font-medium rounded-lg hover:bg-brand-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2 px-4 bg-brand-accent text-white font-medium rounded-lg hover:bg-brand-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
@@ -137,7 +124,7 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
               onClick={onShowRegister}
               className={`text-sm ${darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-800'}`}
             >
-              Don't have an account? <span className="text-brand-primary font-medium">Register</span>
+              Don't have an account? <span className="text-brand-accent font-medium">Register</span>
             </button>
           </div>
         )}

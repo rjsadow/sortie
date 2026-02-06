@@ -195,7 +195,7 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%d", appConfig.Port)
-	log.Printf("Launchpad server starting on http://localhost%s", addr)
+	log.Printf("Sortie server starting on http://localhost%s", addr)
 
 	// Wrap mux with security headers middleware
 	handler := middleware.SecurityHeaders(mux)

@@ -315,7 +315,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
           <button
             onClick={() => setActiveTab('settings')}
             className={`pb-2 px-1 ${activeTab === 'settings'
-              ? 'border-b-2 border-brand-primary text-brand-primary'
+              ? 'border-b-2 border-brand-accent text-brand-accent'
               : mutedText}`}
           >
             Settings
@@ -323,7 +323,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
           <button
             onClick={() => setActiveTab('users')}
             className={`pb-2 px-1 ${activeTab === 'users'
-              ? 'border-b-2 border-brand-primary text-brand-primary'
+              ? 'border-b-2 border-brand-accent text-brand-accent'
               : mutedText}`}
           >
             Users
@@ -331,7 +331,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
           <button
             onClick={() => setActiveTab('templates')}
             className={`pb-2 px-1 ${activeTab === 'templates'
-              ? 'border-b-2 border-brand-primary text-brand-primary'
+              ? 'border-b-2 border-brand-accent text-brand-accent'
               : mutedText}`}
           >
             Templates
@@ -339,7 +339,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
           <button
             onClick={() => setActiveTab('sessions')}
             className={`pb-2 px-1 ${activeTab === 'sessions'
-              ? 'border-b-2 border-brand-primary text-brand-primary'
+              ? 'border-b-2 border-brand-accent text-brand-accent'
               : mutedText}`}
           >
             Sessions
@@ -360,7 +360,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
 
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-accent"></div>
           </div>
         ) : (
           <>
@@ -375,7 +375,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                       type="checkbox"
                       checked={allowRegistration}
                       onChange={(e) => setAllowRegistration(e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-500 text-brand-primary focus:ring-brand-primary"
+                      className="w-5 h-5 rounded border-gray-500 text-brand-accent focus:ring-brand-accent"
                     />
                     <div>
                       <span className={textColor}>Allow user self-registration</span>
@@ -389,7 +389,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                 <div className="mt-6">
                   <button
                     onClick={handleSaveSettings}
-                    className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                    className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
                   >
                     Save Settings
                   </button>
@@ -404,7 +404,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                   <h2 className={`text-lg font-semibold ${textColor}`}>User Management</h2>
                   <button
                     onClick={() => setShowCreateUser(!showCreateUser)}
-                    className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                    className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
                   >
                     {showCreateUser ? 'Cancel' : 'Create User'}
                   </button>
@@ -531,7 +531,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                   <h2 className={`text-lg font-semibold ${textColor}`}>Template Management</h2>
                   <button
                     onClick={() => handleOpenTemplateForm()}
-                    className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                    className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
                   >
                     Create Template
                   </button>
@@ -820,7 +820,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                         </button>
                         <button
                           onClick={handleSaveTemplate}
-                          className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                          className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
                         >
                           {editingTemplate ? 'Update Template' : 'Create Template'}
                         </button>
@@ -930,7 +930,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                   <h2 className={`text-lg font-semibold ${textColor}`}>Session Management</h2>
                   <button
                     onClick={loadData}
-                    className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
+                    className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
                   >
                     Refresh
                   </button>
