@@ -7,6 +7,7 @@ interface UseSessionReturn {
   isLoading: boolean;
   error: string | null;
   createSession: (appId: string) => Promise<Session | null>;
+  reconnectToSession: (sessionId: string) => Promise<Session | null>;
   terminateSession: () => Promise<void>;
   connectWebSocket: () => WebSocket | null;
   disconnectWebSocket: () => void;
@@ -117,6 +118,36 @@ export function useSession(): UseSessionReturn {
     }
   }, [cleanup, startPolling]);
 
+  // Reconnect to an existing session
+  const reconnectToSession = useCallback(async (sessionId: string): Promise<Session | null> => {
+    setIsLoading(true);
+    setError(null);
+    cleanup();
+
+    try {
+      const response = await fetchWithAuth(`/api/sessions/${sessionId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get session: ${response.statusText}`);
+      }
+
+      const data: Session = await response.json();
+      setSession(data);
+
+      // Start polling if session is not yet running
+      if (data.status === 'creating') {
+        startPolling(data.id);
+      }
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to reconnect to session';
+      setError(message);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [cleanup, startPolling]);
+
   // Terminate the current session
   const terminateSession = useCallback(async () => {
     if (!session) return;
@@ -215,6 +246,7 @@ export function useSession(): UseSessionReturn {
     isLoading,
     error,
     createSession,
+    reconnectToSession,
     terminateSession,
     connectWebSocket,
     disconnectWebSocket,

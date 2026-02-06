@@ -7,21 +7,23 @@ interface SessionPageProps {
   app: Application;
   onClose: () => void;
   darkMode: boolean;
+  sessionId?: string; // If provided, reconnect to this existing session instead of creating a new one
 }
 
 type ConnectionState = 'idle' | 'creating' | 'waiting' | 'connecting' | 'connected' | 'error';
 
-export function SessionPage({ app, onClose, darkMode }: SessionPageProps) {
-  const { session, isLoading, error, createSession, terminateSession } = useSession();
+export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPageProps) {
+  const { session, isLoading, error, createSession, reconnectToSession, terminateSession } = useSession();
   const [vncConnectionState, setVncConnectionState] = useState<'idle' | 'connected' | 'error'>('idle');
   const [vncErrorMessage, setVncErrorMessage] = useState('');
   const [sessionCreationStarted, setSessionCreationStarted] = useState(false);
 
   // Handle close - defined early so it can be used in effects below
   const handleClose = useCallback(async () => {
-    // Only terminate if not already in a terminal state
+    // Only terminate if not already in a terminal state AND this is not a reconnection
+    // (for reconnections, user may want to reconnect again later)
     const terminalStates = ['stopped', 'expired', 'failed'];
-    if (session && !terminalStates.includes(session.status)) {
+    if (session && !terminalStates.includes(session.status) && !sessionId) {
       await terminateSession();
     }
     // Go back in history if we pushed a state
@@ -29,15 +31,21 @@ export function SessionPage({ app, onClose, darkMode }: SessionPageProps) {
       window.history.back();
     }
     onClose();
-  }, [session, terminateSession, onClose]);
+  }, [session, sessionId, terminateSession, onClose]);
 
-  // Create session when page mounts
+  // Create or reconnect to session when page mounts
   useEffect(() => {
     if (!session && !sessionCreationStarted) {
       setSessionCreationStarted(true);
-      createSession(app.id);
+      if (sessionId) {
+        // Reconnect to existing session
+        reconnectToSession(sessionId);
+      } else {
+        // Create a new session
+        createSession(app.id);
+      }
     }
-  }, [session, sessionCreationStarted, app.id, createSession]);
+  }, [session, sessionCreationStarted, app.id, sessionId, createSession, reconnectToSession]);
 
   // Handle browser back button via History API
   useEffect(() => {

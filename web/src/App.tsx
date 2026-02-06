@@ -4,6 +4,7 @@ import { SessionPage } from './components/SessionPage';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
 import { Admin } from './components/Admin';
+import { SessionManager } from './components/SessionManager';
 import { TemplateBrowser } from './components/templates/TemplateBrowser';
 import {
   getStoredUser,
@@ -43,9 +44,11 @@ function App() {
   });
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [selectedContainerApp, setSelectedContainerApp] = useState<Application | null>(null);
+  const [reconnectSessionId, setReconnectSessionId] = useState<string | null>(null);
   const [isTemplateBrowserOpen, setIsTemplateBrowserOpen] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showSessionManager, setShowSessionManager] = useState(false);
   const [allowRegistration, setAllowRegistration] = useState(false);
   const appRefs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
 
@@ -338,8 +341,12 @@ function App() {
     return (
       <SessionPage
         app={selectedContainerApp}
-        onClose={() => setSelectedContainerApp(null)}
+        onClose={() => {
+          setSelectedContainerApp(null);
+          setReconnectSessionId(null);
+        }}
         darkMode={darkMode}
+        sessionId={reconnectSessionId || undefined}
       />
     );
   }
@@ -409,6 +416,22 @@ function App() {
                   />
                 </svg>
                 <span className="hidden sm:inline">Templates</span>
+              </button>
+              {/* Sessions button */}
+              <button
+                onClick={() => setShowSessionManager(true)}
+                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                aria-label="Manage sessions"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Sessions</span>
               </button>
               {/* Admin button (only for admins) */}
               {isAdmin && (
@@ -850,6 +873,21 @@ function App() {
           onClose={() => setShowAdmin(false)}
         />
       )}
+
+      {/* Session Manager */}
+      <SessionManager
+        isOpen={showSessionManager}
+        onClose={() => setShowSessionManager(false)}
+        onReconnect={(appId, sessionId) => {
+          const app = apps.find((a) => a.id === appId);
+          if (app) {
+            setReconnectSessionId(sessionId);
+            setSelectedContainerApp(app);
+            setShowSessionManager(false);
+          }
+        }}
+        darkMode={darkMode}
+      />
     </div>
   );
 }
