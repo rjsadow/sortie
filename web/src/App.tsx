@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Application, User } from './types';
+import { useSessions } from './hooks/useSessions';
 import { SessionPage } from './components/SessionPage';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
@@ -51,6 +52,11 @@ function App() {
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [allowRegistration, setAllowRegistration] = useState(false);
   const appRefs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
+
+  const { sessions } = useSessions(true);
+  const activeSessionCount = sessions.filter(
+    (s) => s.status === 'creating' || s.status === 'running'
+  ).length;
 
   // Validate token on app load and fetch config
   useEffect(() => {
@@ -420,7 +426,7 @@ function App() {
               {/* Sessions button */}
               <button
                 onClick={() => setShowSessionManager(true)}
-                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                className="relative px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
                 aria-label="Manage sessions"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -432,6 +438,11 @@ function App() {
                   />
                 </svg>
                 <span className="hidden sm:inline">Sessions</span>
+                {activeSessionCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-green-500 text-white text-xs font-bold px-1">
+                    {activeSessionCount}
+                  </span>
+                )}
               </button>
               {/* Admin button (only for admins) */}
               {isAdmin && (
