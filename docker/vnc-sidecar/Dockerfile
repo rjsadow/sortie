@@ -1,5 +1,5 @@
 # VNC Sidecar Container for Launchpad
-# Provides X11 display via Xvfb, VNC server via x11vnc, and WebSocket via websockify
+# Provides X11 display and VNC server via TigerVNC Xvnc, and WebSocket via websockify
 FROM ubuntu:22.04
 
 LABEL org.opencontainers.image.source="https://github.com/rjsadow/launchpad"
@@ -11,8 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install required packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xvfb \
-    x11vnc \
+    tigervnc-standalone-server \
     websockify \
     supervisor \
     procps \
@@ -27,8 +26,10 @@ RUN mkdir -p /tmp/.X11-unix /var/log/supervisor /run/supervisor && \
     chown -R appuser:appuser /tmp/.X11-unix /var/log/supervisor /run/supervisor && \
     chmod 1777 /tmp/.X11-unix
 
-# Copy supervisor configuration
+# Copy configuration and startup files
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY start-xvnc.sh /usr/local/bin/start-xvnc.sh
+RUN chmod +x /usr/local/bin/start-xvnc.sh
 
 # Set environment variables
 ENV DISPLAY=:99

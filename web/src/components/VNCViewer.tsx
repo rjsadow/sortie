@@ -1,5 +1,11 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import type RFB from '@novnc/novnc/lib/rfb.js';
+
+export interface VNCStats {
+  fps: number;
+  frameTime: number;
+  drawOps: number;
+}
 
 interface VNCViewerProps {
   wsUrl: string;
@@ -8,6 +14,7 @@ interface VNCViewerProps {
   onError?: (message: string) => void;
   viewOnly?: boolean;
   scaleViewport?: boolean;
+  showStats?: boolean;
 }
 
 export function VNCViewer({
@@ -17,9 +24,11 @@ export function VNCViewer({
   onError,
   viewOnly = false,
   scaleViewport = true,
+  showStats = false,
 }: VNCViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RFB | null>(null);
+  const [stats, setStats] = useState<VNCStats>({ fps: 0, frameTime: 0, drawOps: 0 });
 
   const handleConnect = useCallback(() => {
     console.log('VNC connected');
@@ -77,6 +86,94 @@ export function VNCViewer({
     }
   }, [viewOnly]);
 
+  // FPS instrumentation: intercept canvas drawImage to count visible VNC frame updates
+  useEffect(() => {
+    if (!showStats || !containerRef.current) return;
+
+    let rafId = 0;
+    let dirty = false;
+    let drawCount = 0;
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let origDrawImage: CanvasRenderingContext2D['drawImage'] | null = null;
+    let ctx: CanvasRenderingContext2D | null = null;
+
+    const startMonitoring = (canvas: HTMLCanvasElement) => {
+      ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Intercept drawImage on the visible canvas context to detect VNC blits
+      origDrawImage = ctx.drawImage;
+      const interceptedCtx = ctx;
+      interceptedCtx.drawImage = function (this: CanvasRenderingContext2D, ...args: Parameters<CanvasRenderingContext2D['drawImage']>) {
+        dirty = true;
+        drawCount++;
+        return origDrawImage!.apply(this, args);
+      } as CanvasRenderingContext2D['drawImage'];
+
+      lastTime = performance.now();
+
+      const tick = (now: number) => {
+        if (dirty) {
+          frameCount++;
+          dirty = false;
+        }
+        const elapsed = now - lastTime;
+        if (elapsed >= 1000) {
+          const fps = Math.round((frameCount * 1000) / elapsed);
+          const ft = frameCount > 0 ? Math.round((elapsed / frameCount) * 10) / 10 : 0;
+          setStats({ fps, frameTime: ft, drawOps: drawCount });
+          frameCount = 0;
+          drawCount = 0;
+          lastTime = now;
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    // noVNC dynamically inserts its canvas — watch for it
+    const existing = containerRef.current.querySelector('canvas');
+    let observer: MutationObserver | null = null;
+
+    if (existing) {
+      startMonitoring(existing);
+    } else {
+      observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          for (const node of Array.from(mutation.addedNodes)) {
+            if (node instanceof HTMLCanvasElement) {
+              observer?.disconnect();
+              observer = null;
+              startMonitoring(node);
+              return;
+            }
+            if (node instanceof HTMLElement) {
+              const c = node.querySelector('canvas');
+              if (c) {
+                observer?.disconnect();
+                observer = null;
+                startMonitoring(c);
+                return;
+              }
+            }
+          }
+        }
+      });
+      observer.observe(containerRef.current, { childList: true, subtree: true });
+    }
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer?.disconnect();
+      // Restore original drawImage
+      if (ctx && origDrawImage) {
+        ctx.drawImage = origDrawImage;
+      }
+    };
+  }, [showStats]);
+
   useEffect(() => {
     if (!containerRef.current || !wsUrl) {
       return;
@@ -101,7 +198,7 @@ export function VNCViewer({
 
         // Configure RFB
         rfb.scaleViewport = scaleViewport;
-        rfb.resizeSession = false;
+        rfb.resizeSession = true;
         rfb.viewOnly = viewOnly;
         rfb.clipViewport = false;
 
@@ -139,12 +236,20 @@ export function VNCViewer({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-black"
+      className="w-full h-full bg-black relative"
       style={{ minHeight: '400px' }}
       onFocus={syncClipboardToRemote}
       onClick={syncClipboardToRemote}
       onPaste={handlePaste}
       tabIndex={0}
-    />
+    >
+      {showStats && (
+        <div className="absolute top-2 right-2 z-20 bg-black/75 text-green-400 text-xs font-mono px-2 py-1.5 rounded select-none pointer-events-none leading-relaxed">
+          <div>{stats.fps} FPS</div>
+          <div>{stats.frameTime}ms frame</div>
+          <div>{stats.drawOps} draws/s</div>
+        </div>
+      )}
+    </div>
   );
 }

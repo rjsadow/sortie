@@ -147,6 +147,13 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 	podConfig.ContainerPort = app.ContainerPort
 	podConfig.Args = app.ContainerArgs
 
+	// Set screen resolution from client viewport if provided
+	if req.ScreenWidth > 0 && req.ScreenHeight > 0 {
+		podConfig.ScreenResolution = fmt.Sprintf("%dx%dx24", req.ScreenWidth, req.ScreenHeight)
+		podConfig.ScreenWidth = req.ScreenWidth
+		podConfig.ScreenHeight = req.ScreenHeight
+	}
+
 	// Apply app-specific resource limits if configured
 	if app.ResourceLimits != nil {
 		if app.ResourceLimits.CPURequest != "" {
@@ -217,6 +224,9 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	if err := k8s.WaitForPodReady(ctx, podName, m.podReadyTimeout); err != nil {
 		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("pod failed to become ready: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
+		if delErr := k8s.DeletePod(context.Background(), podName); delErr != nil {
+			log.Printf("Failed to delete pod %s after timeout: %v", podName, delErr)
+		}
 		return
 	}
 
@@ -225,6 +235,9 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	if err != nil {
 		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("failed to get pod IP: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
+		if delErr := k8s.DeletePod(context.Background(), podName); delErr != nil {
+			log.Printf("Failed to delete pod %s after IP lookup failure: %v", podName, delErr)
+		}
 		return
 	}
 

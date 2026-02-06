@@ -8,8 +8,10 @@ import (
 
 // CreateSessionRequest represents a request to create a new session
 type CreateSessionRequest struct {
-	AppID  string `json:"app_id"`
-	UserID string `json:"user_id"`
+	AppID        string `json:"app_id"`
+	UserID       string `json:"user_id"`
+	ScreenWidth  int    `json:"screen_width,omitempty"`
+	ScreenHeight int    `json:"screen_height,omitempty"`
 }
 
 // SessionResponse represents a session in API responses

@@ -36,18 +36,21 @@ const (
 
 // PodConfig contains configuration for creating a session pod
 type PodConfig struct {
-	SessionID      string
-	AppID          string
-	AppName        string
-	ContainerImage string
-	ContainerPort  int // Port web app listens on (default: 8080 for web_proxy)
-	Command        []string
-	Args           []string
-	EnvVars        map[string]string
-	CPULimit       string
-	MemoryLimit    string
-	CPURequest     string
-	MemoryRequest  string
+	SessionID        string
+	AppID            string
+	AppName          string
+	ContainerImage   string
+	ContainerPort    int // Port web app listens on (default: 8080 for web_proxy)
+	Command          []string
+	Args             []string
+	EnvVars          map[string]string
+	CPULimit         string
+	MemoryLimit      string
+	CPURequest       string
+	MemoryRequest    string
+	ScreenResolution string // e.g. "1920x1080x24", empty uses sidecar default
+	ScreenWidth      int    // Screen width in pixels, passed to app container
+	ScreenHeight     int    // Screen height in pixels, passed to app container
 }
 
 // DefaultPodConfig returns a PodConfig with sensible defaults
@@ -85,6 +88,16 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 	var appEnv []corev1.EnvVar
 	if !jlesageImage {
 		appEnv = append(appEnv, corev1.EnvVar{Name: "DISPLAY", Value: ":99"})
+	}
+	// Pass screen dimensions to app container so desktop images (e.g. LinuxServer)
+	// use the correct resolution instead of their defaults
+	if config.ScreenWidth > 0 && config.ScreenHeight > 0 {
+		w := fmt.Sprintf("%d", config.ScreenWidth)
+		h := fmt.Sprintf("%d", config.ScreenHeight)
+		appEnv = append(appEnv,
+			corev1.EnvVar{Name: "SELKIES_MANUAL_WIDTH", Value: w},
+			corev1.EnvVar{Name: "SELKIES_MANUAL_HEIGHT", Value: h},
+		)
 	}
 	for key, value := range config.EnvVars {
 		appEnv = append(appEnv, corev1.EnvVar{Name: key, Value: value})
@@ -180,10 +193,16 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 					{Name: "vnc", ContainerPort: 5900, Protocol: corev1.ProtocolTCP},
 					{Name: "websocket", ContainerPort: 6080, Protocol: corev1.ProtocolTCP},
 				},
-				Env: []corev1.EnvVar{
-					{Name: "DISPLAY", Value: ":99"},
-					{Name: "VNC_PASSWORD", Value: ""},
-				},
+				Env: func() []corev1.EnvVar {
+					env := []corev1.EnvVar{
+						{Name: "DISPLAY", Value: ":99"},
+						{Name: "VNC_PASSWORD", Value: ""},
+					}
+					if config.ScreenResolution != "" {
+						env = append(env, corev1.EnvVar{Name: "SCREEN_RESOLUTION", Value: config.ScreenResolution})
+					}
+					return env
+				}(),
 				VolumeMounts: []corev1.VolumeMount{
 					{Name: X11SocketVolumeName, MountPath: "/tmp/.X11-unix"},
 				},
@@ -403,10 +422,16 @@ func BuildWebProxyPodSpec(config *PodConfig) *corev1.Pod {
 						{Name: "vnc", ContainerPort: 5900, Protocol: corev1.ProtocolTCP},
 						{Name: "websocket", ContainerPort: 6080, Protocol: corev1.ProtocolTCP},
 					},
-					Env: []corev1.EnvVar{
-						{Name: "DISPLAY", Value: ":99"},
-						{Name: "BROWSER_URL", Value: browserURL},
-					},
+					Env: func() []corev1.EnvVar {
+						env := []corev1.EnvVar{
+							{Name: "DISPLAY", Value: ":99"},
+							{Name: "BROWSER_URL", Value: browserURL},
+						}
+						if config.ScreenResolution != "" {
+							env = append(env, corev1.EnvVar{Name: "SCREEN_RESOLUTION", Value: config.ScreenResolution})
+						}
+						return env
+					}(),
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("1"),

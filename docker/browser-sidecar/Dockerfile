@@ -1,5 +1,5 @@
 # Browser Sidecar Container for Launchpad
-# Provides X11 display, VNC server, WebSocket, and Firefox browser
+# Provides X11 display and VNC server via TigerVNC Xvnc, WebSocket, and Firefox browser
 # Used for web_proxy apps - browser connects to localhost web service
 FROM ubuntu:22.04
 
@@ -12,8 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install required packages and Firefox from Mozilla PPA (not snap)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xvfb \
-    x11vnc \
+    tigervnc-standalone-server \
     websockify \
     supervisor \
     procps \
@@ -52,9 +51,10 @@ RUN mkdir -p /tmp/.X11-unix /var/log/supervisor /run/supervisor \
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY openbox-autostart /home/appuser/.config/openbox/autostart
 COPY start-browser.sh /usr/local/bin/start-browser.sh
+COPY start-xvnc.sh /usr/local/bin/start-xvnc.sh
 
 # Set permissions
-RUN chmod +x /usr/local/bin/start-browser.sh && \
+RUN chmod +x /usr/local/bin/start-browser.sh /usr/local/bin/start-xvnc.sh && \
     chown appuser:appuser /home/appuser/.config/openbox/autostart
 
 # Set environment variables

@@ -6,7 +6,7 @@ interface UseSessionReturn {
   session: Session | null;
   isLoading: boolean;
   error: string | null;
-  createSession: (appId: string) => Promise<Session | null>;
+  createSession: (appId: string, screenWidth?: number, screenHeight?: number) => Promise<Session | null>;
   reconnectToSession: (sessionId: string) => Promise<Session | null>;
   terminateSession: () => Promise<void>;
   connectWebSocket: () => WebSocket | null;
@@ -77,7 +77,7 @@ export function useSession(): UseSessionReturn {
   }, [pollSessionStatus]);
 
   // Create a new session
-  const createSession = useCallback(async (appId: string): Promise<Session | null> => {
+  const createSession = useCallback(async (appId: string, screenWidth?: number, screenHeight?: number): Promise<Session | null> => {
     setIsLoading(true);
     setError(null);
     cleanup();
@@ -85,6 +85,8 @@ export function useSession(): UseSessionReturn {
     try {
       const request: CreateSessionRequest = {
         app_id: appId,
+        screen_width: screenWidth,
+        screen_height: screenHeight,
       };
 
       const response = await fetchWithAuth('/api/sessions', {

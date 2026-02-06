@@ -50,6 +50,8 @@ export interface Session {
 export interface CreateSessionRequest {
   app_id: string;
   user_id?: string;
+  screen_width?: number;
+  screen_height?: number;
 }
 
 export interface User {

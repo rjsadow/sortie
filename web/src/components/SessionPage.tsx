@@ -17,6 +17,7 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
   const [vncConnectionState, setVncConnectionState] = useState<'idle' | 'connected' | 'error'>('idle');
   const [vncErrorMessage, setVncErrorMessage] = useState('');
   const [sessionCreationStarted, setSessionCreationStarted] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   // Handle close - defined early so it can be used in effects below
   const handleClose = useCallback(async () => {
@@ -41,8 +42,10 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
         // Reconnect to existing session
         reconnectToSession(sessionId);
       } else {
-        // Create a new session
-        createSession(app.id);
+        // Measure viewport: full width, height minus 48px header
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight - 48;
+        createSession(app.id, screenWidth, screenHeight);
       }
     }
   }, [session, sessionCreationStarted, app.id, sessionId, createSession, reconnectToSession]);
@@ -197,17 +200,31 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
           )}
         </div>
 
-        {/* Right side - Close button */}
-        <button
-          onClick={handleClose}
-          className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
-          aria-label="Close session"
-          title="Close session (Esc)"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {/* Right side - Stats toggle and Close button */}
+        <div className="flex items-center gap-1">
+          {connectionState === 'connected' && (
+            <button
+              onClick={() => setShowStats((s) => !s)}
+              className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${showStats ? 'text-green-500' : textColor}`}
+              aria-label="Toggle performance stats"
+              title="Toggle FPS stats"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={handleClose}
+            className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
+            aria-label="Close session"
+            title="Close session (Esc)"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* Content - fills remaining space */}
@@ -257,6 +274,7 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
             onConnect={handleVNCConnect}
             onDisconnect={handleVNCDisconnect}
             onError={handleVNCError}
+            showStats={showStats}
           />
         )}
       </div>
