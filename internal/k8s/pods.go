@@ -24,6 +24,12 @@ const (
 	// X11SocketVolumeName is the name of the shared X11 socket volume
 	X11SocketVolumeName = "x11-socket"
 
+	// WorkspaceVolumeName is the name of the shared workspace volume for file transfers
+	WorkspaceVolumeName = "workspace"
+
+	// WorkspaceMountPath is the mount path for the workspace volume
+	WorkspaceMountPath = "/workspace"
+
 	// SessionLabelKey is the label key for session identification
 	SessionLabelKey = "launchpad.io/session-id"
 
@@ -137,6 +143,14 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 
 	// For jlesage images: single container with built-in VNC on port 5800
 	if jlesageImage {
+		pod.Spec.Volumes = []corev1.Volume{
+			{
+				Name: WorkspaceVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}
 		pod.Spec.Containers = []corev1.Container{
 			{
 				Name:            "app",
@@ -148,6 +162,9 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 				Ports: []corev1.ContainerPort{
 					{Name: "http", ContainerPort: 5800, Protocol: corev1.ProtocolTCP},
 					{Name: "vnc", ContainerPort: 5900, Protocol: corev1.ProtocolTCP},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: WorkspaceVolumeName, MountPath: WorkspaceMountPath},
 				},
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -178,6 +195,12 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 		pod.Spec.Volumes = []corev1.Volume{
 			{
 				Name: X11SocketVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: WorkspaceVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -260,6 +283,7 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 				Env:             appEnv,
 				VolumeMounts: []corev1.VolumeMount{
 					{Name: X11SocketVolumeName, MountPath: "/tmp/.X11-unix"},
+					{Name: WorkspaceVolumeName, MountPath: WorkspaceMountPath},
 				},
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -412,6 +436,14 @@ func BuildWebProxyPodSpec(config *PodConfig) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
+			Volumes: []corev1.Volume{
+				{
+					Name: WorkspaceVolumeName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
 			Containers: []corev1.Container{
 				// Browser sidecar - provides VNC + Firefox browser
 				{
@@ -478,6 +510,9 @@ func BuildWebProxyPodSpec(config *PodConfig) *corev1.Pod {
 							ContainerPort: int32(port),
 							Protocol:      corev1.ProtocolTCP,
 						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: WorkspaceVolumeName, MountPath: WorkspaceMountPath},
 					},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
@@ -550,6 +585,14 @@ func BuildWindowsPodSpec(config *PodConfig) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
+			Volumes: []corev1.Volume{
+				{
+					Name: WorkspaceVolumeName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
 			Containers: []corev1.Container{
 				// Guacd sidecar - translates RDP to Guacamole protocol
 				{
@@ -607,6 +650,9 @@ func BuildWindowsPodSpec(config *PodConfig) *corev1.Pod {
 					Env:             appEnv,
 					Ports: []corev1.ContainerPort{
 						{Name: "rdp", ContainerPort: 3389, Protocol: corev1.ProtocolTCP},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: WorkspaceVolumeName, MountPath: WorkspaceMountPath},
 					},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{

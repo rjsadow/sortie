@@ -144,19 +144,37 @@ func TestBuildPodSpec_StandardImage(t *testing.T) {
 		t.Error("app container missing DISPLAY=:99 env var")
 	}
 
-	// Should have X11 volume
-	if len(pod.Spec.Volumes) != 1 {
-		t.Fatalf("len(Volumes) = %d, want 1", len(pod.Spec.Volumes))
+	// Should have X11 volume + workspace volume
+	if len(pod.Spec.Volumes) != 2 {
+		t.Fatalf("len(Volumes) = %d, want 2", len(pod.Spec.Volumes))
 	}
-	if pod.Spec.Volumes[0].Name != X11SocketVolumeName {
-		t.Errorf("volume name = %q, want %q", pod.Spec.Volumes[0].Name, X11SocketVolumeName)
+	hasX11 := false
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == X11SocketVolumeName {
+			hasX11 = true
+		}
+	}
+	if !hasX11 {
+		t.Error("missing X11 volume")
 	}
 
 	// Both containers should mount the X11 volume
-	if len(vnc.VolumeMounts) != 1 || vnc.VolumeMounts[0].Name != X11SocketVolumeName {
+	hasX11Mount := false
+	for _, vm := range vnc.VolumeMounts {
+		if vm.Name == X11SocketVolumeName {
+			hasX11Mount = true
+		}
+	}
+	if !hasX11Mount {
 		t.Error("vnc container missing X11 volume mount")
 	}
-	if len(app.VolumeMounts) != 1 || app.VolumeMounts[0].Name != X11SocketVolumeName {
+	hasX11Mount = false
+	for _, vm := range app.VolumeMounts {
+		if vm.Name == X11SocketVolumeName {
+			hasX11Mount = true
+		}
+	}
+	if !hasX11Mount {
 		t.Error("app container missing X11 volume mount")
 	}
 }
@@ -209,9 +227,9 @@ func TestBuildPodSpec_JlesageImage(t *testing.T) {
 		t.Errorf("readiness probe port = %d, want 5800", app.ReadinessProbe.TCPSocket.Port.IntValue())
 	}
 
-	// No volumes for jlesage images
-	if len(pod.Spec.Volumes) != 0 {
-		t.Errorf("len(Volumes) = %d, want 0 for jlesage image", len(pod.Spec.Volumes))
+	// Only workspace volume for jlesage images
+	if len(pod.Spec.Volumes) != 1 {
+		t.Errorf("len(Volumes) = %d, want 1 (workspace only) for jlesage image", len(pod.Spec.Volumes))
 	}
 
 	// jlesage images should NOT have DISPLAY env var

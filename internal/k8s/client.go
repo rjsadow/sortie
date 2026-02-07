@@ -14,6 +14,7 @@ import (
 var (
 	clientOnce sync.Once
 	client     kubernetes.Interface
+	restConfig *rest.Config
 	clientErr  error
 	namespace  string
 
@@ -100,20 +101,22 @@ func GetNamespace() string {
 // It supports both in-cluster config and kubeconfig file.
 func GetClient() (kubernetes.Interface, error) {
 	clientOnce.Do(func() {
-		var config *rest.Config
+		var cfg *rest.Config
 
 		// Try in-cluster config first
-		config, clientErr = rest.InClusterConfig()
+		cfg, clientErr = rest.InClusterConfig()
 		if clientErr != nil {
 			// Fall back to kubeconfig
-			config, clientErr = buildConfigFromKubeconfig()
+			cfg, clientErr = buildConfigFromKubeconfig()
 			if clientErr != nil {
 				clientErr = fmt.Errorf("failed to create kubernetes config: %w", clientErr)
 				return
 			}
 		}
 
-		client, clientErr = kubernetes.NewForConfig(config)
+		restConfig = cfg
+
+		client, clientErr = kubernetes.NewForConfig(cfg)
 		if clientErr != nil {
 			clientErr = fmt.Errorf("failed to create kubernetes client: %w", clientErr)
 			return
@@ -121,6 +124,14 @@ func GetClient() (kubernetes.Interface, error) {
 	})
 
 	return client, clientErr
+}
+
+// GetRESTConfig returns the Kubernetes REST config, initializing the client if necessary.
+func GetRESTConfig() (*rest.Config, error) {
+	if _, err := GetClient(); err != nil {
+		return nil, err
+	}
+	return restConfig, nil
 }
 
 // buildConfigFromKubeconfig builds a REST config from kubeconfig file.
@@ -150,6 +161,7 @@ func buildConfigFromKubeconfig() (*rest.Config, error) {
 func ResetClient() {
 	clientOnce = sync.Once{}
 	client = nil
+	restConfig = nil
 	clientErr = nil
 	namespace = ""
 	configuredNamespace = ""

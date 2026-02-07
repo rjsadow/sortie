@@ -44,6 +44,9 @@ type Config struct {
 	AdminUsername        string
 	AdminPassword        string
 	AllowRegistration    bool
+
+	// File transfer configuration
+	MaxUploadSize int64 // Maximum upload file size in bytes
 }
 
 // ValidationError represents a configuration validation error.
@@ -87,6 +90,7 @@ const (
 	DefaultJWTAccessExpiry        = 15 * time.Minute
 	DefaultJWTRefreshExpiry       = 24 * time.Hour
 	DefaultAdminUsername          = "admin"
+	DefaultMaxUploadSize         = int64(100 * 1024 * 1024) // 100MB
 )
 
 // Load reads configuration from environment variables and returns a Config.
@@ -118,6 +122,9 @@ func Load() (*Config, error) {
 		JWTAccessExpiry:  DefaultJWTAccessExpiry,
 		JWTRefreshExpiry: DefaultJWTRefreshExpiry,
 		AdminUsername:    DefaultAdminUsername,
+
+		// File transfer defaults
+		MaxUploadSize: DefaultMaxUploadSize,
 	}
 
 	// Load from environment variables
@@ -297,6 +304,24 @@ func (c *Config) loadFromEnv() error {
 
 	if v := os.Getenv("LAUNCHPAD_ALLOW_REGISTRATION"); v != "" {
 		c.AllowRegistration = strings.EqualFold(v, "true") || v == "1"
+	}
+
+	// File transfer configuration
+	if v := os.Getenv("LAUNCHPAD_MAX_UPLOAD_SIZE"); v != "" {
+		size, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_MAX_UPLOAD_SIZE",
+				Message: fmt.Sprintf("invalid size: %q (must be an integer representing bytes)", v),
+			})
+		} else if size <= 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_MAX_UPLOAD_SIZE",
+				Message: fmt.Sprintf("size must be positive: %d", size),
+			})
+		} else {
+			c.MaxUploadSize = size
+		}
 	}
 
 	if len(parseErrors) > 0 {

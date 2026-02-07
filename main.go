@@ -17,6 +17,7 @@ import (
 
 	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/launchpad/internal/files"
 	"github.com/rjsadow/launchpad/internal/guacamole"
 	"github.com/rjsadow/launchpad/internal/k8s"
 	"github.com/rjsadow/launchpad/internal/middleware"
@@ -36,6 +37,7 @@ var database *db.DB
 var sessionManager *sessions.Manager
 var appConfig *config.Config
 var jwtAuthProvider *auth.JWTAuthProvider
+var fileHandler *files.Handler
 
 func main() {
 	// Initialize structured logging with JSON handler for production
@@ -124,6 +126,9 @@ func main() {
 
 	// Initialize WebSocket handler
 	wsHandler := websocket.NewHandler(sessionManager)
+
+	// Initialize file transfer handler
+	fileHandler = files.NewHandler(sessionManager, database, appConfig.MaxUploadSize)
 
 	// Get the subdirectory from the embedded filesystem
 	distFS, err := fs.Sub(embeddedFiles, "web/dist")
@@ -862,14 +867,18 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		action = parts[1]
 	}
 
-	switch action {
-	case "stop":
+	switch {
+	case action == "stop":
 		handleSessionStop(w, r, id)
 		return
-	case "restart":
+	case action == "restart":
 		handleSessionRestart(w, r, id)
 		return
-	case "":
+	case action == "files" || strings.HasPrefix(action, "files/"):
+		// Delegate to file transfer handler (handles upload, download, list, delete)
+		fileHandler.ServeHTTP(w, r)
+		return
+	case action == "":
 		// Fall through to standard GET/DELETE handling
 	default:
 		http.Error(w, "Unknown session action", http.StatusNotFound)
