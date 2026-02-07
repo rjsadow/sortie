@@ -13,7 +13,7 @@ import (
 
 var (
 	clientOnce sync.Once
-	client     *kubernetes.Clientset
+	client     kubernetes.Interface
 	clientErr  error
 	namespace  string
 
@@ -98,7 +98,7 @@ func GetNamespace() string {
 
 // GetClient returns a Kubernetes clientset, initializing it if necessary.
 // It supports both in-cluster config and kubeconfig file.
-func GetClient() (*kubernetes.Clientset, error) {
+func GetClient() (kubernetes.Interface, error) {
 	clientOnce.Do(func() {
 		var config *rest.Config
 
@@ -155,5 +155,6 @@ func ResetClient() {
 	configuredNamespace = ""
 	configuredKubeconfig = ""
 	configuredVNCSidecarImage = ""
+	configuredBrowserSidecarImage = ""
 	configuredGuacdSidecarImage = ""
 }
