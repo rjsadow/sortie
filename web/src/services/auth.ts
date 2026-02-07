@@ -349,6 +349,7 @@ export interface AdminTemplate {
   icon: string;
   category: string;
   launch_type: string;
+  os_type?: string;
   container_image?: string;
   container_port?: number;
   container_args?: string[];

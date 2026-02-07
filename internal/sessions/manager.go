@@ -170,11 +170,15 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		}
 	}
 
-	// Build and create the pod based on launch type
+	// Build and create the pod based on launch type and OS type
 	var pod *corev1.Pod
 	switch app.LaunchType {
 	case db.LaunchTypeContainer:
-		pod = k8s.BuildPodSpec(podConfig)
+		if app.OsType == "windows" {
+			pod = k8s.BuildWindowsPodSpec(podConfig)
+		} else {
+			pod = k8s.BuildPodSpec(podConfig)
+		}
 	case db.LaunchTypeWebProxy:
 		pod = k8s.BuildWebProxyPodSpec(podConfig)
 	default:
@@ -400,4 +404,21 @@ func (m *Manager) GetSessionProxyURL(session *db.Session) string {
 	}
 	// The HTTP proxy endpoint on the server
 	return fmt.Sprintf("/api/sessions/%s/proxy/", session.ID)
+}
+
+// GetSessionGuacWebSocketURL returns the Guacamole WebSocket URL for Windows RDP sessions
+func (m *Manager) GetSessionGuacWebSocketURL(session *db.Session) string {
+	if session.PodIP == "" || session.Status != db.SessionStatusRunning {
+		return ""
+	}
+	return fmt.Sprintf("/ws/guac/sessions/%s", session.ID)
+}
+
+// IsWindowsApp checks if the given app is a Windows application
+func (m *Manager) IsWindowsApp(appID string) bool {
+	app, err := m.db.GetApp(appID)
+	if err != nil || app == nil {
+		return false
+	}
+	return app.OsType == "windows"
 }

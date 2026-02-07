@@ -509,6 +509,135 @@ func BuildWebProxyPodSpec(config *PodConfig) *corev1.Pod {
 	return pod
 }
 
+// BuildWindowsPodSpec creates a Kubernetes Pod specification for a Windows RDP session.
+// Windows apps run an RDP server (xrdp on port 3389). A guacd sidecar translates
+// RDP to the Guacamole protocol. The frontend connects via WebSocket to our server,
+// which connects to guacd on port 4822.
+func BuildWindowsPodSpec(config *PodConfig) *corev1.Pod {
+	// Get guacd sidecar image from centralized config
+	guacdImage := GetGuacdSidecarImage()
+
+	// Sanitize pod name (must be DNS-1123 compliant)
+	podName := fmt.Sprintf("launchpad-session-%s", config.SessionID)
+
+	// Build environment variables for app container
+	var appEnv []corev1.EnvVar
+	for key, value := range config.EnvVars {
+		appEnv = append(appEnv, corev1.EnvVar{Name: key, Value: value})
+	}
+
+	// Parse resource limits
+	cpuLimit := resource.MustParse(config.CPULimit)
+	memoryLimit := resource.MustParse(config.MemoryLimit)
+	cpuRequest := resource.MustParse(config.CPURequest)
+	memoryRequest := resource.MustParse(config.MemoryRequest)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: GetNamespace(),
+			Labels: map[string]string{
+				SessionLabelKey:   config.SessionID,
+				AppLabelKey:       config.AppID,
+				ComponentLabelKey: "session",
+			},
+			Annotations: map[string]string{
+				"launchpad.io/app-name":   config.AppName,
+				"launchpad.io/created-at": time.Now().UTC().Format(time.RFC3339),
+				"launchpad.io/protocol":   "rdp",
+				"launchpad.io/guacd-port": "4822",
+			},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				// Guacd sidecar - translates RDP to Guacamole protocol
+				{
+					Name:            "guacd-sidecar",
+					Image:           guacdImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Ports: []corev1.ContainerPort{
+						{Name: "guacd", ContainerPort: 4822, Protocol: corev1.ProtocolTCP},
+					},
+					Env: []corev1.EnvVar{
+						{Name: "GUACD_LOG_LEVEL", Value: "debug"},
+					},
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("512Mi"),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("128Mi"),
+						},
+					},
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							TCPSocket: &corev1.TCPSocketAction{
+								Port: intstr.FromInt(4822),
+							},
+						},
+						InitialDelaySeconds: 2,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      2,
+						SuccessThreshold:    1,
+						FailureThreshold:    6,
+					},
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							TCPSocket: &corev1.TCPSocketAction{
+								Port: intstr.FromInt(4822),
+							},
+						},
+						InitialDelaySeconds: 10,
+						PeriodSeconds:       30,
+						TimeoutSeconds:      5,
+						SuccessThreshold:    1,
+						FailureThreshold:    3,
+					},
+				},
+				// Application container (Windows app with RDP server)
+				{
+					Name:            "app",
+					Image:           config.ContainerImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Command:         config.Command,
+					Args:            config.Args,
+					Env:             appEnv,
+					Ports: []corev1.ContainerPort{
+						{Name: "rdp", ContainerPort: 3389, Protocol: corev1.ProtocolTCP},
+					},
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    cpuLimit,
+							corev1.ResourceMemory: memoryLimit,
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    cpuRequest,
+							corev1.ResourceMemory: memoryRequest,
+						},
+					},
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							TCPSocket: &corev1.TCPSocketAction{
+								Port: intstr.FromInt(3389),
+							},
+						},
+						InitialDelaySeconds: 5,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      2,
+						SuccessThreshold:    1,
+						FailureThreshold:    12,
+					},
+				},
+			},
+		},
+	}
+
+	return pod
+}
+
 // Helper functions
 func boolPtr(b bool) *bool {
 	return &b

@@ -1,4 +1,5 @@
 export type LaunchType = 'url' | 'container' | 'web_proxy';
+export type OsType = 'linux' | 'windows';
 
 // ResourceLimits defines CPU and memory constraints for container applications
 export interface ResourceLimits {
@@ -16,6 +17,7 @@ export interface Application {
   icon: string;
   category: string;
   launch_type: LaunchType;
+  os_type?: OsType;
   container_image?: string;
   container_port?: number;  // Port web app listens on (default: 8080 for web_proxy)
   container_args?: string[]; // Extra arguments to pass to the container
@@ -41,8 +43,9 @@ export interface Session {
   app_name?: string;
   pod_name: string;
   status: SessionStatus;
-  websocket_url?: string;  // For container apps (VNC)
-  proxy_url?: string;      // For web_proxy apps
+  websocket_url?: string;    // For Linux container apps (VNC)
+  guacamole_url?: string;    // For Windows container apps (RDP via Guacamole)
+  proxy_url?: string;        // For web_proxy apps
   created_at: string;
   updated_at: string;
 }

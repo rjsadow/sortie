@@ -36,6 +36,7 @@ type Application struct {
 	Icon           string          `json:"icon"`
 	Category       string          `json:"category"`
 	LaunchType     LaunchType      `json:"launch_type"`
+	OsType         string          `json:"os_type,omitempty"`         // "linux" (default) or "windows"
 	ContainerImage string          `json:"container_image,omitempty"`
 	ContainerPort  int             `json:"container_port,omitempty"`  // Port web app listens on (default: 8080)
 	ContainerArgs  []string        `json:"container_args,omitempty"`  // Extra arguments to pass to the container
@@ -59,6 +60,7 @@ type Template struct {
 	Icon              string          `json:"icon"`
 	Category          string          `json:"category"`
 	LaunchType        string          `json:"launch_type"`
+	OsType            string          `json:"os_type,omitempty"`
 	ContainerImage    string          `json:"container_image,omitempty"`
 	ContainerPort     int             `json:"container_port,omitempty"`
 	ContainerArgs     []string        `json:"container_args,omitempty"`
@@ -177,6 +179,7 @@ func (db *DB) migrate() error {
 		icon TEXT NOT NULL,
 		category TEXT NOT NULL,
 		launch_type TEXT NOT NULL DEFAULT 'url',
+		os_type TEXT DEFAULT 'linux',
 		container_image TEXT DEFAULT '',
 		container_port INTEGER DEFAULT 0,
 		container_args TEXT DEFAULT '[]',
@@ -248,6 +251,7 @@ func (db *DB) migrate() error {
 		icon TEXT DEFAULT '',
 		category TEXT NOT NULL,
 		launch_type TEXT NOT NULL DEFAULT 'container',
+		os_type TEXT DEFAULT 'linux',
 		container_image TEXT,
 		container_port INTEGER DEFAULT 8080,
 		container_args TEXT DEFAULT '[]',
@@ -279,6 +283,8 @@ func (db *DB) migrate() error {
 		"ALTER TABLE applications ADD COLUMN cpu_limit TEXT DEFAULT ''",
 		"ALTER TABLE applications ADD COLUMN memory_request TEXT DEFAULT ''",
 		"ALTER TABLE applications ADD COLUMN memory_limit TEXT DEFAULT ''",
+		"ALTER TABLE applications ADD COLUMN os_type TEXT DEFAULT 'linux'",
+		"ALTER TABLE templates ADD COLUMN os_type TEXT DEFAULT 'linux'",
 	}
 
 	for _, migration := range migrations {
@@ -325,7 +331,7 @@ func (db *DB) SeedFromJSON(jsonPath string) error {
 
 // ListApps returns all applications
 func (db *DB) ListApps() ([]Application, error) {
-	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications ORDER BY category, name")
+	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications ORDER BY category, name")
 	if err != nil {
 		return nil, err
 	}
@@ -334,16 +340,20 @@ func (db *DB) ListApps() ([]Application, error) {
 	var apps []Application
 	for rows.Next() {
 		var app Application
-		var launchType, containerImage string
+		var launchType, osType, containerImage string
 		var containerPort int
 		var containerArgsJSON string
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit); err != nil {
+		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit); err != nil {
 			return nil, err
 		}
 		app.LaunchType = LaunchType(launchType)
 		if app.LaunchType == "" {
 			app.LaunchType = LaunchTypeURL
+		}
+		app.OsType = osType
+		if app.OsType == "" {
+			app.OsType = "linux"
 		}
 		app.ContainerImage = containerImage
 		app.ContainerPort = containerPort
@@ -369,14 +379,14 @@ func (db *DB) ListApps() ([]Application, error) {
 // GetApp returns a single application by ID
 func (db *DB) GetApp(id string) (*Application, error) {
 	var app Application
-	var launchType, containerImage string
+	var launchType, osType, containerImage string
 	var containerPort int
 	var containerArgsJSON string
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 	err := db.conn.QueryRow(
-		"SELECT id, name, description, url, icon, category, launch_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications WHERE id = ?",
+		"SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications WHERE id = ?",
 		id,
-	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit)
+	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -387,6 +397,10 @@ func (db *DB) GetApp(id string) (*Application, error) {
 	app.LaunchType = LaunchType(launchType)
 	if app.LaunchType == "" {
 		app.LaunchType = LaunchTypeURL
+	}
+	app.OsType = osType
+	if app.OsType == "" {
+		app.OsType = "linux"
 	}
 	app.ContainerImage = containerImage
 	app.ContainerPort = containerPort
@@ -412,6 +426,10 @@ func (db *DB) CreateApp(app Application) error {
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
 	}
+	osType := app.OsType
+	if osType == "" {
+		osType = "linux"
+	}
 	// Serialize container args to JSON
 	containerArgsJSON := "[]"
 	if len(app.ContainerArgs) > 0 {
@@ -428,8 +446,8 @@ func (db *DB) CreateApp(app Application) error {
 		memoryLimit = app.ResourceLimits.MemoryLimit
 	}
 	_, err := db.conn.Exec(
-		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
+		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
 	)
 	return err
 }
@@ -439,6 +457,10 @@ func (db *DB) UpdateApp(app Application) error {
 	launchType := string(app.LaunchType)
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
+	}
+	osType := app.OsType
+	if osType == "" {
+		osType = "linux"
 	}
 	// Serialize container args to JSON
 	containerArgsJSON := "[]"
@@ -456,8 +478,8 @@ func (db *DB) UpdateApp(app Application) error {
 		memoryLimit = app.ResourceLimits.MemoryLimit
 	}
 	result, err := db.conn.Exec(
-		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, container_image = ?, container_port = ?, container_args = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ? WHERE id = ?",
-		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, app.ID,
+		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, os_type = ?, container_image = ?, container_port = ?, container_args = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ? WHERE id = ?",
+		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, app.ID,
 	)
 	if err != nil {
 		return err
@@ -958,7 +980,7 @@ func (db *DB) GetAllSettings() (map[string]string, error) {
 func (db *DB) ListTemplates() ([]Template, error) {
 	rows, err := db.conn.Query(`
 		SELECT id, template_id, template_version, template_category, name, description,
-		       url, icon, category, launch_type, container_image, container_port,
+		       url, icon, category, launch_type, os_type, container_image, container_port,
 		       container_args, tags, maintainer, documentation_url,
 		       cpu_request, cpu_limit, memory_request, memory_limit, created_at, updated_at
 		FROM templates ORDER BY template_category, name`)
@@ -975,11 +997,12 @@ func (db *DB) ListTemplates() ([]Template, error) {
 		var maintainer, docURL sql.NullString
 		var containerImage sql.NullString
 		var containerPort sql.NullInt64
+		var osType sql.NullString
 
 		if err := rows.Scan(
 			&t.ID, &t.TemplateID, &t.TemplateVersion, &t.TemplateCategory,
 			&t.Name, &t.Description, &t.URL, &t.Icon, &t.Category, &t.LaunchType,
-			&containerImage, &containerPort, &containerArgsJSON, &tagsJSON,
+			&osType, &containerImage, &containerPort, &containerArgsJSON, &tagsJSON,
 			&maintainer, &docURL,
 			&cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit,
 			&t.CreatedAt, &t.UpdatedAt,
@@ -987,6 +1010,11 @@ func (db *DB) ListTemplates() ([]Template, error) {
 			return nil, err
 		}
 
+		if osType.Valid && osType.String != "" {
+			t.OsType = osType.String
+		} else {
+			t.OsType = "linux"
+		}
 		if containerImage.Valid {
 			t.ContainerImage = containerImage.String
 		}
@@ -1032,16 +1060,17 @@ func (db *DB) GetTemplate(templateID string) (*Template, error) {
 	var maintainer, docURL sql.NullString
 	var containerImage sql.NullString
 	var containerPort sql.NullInt64
+	var osType sql.NullString
 
 	err := db.conn.QueryRow(`
 		SELECT id, template_id, template_version, template_category, name, description,
-		       url, icon, category, launch_type, container_image, container_port,
+		       url, icon, category, launch_type, os_type, container_image, container_port,
 		       container_args, tags, maintainer, documentation_url,
 		       cpu_request, cpu_limit, memory_request, memory_limit, created_at, updated_at
 		FROM templates WHERE template_id = ?`, templateID).Scan(
 		&t.ID, &t.TemplateID, &t.TemplateVersion, &t.TemplateCategory,
 		&t.Name, &t.Description, &t.URL, &t.Icon, &t.Category, &t.LaunchType,
-		&containerImage, &containerPort, &containerArgsJSON, &tagsJSON,
+		&osType, &containerImage, &containerPort, &containerArgsJSON, &tagsJSON,
 		&maintainer, &docURL,
 		&cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit,
 		&t.CreatedAt, &t.UpdatedAt,
@@ -1054,6 +1083,11 @@ func (db *DB) GetTemplate(templateID string) (*Template, error) {
 		return nil, err
 	}
 
+	if osType.Valid && osType.String != "" {
+		t.OsType = osType.String
+	} else {
+		t.OsType = "linux"
+	}
 	if containerImage.Valid {
 		t.ContainerImage = containerImage.String
 	}
@@ -1113,15 +1147,20 @@ func (db *DB) CreateTemplate(t Template) error {
 		memoryLimit = t.RecommendedLimits.MemoryLimit
 	}
 
+	osType := t.OsType
+	if osType == "" {
+		osType = "linux"
+	}
+
 	now := time.Now()
 	_, err := db.conn.Exec(`
 		INSERT INTO templates (template_id, template_version, template_category, name, description,
-		                       url, icon, category, launch_type, container_image, container_port,
+		                       url, icon, category, launch_type, os_type, container_image, container_port,
 		                       container_args, tags, maintainer, documentation_url,
 		                       cpu_request, cpu_limit, memory_request, memory_limit, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.TemplateID, t.TemplateVersion, t.TemplateCategory, t.Name, t.Description,
-		t.URL, t.Icon, t.Category, t.LaunchType, t.ContainerImage, t.ContainerPort,
+		t.URL, t.Icon, t.Category, t.LaunchType, osType, t.ContainerImage, t.ContainerPort,
 		containerArgsJSON, tagsJSON, t.Maintainer, t.DocumentationURL,
 		cpuRequest, cpuLimit, memoryRequest, memoryLimit, now, now,
 	)
@@ -1153,15 +1192,20 @@ func (db *DB) UpdateTemplate(t Template) error {
 		memoryLimit = t.RecommendedLimits.MemoryLimit
 	}
 
+	osType := t.OsType
+	if osType == "" {
+		osType = "linux"
+	}
+
 	result, err := db.conn.Exec(`
 		UPDATE templates SET template_version = ?, template_category = ?, name = ?, description = ?,
-		                     url = ?, icon = ?, category = ?, launch_type = ?, container_image = ?,
+		                     url = ?, icon = ?, category = ?, launch_type = ?, os_type = ?, container_image = ?,
 		                     container_port = ?, container_args = ?, tags = ?, maintainer = ?,
 		                     documentation_url = ?, cpu_request = ?, cpu_limit = ?,
 		                     memory_request = ?, memory_limit = ?, updated_at = ?
 		WHERE template_id = ?`,
 		t.TemplateVersion, t.TemplateCategory, t.Name, t.Description,
-		t.URL, t.Icon, t.Category, t.LaunchType, t.ContainerImage,
+		t.URL, t.Icon, t.Category, t.LaunchType, osType, t.ContainerImage,
 		t.ContainerPort, containerArgsJSON, tagsJSON, t.Maintainer,
 		t.DocumentationURL, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
 		time.Now(), t.TemplateID,

@@ -16,20 +16,21 @@ type CreateSessionRequest struct {
 
 // SessionResponse represents a session in API responses
 type SessionResponse struct {
-	ID           string           `json:"id"`
-	UserID       string           `json:"user_id"`
-	AppID        string           `json:"app_id"`
-	AppName      string           `json:"app_name,omitempty"`
-	PodName      string           `json:"pod_name"`
-	Status       db.SessionStatus `json:"status"`
-	WebSocketURL string           `json:"websocket_url,omitempty"` // For container apps (VNC)
-	ProxyURL     string           `json:"proxy_url,omitempty"`     // For web_proxy apps
-	CreatedAt    time.Time        `json:"created_at"`
-	UpdatedAt    time.Time        `json:"updated_at"`
+	ID            string           `json:"id"`
+	UserID        string           `json:"user_id"`
+	AppID         string           `json:"app_id"`
+	AppName       string           `json:"app_name,omitempty"`
+	PodName       string           `json:"pod_name"`
+	Status        db.SessionStatus `json:"status"`
+	WebSocketURL  string           `json:"websocket_url,omitempty"`  // For Linux container apps (VNC)
+	GuacamoleURL  string           `json:"guacamole_url,omitempty"`  // For Windows container apps (RDP via Guacamole)
+	ProxyURL      string           `json:"proxy_url,omitempty"`      // For web_proxy apps
+	CreatedAt     time.Time        `json:"created_at"`
+	UpdatedAt     time.Time        `json:"updated_at"`
 }
 
 // SessionFromDB converts a database session to an API response
-func SessionFromDB(session *db.Session, appName string, wsURL string, proxyURL string) *SessionResponse {
+func SessionFromDB(session *db.Session, appName string, wsURL string, guacURL string, proxyURL string) *SessionResponse {
 	return &SessionResponse{
 		ID:           session.ID,
 		UserID:       session.UserID,
@@ -38,6 +39,7 @@ func SessionFromDB(session *db.Session, appName string, wsURL string, proxyURL s
 		PodName:      session.PodName,
 		Status:       session.Status,
 		WebSocketURL: wsURL,
+		GuacamoleURL: guacURL,
 		ProxyURL:     proxyURL,
 		CreatedAt:    session.CreatedAt,
 		UpdatedAt:    session.UpdatedAt,

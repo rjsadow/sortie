@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-teardown
+.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-windows kind-teardown
 
 all: build
 
@@ -74,6 +74,10 @@ test:
 # Setup Kind cluster and deploy with Helm
 kind:
 	@./scripts/kind-setup.sh
+
+# Setup Kind cluster with Windows RDP support for testing
+kind-windows:
+	@./scripts/kind-setup.sh windows
 
 # Teardown Kind cluster
 kind-teardown:

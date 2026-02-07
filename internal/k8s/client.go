@@ -22,6 +22,7 @@ var (
 	configuredKubeconfig          string
 	configuredVNCSidecarImage     string
 	configuredBrowserSidecarImage string
+	configuredGuacdSidecarImage   string
 )
 
 // Configure sets the Kubernetes configuration from the application config.
@@ -51,6 +52,19 @@ func GetBrowserSidecarImage() string {
 		return configuredBrowserSidecarImage
 	}
 	return BrowserSidecarImage
+}
+
+// ConfigureGuacdSidecar sets the guacd sidecar image for Windows RDP support.
+func ConfigureGuacdSidecar(guacdSidecarImage string) {
+	configuredGuacdSidecarImage = guacdSidecarImage
+}
+
+// GetGuacdSidecarImage returns the configured guacd sidecar image.
+func GetGuacdSidecarImage() string {
+	if configuredGuacdSidecarImage != "" {
+		return configuredGuacdSidecarImage
+	}
+	return "guacamole/guacd:1.5.5"
 }
 
 // GetNamespace returns the Kubernetes namespace to use for sessions.
@@ -141,4 +155,5 @@ func ResetClient() {
 	configuredNamespace = ""
 	configuredKubeconfig = ""
 	configuredVNCSidecarImage = ""
+	configuredGuacdSidecarImage = ""
 }

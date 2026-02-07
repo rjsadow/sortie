@@ -1,0 +1,37 @@
+{
+  "applications": [
+    {
+      "id": "firefox",
+      "name": "Firefox Browser",
+      "description": "Firefox web browser in a secure container",
+      "url": "",
+      "icon": "https://www.mozilla.org/media/protocol/img/logos/firefox/browser/logo.svg",
+      "category": "Browsers",
+      "launch_type": "container",
+      "container_image": "jlesage/firefox:latest",
+      "resource_limits": {
+        "cpu_request": "250m",
+        "cpu_limit": "1",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    },
+    {
+      "id": "windows-desktop",
+      "name": "Windows Desktop (Test)",
+      "description": "Test desktop via RDP (xrdp + XFCE)",
+      "url": "",
+      "icon": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Windows_logo_-_2012.svg/88px-Windows_logo_-_2012.svg.png",
+      "category": "Development",
+      "launch_type": "container",
+      "os_type": "windows",
+      "container_image": "ghcr.io/rjsadow/launchpad-xrdp-test:latest",
+      "resource_limits": {
+        "cpu_request": "500m",
+        "cpu_limit": "2",
+        "memory_request": "512Mi",
+        "memory_limit": "2Gi"
+      }
+    }
+  ]
+}

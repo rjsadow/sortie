@@ -13,6 +13,10 @@ image:
 vncSidecar:
   image: ghcr.io/rjsadow/launchpad-vnc-sidecar:latest
 
+# Guacd sidecar image for Windows RDP sessions
+guacdSidecar:
+  image: guacamole/guacd:1.5.5
+
 # Replica count
 replicaCount: 1
 

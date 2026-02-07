@@ -33,6 +33,7 @@ const TEMPLATE_CATEGORIES = [
 ] as const;
 
 const LAUNCH_TYPES = ['url', 'container', 'web_proxy'] as const;
+const OS_TYPES = ['linux', 'windows'] as const;
 
 const emptyTemplate: Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'> = {
   template_id: '',
@@ -44,6 +45,7 @@ const emptyTemplate: Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'> = {
   icon: '',
   category: 'Development',
   launch_type: 'container',
+  os_type: 'linux',
   container_image: '',
   container_port: 8080,
   container_args: [],
@@ -631,6 +633,24 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                             ))}
                           </select>
                         </div>
+
+                        {/* OS Type - only shown for container apps */}
+                        {templateForm.launch_type === 'container' && (
+                          <div>
+                            <label className={`block text-sm mb-1 ${mutedText}`}>OS Type</label>
+                            <select
+                              value={templateForm.os_type || 'linux'}
+                              onChange={(e) => setTemplateForm({ ...templateForm, os_type: e.target.value })}
+                              className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                            >
+                              {OS_TYPES.map((type) => (
+                                <option key={type} value={type}>
+                                  {type === 'linux' ? 'Linux (VNC)' : 'Windows (RDP)'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
 
                         <div>
                           <label className={`block text-sm mb-1 ${mutedText}`}>Version</label>

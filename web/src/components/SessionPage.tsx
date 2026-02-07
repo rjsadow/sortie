@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../hooks/useSession';
 import { VNCViewer } from './VNCViewer';
+import { GuacamoleViewer } from './GuacamoleViewer';
 import type { Application } from '../types';
 
 interface SessionPageProps {
@@ -103,7 +104,7 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
       case 'creating':
         return { connectionState: 'waiting', statusMessage: 'Starting container...' };
       case 'running':
-        if (session.websocket_url) {
+        if (session.websocket_url || session.guacamole_url) {
           return { connectionState: 'connecting', statusMessage: 'Connecting to display...' };
         }
         return { connectionState: 'waiting', statusMessage: 'Waiting for container...' };
@@ -267,14 +268,24 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
           </div>
         )}
 
-        {/* VNC Viewer - full viewport */}
-        {session?.websocket_url && connectionState !== 'error' && (
+        {/* VNC Viewer - for Linux container apps */}
+        {session?.websocket_url && !session?.guacamole_url && connectionState !== 'error' && (
           <VNCViewer
             wsUrl={session.websocket_url}
             onConnect={handleVNCConnect}
             onDisconnect={handleVNCDisconnect}
             onError={handleVNCError}
             showStats={showStats}
+          />
+        )}
+
+        {/* Guacamole Viewer - for Windows RDP apps */}
+        {session?.guacamole_url && connectionState !== 'error' && (
+          <GuacamoleViewer
+            wsUrl={session.guacamole_url}
+            onConnect={handleVNCConnect}
+            onDisconnect={handleVNCDisconnect}
+            onError={handleVNCError}
           />
         )}
       </div>

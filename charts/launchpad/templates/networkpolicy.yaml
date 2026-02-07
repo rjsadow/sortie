@@ -26,6 +26,11 @@ spec:
           port: 6080
         - protocol: TCP
           port: 5900
+        # RDP and guacd ports for Windows apps
+        - protocol: TCP
+          port: 3389
+        - protocol: TCP
+          port: 4822
         # Web proxy ports for web_proxy apps
         - protocol: TCP
           port: 8080
@@ -96,6 +101,9 @@ spec:
           port: 6080
         - protocol: TCP
           port: 5900
+        # Guacd port for Windows RDP apps
+        - protocol: TCP
+          port: 4822
         # Web proxy ports for web_proxy apps
         - protocol: TCP
           port: 8080

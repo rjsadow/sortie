@@ -19,6 +19,7 @@ import (
 	"github.com/rjsadow/launchpad/internal/k8s"
 	"github.com/rjsadow/launchpad/internal/middleware"
 	"github.com/rjsadow/launchpad/internal/plugins/auth"
+	"github.com/rjsadow/launchpad/internal/guacamole"
 	"github.com/rjsadow/launchpad/internal/sessions"
 	"github.com/rjsadow/launchpad/internal/websocket"
 )
@@ -50,6 +51,7 @@ func main() {
 
 	// Initialize Kubernetes configuration
 	k8s.Configure(appConfig.Namespace, appConfig.Kubeconfig, appConfig.VNCSidecarImage)
+	k8s.ConfigureGuacdSidecar(appConfig.GuacdSidecarImage)
 
 	// Initialize database
 	database, err = db.Open(appConfig.DB)
@@ -160,6 +162,10 @@ func main() {
 
 	// WebSocket route for session VNC streams
 	mux.Handle("/ws/sessions/", wsHandler)
+
+	// WebSocket route for Guacamole (Windows RDP) streams
+	guacHandler := guacamole.NewHandler(sessionManager)
+	mux.Handle("/ws/guac/sessions/", guacHandler)
 
 	// Serve apps.json from database (for frontend compatibility)
 	mux.HandleFunc("/apps.json", handleAppsJSON)
@@ -549,15 +555,19 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 			app, _ := database.GetApp(s.AppID)
 			appName := ""
 			wsURL := ""
+			guacURL := ""
 			proxyURL := ""
 			if app != nil {
 				appName = app.Name
 				if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
-					// Both container and web_proxy apps use VNC streaming
-					wsURL = sessionManager.GetSessionWebSocketURL(&s)
+					if app.OsType == "windows" {
+						guacURL = sessionManager.GetSessionGuacWebSocketURL(&s)
+					} else {
+						wsURL = sessionManager.GetSessionWebSocketURL(&s)
+					}
 				}
 			}
-			responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, proxyURL)
+			responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, guacURL, proxyURL)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -597,16 +607,20 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 		app, _ := database.GetApp(session.AppID)
 		appName := ""
 		wsURL := ""
+		guacURL := ""
 		proxyURL := ""
 		if app != nil {
 			appName = app.Name
 			if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
-				// Both container and web_proxy apps use VNC streaming
-				wsURL = sessionManager.GetSessionWebSocketURL(session)
+				if app.OsType == "windows" {
+					guacURL = sessionManager.GetSessionGuacWebSocketURL(session)
+				} else {
+					wsURL = sessionManager.GetSessionWebSocketURL(session)
+				}
 			}
 		}
 
-		response := sessions.SessionFromDB(session, appName, wsURL, proxyURL)
+		response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL)
 
 		// Log the action
 		details := fmt.Sprintf("Created session %s for app %s", session.ID, session.AppID)
@@ -647,16 +661,20 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		app, _ := database.GetApp(session.AppID)
 		appName := ""
 		wsURL := ""
+		guacURL := ""
 		proxyURL := ""
 		if app != nil {
 			appName = app.Name
 			if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
-				// Both container and web_proxy apps use VNC streaming
-				wsURL = sessionManager.GetSessionWebSocketURL(session)
+				if app.OsType == "windows" {
+					guacURL = sessionManager.GetSessionGuacWebSocketURL(session)
+				} else {
+					wsURL = sessionManager.GetSessionWebSocketURL(session)
+				}
 			}
 		}
 
-		response := sessions.SessionFromDB(session, appName, wsURL, proxyURL)
+		response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
@@ -1078,14 +1096,19 @@ func handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 		app, _ := database.GetApp(s.AppID)
 		appName := ""
 		wsURL := ""
+		guacURL := ""
 		proxyURL := ""
 		if app != nil {
 			appName = app.Name
 			if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
-				wsURL = sessionManager.GetSessionWebSocketURL(&s)
+				if app.OsType == "windows" {
+					guacURL = sessionManager.GetSessionGuacWebSocketURL(&s)
+				} else {
+					wsURL = sessionManager.GetSessionWebSocketURL(&s)
+				}
 			}
 		}
-		responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, proxyURL)
+		responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, guacURL, proxyURL)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

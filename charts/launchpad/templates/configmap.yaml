@@ -13,3 +13,4 @@ data:
   SESSION_CLEANUP_INTERVAL: {{ .Values.session.cleanupInterval | quote }}
   POD_READY_TIMEOUT: {{ .Values.session.podReadyTimeout | quote }}
   LAUNCHPAD_VNC_SIDECAR_IMAGE: {{ .Values.vncSidecar.image | quote }}
+  LAUNCHPAD_GUACD_SIDECAR_IMAGE: {{ .Values.guacdSidecar.image | quote }}
