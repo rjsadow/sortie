@@ -179,6 +179,227 @@ func TestSessionCRUD(t *testing.T) {
 	})
 }
 
+func TestAppSpecCRUD(t *testing.T) {
+	db := setupTestDB(t)
+
+	t.Run("create and get app spec", func(t *testing.T) {
+		spec := AppSpec{
+			ID:            "spec-1",
+			Name:          "Test App Spec",
+			Description:   "A test app specification",
+			Image:         "nginx:latest",
+			LaunchCommand: "/bin/sh -c 'nginx -g daemon off;'",
+			Resources: &ResourceLimits{
+				CPURequest:    "100m",
+				CPULimit:      "500m",
+				MemoryRequest: "128Mi",
+				MemoryLimit:   "512Mi",
+			},
+			EnvVars: []EnvVar{
+				{Name: "PORT", Value: "8080"},
+				{Name: "ENV", Value: "production"},
+			},
+			Volumes: []VolumeMount{
+				{Name: "data", MountPath: "/data", Size: "1Gi"},
+			},
+			NetworkRules: []NetworkRule{
+				{Port: 8080, Protocol: "TCP"},
+				{Port: 443, Protocol: "TCP", AllowFrom: "10.0.0.0/8"},
+			},
+		}
+
+		if err := db.CreateAppSpec(spec); err != nil {
+			t.Fatalf("CreateAppSpec() error = %v", err)
+		}
+
+		got, err := db.GetAppSpec("spec-1")
+		if err != nil {
+			t.Fatalf("GetAppSpec() error = %v", err)
+		}
+		if got == nil {
+			t.Fatal("GetAppSpec() returned nil")
+		}
+		if got.ID != "spec-1" {
+			t.Errorf("got ID = %s, want spec-1", got.ID)
+		}
+		if got.Name != "Test App Spec" {
+			t.Errorf("got Name = %s, want Test App Spec", got.Name)
+		}
+		if got.Image != "nginx:latest" {
+			t.Errorf("got Image = %s, want nginx:latest", got.Image)
+		}
+		if got.LaunchCommand != "/bin/sh -c 'nginx -g daemon off;'" {
+			t.Errorf("got LaunchCommand = %s, want /bin/sh -c 'nginx -g daemon off;'", got.LaunchCommand)
+		}
+		if got.Resources == nil {
+			t.Fatal("got Resources = nil, want non-nil")
+		}
+		if got.Resources.CPURequest != "100m" {
+			t.Errorf("got CPURequest = %s, want 100m", got.Resources.CPURequest)
+		}
+		if got.Resources.MemoryLimit != "512Mi" {
+			t.Errorf("got MemoryLimit = %s, want 512Mi", got.Resources.MemoryLimit)
+		}
+		if len(got.EnvVars) != 2 {
+			t.Fatalf("got %d env vars, want 2", len(got.EnvVars))
+		}
+		if got.EnvVars[0].Name != "PORT" || got.EnvVars[0].Value != "8080" {
+			t.Errorf("got EnvVars[0] = %+v, want PORT=8080", got.EnvVars[0])
+		}
+		if len(got.Volumes) != 1 {
+			t.Fatalf("got %d volumes, want 1", len(got.Volumes))
+		}
+		if got.Volumes[0].MountPath != "/data" {
+			t.Errorf("got Volumes[0].MountPath = %s, want /data", got.Volumes[0].MountPath)
+		}
+		if len(got.NetworkRules) != 2 {
+			t.Fatalf("got %d network rules, want 2", len(got.NetworkRules))
+		}
+		if got.NetworkRules[1].AllowFrom != "10.0.0.0/8" {
+			t.Errorf("got NetworkRules[1].AllowFrom = %s, want 10.0.0.0/8", got.NetworkRules[1].AllowFrom)
+		}
+	})
+
+	t.Run("get nonexistent app spec", func(t *testing.T) {
+		got, err := db.GetAppSpec("nonexistent")
+		if err != nil {
+			t.Fatalf("GetAppSpec() error = %v", err)
+		}
+		if got != nil {
+			t.Errorf("expected nil for nonexistent app spec, got %+v", got)
+		}
+	})
+
+	t.Run("create duplicate app spec", func(t *testing.T) {
+		spec := AppSpec{
+			ID:    "spec-1",
+			Name:  "Duplicate",
+			Image: "busybox",
+		}
+		err := db.CreateAppSpec(spec)
+		if err == nil {
+			t.Fatal("expected error for duplicate ID, got nil")
+		}
+	})
+
+	t.Run("list app specs", func(t *testing.T) {
+		specs, err := db.ListAppSpecs()
+		if err != nil {
+			t.Fatalf("ListAppSpecs() error = %v", err)
+		}
+		if len(specs) != 1 {
+			t.Fatalf("ListAppSpecs() returned %d specs, want 1", len(specs))
+		}
+		if specs[0].ID != "spec-1" {
+			t.Errorf("got ID = %s, want spec-1", specs[0].ID)
+		}
+	})
+
+	t.Run("update app spec", func(t *testing.T) {
+		spec := AppSpec{
+			ID:            "spec-1",
+			Name:          "Updated App Spec",
+			Description:   "Updated description",
+			Image:         "nginx:1.25",
+			LaunchCommand: "nginx",
+			Resources: &ResourceLimits{
+				CPULimit:    "1",
+				MemoryLimit: "1Gi",
+			},
+			EnvVars: []EnvVar{
+				{Name: "PORT", Value: "9090"},
+			},
+		}
+
+		if err := db.UpdateAppSpec(spec); err != nil {
+			t.Fatalf("UpdateAppSpec() error = %v", err)
+		}
+
+		got, _ := db.GetAppSpec("spec-1")
+		if got.Name != "Updated App Spec" {
+			t.Errorf("got Name = %s, want Updated App Spec", got.Name)
+		}
+		if got.Image != "nginx:1.25" {
+			t.Errorf("got Image = %s, want nginx:1.25", got.Image)
+		}
+		if len(got.EnvVars) != 1 {
+			t.Fatalf("got %d env vars, want 1", len(got.EnvVars))
+		}
+		if got.EnvVars[0].Value != "9090" {
+			t.Errorf("got EnvVars[0].Value = %s, want 9090", got.EnvVars[0].Value)
+		}
+		// Volumes and network rules should be empty after update
+		if len(got.Volumes) != 0 {
+			t.Errorf("got %d volumes, want 0", len(got.Volumes))
+		}
+		if len(got.NetworkRules) != 0 {
+			t.Errorf("got %d network rules, want 0", len(got.NetworkRules))
+		}
+	})
+
+	t.Run("update nonexistent app spec", func(t *testing.T) {
+		spec := AppSpec{
+			ID:    "nonexistent",
+			Name:  "Doesn't Exist",
+			Image: "busybox",
+		}
+		err := db.UpdateAppSpec(spec)
+		if err == nil {
+			t.Fatal("expected error for nonexistent app spec, got nil")
+		}
+	})
+
+	t.Run("create minimal app spec", func(t *testing.T) {
+		spec := AppSpec{
+			ID:    "spec-minimal",
+			Name:  "Minimal Spec",
+			Image: "busybox:latest",
+		}
+
+		if err := db.CreateAppSpec(spec); err != nil {
+			t.Fatalf("CreateAppSpec() error = %v", err)
+		}
+
+		got, _ := db.GetAppSpec("spec-minimal")
+		if got == nil {
+			t.Fatal("GetAppSpec() returned nil")
+		}
+		if got.Resources != nil {
+			t.Errorf("expected nil Resources for minimal spec, got %+v", got.Resources)
+		}
+		if len(got.EnvVars) != 0 {
+			t.Errorf("expected 0 env vars, got %d", len(got.EnvVars))
+		}
+		if len(got.Volumes) != 0 {
+			t.Errorf("expected 0 volumes, got %d", len(got.Volumes))
+		}
+		if len(got.NetworkRules) != 0 {
+			t.Errorf("expected 0 network rules, got %d", len(got.NetworkRules))
+		}
+	})
+
+	t.Run("delete app spec", func(t *testing.T) {
+		if err := db.DeleteAppSpec("spec-1"); err != nil {
+			t.Fatalf("DeleteAppSpec() error = %v", err)
+		}
+
+		got, err := db.GetAppSpec("spec-1")
+		if err != nil {
+			t.Fatalf("GetAppSpec() error = %v", err)
+		}
+		if got != nil {
+			t.Error("expected nil after delete")
+		}
+	})
+
+	t.Run("delete nonexistent app spec", func(t *testing.T) {
+		err := db.DeleteAppSpec("nonexistent")
+		if err == nil {
+			t.Fatal("expected error for nonexistent app spec, got nil")
+		}
+	})
+}
+
 func TestGetStaleSessions(t *testing.T) {
 	db := setupTestDB(t)
 
