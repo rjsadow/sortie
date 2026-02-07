@@ -3,11 +3,12 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -22,6 +23,8 @@ import (
 // It supports any OIDC-compliant provider (Auth0, Keycloak, Entra ID, Okta, etc.).
 // After OIDC authentication, it issues local JWT tokens so the rest of the
 // application works identically to password-based login.
+// CSRF state tokens are stored in the database for horizontal scalability,
+// so any replica can complete an OIDC callback started by another.
 type OIDCAuthProvider struct {
 	config       map[string]string
 	database     *db.DB
@@ -32,14 +35,6 @@ type OIDCAuthProvider struct {
 	provider     *oidc.Provider
 	verifier     *oidc.IDTokenVerifier
 	oauth2Config oauth2.Config
-
-	// stateStore holds CSRF state tokens with expiry
-	stateStore sync.Map
-}
-
-type stateEntry struct {
-	redirectURL string
-	expiresAt   time.Time
 }
 
 func init() {
@@ -194,16 +189,17 @@ func (p *OIDCAuthProvider) Authenticate(ctx context.Context, tokenString string)
 }
 
 // GetLoginURL returns the OIDC authorization URL with a CSRF state token.
+// The state token is stored in the database for multi-replica consistency.
 func (p *OIDCAuthProvider) GetLoginURL(redirectURL string) string {
 	state, err := generateState()
 	if err != nil {
 		return ""
 	}
 
-	p.stateStore.Store(state, stateEntry{
-		redirectURL: redirectURL,
-		expiresAt:   time.Now().Add(10 * time.Minute),
-	})
+	if err := p.database.SaveOIDCState(state, redirectURL, time.Now().Add(10*time.Minute)); err != nil {
+		log.Printf("oidc: failed to save state: %v", err)
+		return ""
+	}
 
 	return p.oauth2Config.AuthCodeURL(state)
 }
@@ -215,13 +211,15 @@ func (p *OIDCAuthProvider) HandleCallback(ctx context.Context, code, state strin
 		return nil, errors.New("database not configured")
 	}
 
-	// Validate state
-	val, ok := p.stateStore.LoadAndDelete(state)
-	if !ok {
-		return nil, errors.New("invalid or expired state parameter")
+	// Validate and consume state from database (atomic load-and-delete)
+	_, expiresAt, err := p.database.ConsumeOIDCState(state)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("invalid or expired state parameter")
+		}
+		return nil, fmt.Errorf("oidc: failed to validate state: %w", err)
 	}
-	entry := val.(stateEntry)
-	if time.Now().After(entry.expiresAt) {
+	if time.Now().After(expiresAt) {
 		return nil, errors.New("state parameter expired")
 	}
 
@@ -280,7 +278,7 @@ func (p *OIDCAuthProvider) HandleCallback(ctx context.Context, code, state strin
 		return nil, fmt.Errorf("oidc: failed to generate refresh token: %w", err)
 	}
 
-	expiresAt := time.Now().Add(p.accessExpiry)
+	accessExpiresAt := time.Now().Add(p.accessExpiry)
 	return &plugins.AuthResult{
 		Authenticated: true,
 		User: &plugins.User{
@@ -291,7 +289,7 @@ func (p *OIDCAuthProvider) HandleCallback(ctx context.Context, code, state strin
 			Roles:    user.Roles,
 		},
 		Token:     accessToken,
-		ExpiresAt: &expiresAt,
+		ExpiresAt: &accessExpiresAt,
 		Message:   refreshToken, // Pass refresh token in Message field for the handler to extract
 	}, nil
 }
@@ -517,18 +515,14 @@ func generateState() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// cleanupStates periodically removes expired state entries.
+// cleanupStates periodically removes expired state entries from the database.
 func (p *OIDCAuthProvider) cleanupStates() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		now := time.Now()
-		p.stateStore.Range(func(key, value any) bool {
-			if entry, ok := value.(stateEntry); ok && now.After(entry.expiresAt) {
-				p.stateStore.Delete(key)
-			}
-			return true
-		})
+		if err := p.database.CleanupExpiredOIDCStates(); err != nil {
+			log.Printf("oidc: failed to cleanup expired states: %v", err)
+		}
 	}
 }
 

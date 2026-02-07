@@ -11,7 +11,10 @@ import (
 )
 
 // MemoryStorage implements StorageProvider using in-memory storage.
-// Useful for testing and development.
+// Useful for testing and development only.
+//
+// WARNING: NOT suitable for multi-replica deployments. Use the SQLite-backed
+// storage (or the direct db.DB layer) for production horizontal scalability.
 type MemoryStorage struct {
 	mu           sync.RWMutex
 	apps         map[string]*plugins.Application

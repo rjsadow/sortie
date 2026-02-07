@@ -17,7 +17,11 @@ vncSidecar:
 guacdSidecar:
   image: guacamole/guacd:1.5.5
 
-# Replica count
+# Replica count - supports >1 for horizontal scalability.
+# When replicaCount > 1, persistence.enabled must be true with a ReadWriteMany
+# storage class so all replicas share the same SQLite database.
+# The application is stateless: sessions are stored in the database and
+# any replica can serve any request.
 replicaCount: 1
 
 # JWT Authentication configuration
@@ -81,10 +85,13 @@ resourceQuota:
 limitRange:
   enabled: true
 
-# Persistent storage for SQLite database
+# Persistent storage for SQLite database.
+# Required for multi-replica deployments.
+# Use ReadWriteMany access mode with a shared filesystem (e.g., NFS, CephFS, EFS)
+# when running more than one replica so all pods share the same database.
 persistence:
   enabled: false
   # storageClass: ""  # Use default storage class if empty
   size: 1Gi
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteOnce  # Change to ReadWriteMany for replicaCount > 1

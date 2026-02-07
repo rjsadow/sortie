@@ -20,6 +20,10 @@ const (
 
 // ContainerLauncher implements LauncherPlugin for Kubernetes container-based launches.
 // It creates pods with VNC sidecars for interactive desktop applications.
+//
+// NOTE: This plugin maintains session state in-memory and is NOT horizontally scalable.
+// For multi-replica deployments, use the sessions.Manager which stores all state in the
+// database. This plugin is intended for single-instance or plugin-system use only.
 type ContainerLauncher struct {
 	mu              sync.RWMutex
 	sessions        map[string]*containerSession

@@ -11,6 +11,10 @@ import (
 )
 
 // RateLimiter tracks per-IP rate limits for WebSocket connections.
+// Rate limiting is per-replica: each backend instance maintains its own counters.
+// With N replicas behind a load balancer, the effective limit per IP is N * rate.
+// This is the standard pattern used by stateless services and is acceptable
+// because it still provides burst protection per replica.
 type RateLimiter struct {
 	mu       sync.Mutex
 	visitors map[string]*visitor

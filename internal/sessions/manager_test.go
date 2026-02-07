@@ -56,9 +56,6 @@ func TestNewManager(t *testing.T) {
 	if m.podReadyTimeout != DefaultPodReadyTimeout {
 		t.Errorf("podReadyTimeout = %v, want %v", m.podReadyTimeout, DefaultPodReadyTimeout)
 	}
-	if m.sessions == nil {
-		t.Error("sessions map should be initialized")
-	}
 }
 
 func TestNewManagerWithConfig(t *testing.T) {
@@ -110,26 +107,31 @@ func TestStartStop(t *testing.T) {
 
 // --- GetSession ---
 
-func TestGetSession_CacheHit(t *testing.T) {
+func TestGetSession_FromDB(t *testing.T) {
 	database := newTestDB(t)
 	m := NewManager(database)
 
-	session := &db.Session{
-		ID:     "cached-session",
-		UserID: "user1",
-		AppID:  "app1",
-		Status: db.SessionStatusRunning,
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+	err := database.CreateSession(db.Session{
+		ID:        "db-session-1",
+		UserID:    "user1",
+		AppID:     "app1",
+		PodName:   "pod-1",
+		Status:    db.SessionStatusRunning,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession error = %v", err)
 	}
-	m.mu.Lock()
-	m.sessions["cached-session"] = session
-	m.mu.Unlock()
 
-	got, err := m.GetSession(context.Background(), "cached-session")
+	got, err := m.GetSession(context.Background(), "db-session-1")
 	if err != nil {
 		t.Fatalf("GetSession() error = %v", err)
 	}
-	if got.ID != "cached-session" {
-		t.Errorf("GetSession() ID = %q, want %q", got.ID, "cached-session")
+	if got.ID != "db-session-1" {
+		t.Errorf("GetSession() ID = %q, want %q", got.ID, "db-session-1")
 	}
 }
 
@@ -601,13 +603,18 @@ func TestStopSession_InvalidTransition(t *testing.T) {
 	database := newTestDB(t)
 	m := NewManager(database)
 
-	// Put a session in "creating" state in cache - can't transition to "stopped"
-	m.mu.Lock()
-	m.sessions["s1"] = &db.Session{
-		ID:     "s1",
-		Status: db.SessionStatusCreating,
-	}
-	m.mu.Unlock()
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+	// Put a session in "creating" state in DB - can't transition to "stopped"
+	database.CreateSession(db.Session{
+		ID:      "s1",
+		UserID:  "user1",
+		AppID:   "app1",
+		PodName: "pod-1",
+		Status:  db.SessionStatusCreating,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 
 	err := m.StopSession(context.Background(), "s1")
 	if err == nil {
@@ -631,13 +638,18 @@ func TestRestartSession_InvalidTransition(t *testing.T) {
 	database := newTestDB(t)
 	m := NewManager(database)
 
-	// Put a session in "running" state - can't restart
-	m.mu.Lock()
-	m.sessions["s1"] = &db.Session{
-		ID:     "s1",
-		Status: db.SessionStatusRunning,
-	}
-	m.mu.Unlock()
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+	// Put a session in "running" state in DB - can't restart
+	database.CreateSession(db.Session{
+		ID:      "s1",
+		UserID:  "user1",
+		AppID:   "app1",
+		PodName: "pod-1",
+		Status:  db.SessionStatusRunning,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 
 	_, err := m.RestartSession(context.Background(), "s1")
 	if err == nil {
@@ -671,13 +683,18 @@ func TestTerminateSession_AlreadyTerminal(t *testing.T) {
 	database := newTestDB(t)
 	m := NewManager(database)
 
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
 	// A session already in expired state should return nil (early return)
-	m.mu.Lock()
-	m.sessions["s1"] = &db.Session{
-		ID:     "s1",
-		Status: db.SessionStatusExpired,
-	}
-	m.mu.Unlock()
+	database.CreateSession(db.Session{
+		ID:      "s1",
+		UserID:  "user1",
+		AppID:   "app1",
+		PodName: "pod-1",
+		Status:  db.SessionStatusExpired,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 
 	err := m.TerminateSession(context.Background(), "s1")
 	if err != nil {
@@ -689,12 +706,17 @@ func TestExpireSession_AlreadyFailed(t *testing.T) {
 	database := newTestDB(t)
 	m := NewManager(database)
 
-	m.mu.Lock()
-	m.sessions["s1"] = &db.Session{
-		ID:     "s1",
-		Status: db.SessionStatusFailed,
-	}
-	m.mu.Unlock()
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+	database.CreateSession(db.Session{
+		ID:      "s1",
+		UserID:  "user1",
+		AppID:   "app1",
+		PodName: "pod-1",
+		Status:  db.SessionStatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 
 	err := m.ExpireSession(context.Background(), "s1")
 	if err != nil {

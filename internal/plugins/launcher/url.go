@@ -11,6 +11,10 @@ import (
 // URLLauncher implements LauncherPlugin for URL-based application launches.
 // It provides simple redirect-based launching where the client is directed
 // to open the application URL directly.
+//
+// NOTE: This plugin maintains session state in-memory and is NOT horizontally scalable.
+// For multi-replica deployments, use the sessions.Manager which stores all state in the
+// database. This plugin is intended for single-instance or plugin-system use only.
 type URLLauncher struct {
 	mu       sync.RWMutex
 	sessions map[string]*plugins.LaunchResult

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,7 +39,9 @@ type ManagerConfig struct {
 	DefaultMemLimit    string // Default memory limit for new sessions
 }
 
-// Manager handles session lifecycle
+// Manager handles session lifecycle.
+// All session state is stored in the database for horizontal scalability.
+// Multiple replicas can share the same database and operate independently.
 type Manager struct {
 	db              *db.DB
 	sessionTimeout  time.Duration
@@ -55,9 +56,7 @@ type Manager struct {
 	defaultMemRequest  string
 	defaultMemLimit    string
 
-	mu       sync.RWMutex
-	stopCh   chan struct{}
-	sessions map[string]*db.Session
+	stopCh chan struct{}
 }
 
 // NewManager creates a new session manager with default configuration.
@@ -95,7 +94,6 @@ func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
 		defaultMemRequest:  cfg.DefaultMemRequest,
 		defaultMemLimit:    cfg.DefaultMemLimit,
 		stopCh:             make(chan struct{}),
-		sessions:           make(map[string]*db.Session),
 	}
 }
 
@@ -312,11 +310,6 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		return nil, fmt.Errorf("failed to create session in database: %w", err)
 	}
 
-	// Cache the session
-	m.mu.Lock()
-	m.sessions[sessionID] = session
-	m.mu.Unlock()
-
 	// Start goroutine to wait for pod ready and update session
 	go m.waitForPodReady(sessionID, createdPod.Name)
 
@@ -354,27 +347,11 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	if err := m.db.UpdateSessionPodIPAndStatus(sessionID, podIP, db.SessionStatusRunning); err != nil {
 		log.Printf("Failed to update session for %s: %v", sessionID, err)
 	}
-
-	// Update cache
-	m.mu.Lock()
-	if session, ok := m.sessions[sessionID]; ok {
-		session.PodIP = podIP
-		session.Status = db.SessionStatusRunning
-	}
-	m.mu.Unlock()
 }
 
-// GetSession returns a session by ID
+// GetSession returns a session by ID, always reading from the database
+// to ensure consistency across multiple replicas.
 func (m *Manager) GetSession(ctx context.Context, sessionID string) (*db.Session, error) {
-	// Check cache first
-	m.mu.RLock()
-	if session, ok := m.sessions[sessionID]; ok {
-		m.mu.RUnlock()
-		return session, nil
-	}
-	m.mu.RUnlock()
-
-	// Load from database
 	session, err := m.db.GetSession(sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
@@ -425,14 +402,6 @@ func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
 	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusStopped); err != nil {
 		return fmt.Errorf("failed to update session status: %w", err)
 	}
-
-	// Update cache
-	m.mu.Lock()
-	if s, ok := m.sessions[sessionID]; ok {
-		s.Status = db.SessionStatusStopped
-		s.PodIP = ""
-	}
-	m.mu.Unlock()
 
 	return nil
 }
@@ -499,13 +468,11 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 		return nil, fmt.Errorf("failed to update session in database: %w", err)
 	}
 
-	// Update cache
-	m.mu.Lock()
-	session.PodName = createdPod.Name
-	session.PodIP = ""
-	session.Status = db.SessionStatusCreating
-	m.sessions[sessionID] = session
-	m.mu.Unlock()
+	// Re-read the session from DB to get the updated state
+	session, err = m.db.GetSession(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to re-read session after restart: %w", err)
+	}
 
 	// Wait for pod ready in background
 	go m.waitForPodReady(sessionID, createdPod.Name)
@@ -553,11 +520,6 @@ func (m *Manager) terminateWithStatus(ctx context.Context, sessionID string, fin
 	if err := m.db.UpdateSessionStatus(sessionID, finalStatus); err != nil {
 		return fmt.Errorf("failed to update session status: %w", err)
 	}
-
-	// Remove from cache
-	m.mu.Lock()
-	delete(m.sessions, sessionID)
-	m.mu.Unlock()
 
 	return nil
 }

@@ -329,6 +329,13 @@ func (db *DB) migrate() error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS oidc_states (
+		state TEXT PRIMARY KEY,
+		redirect_url TEXT NOT NULL DEFAULT '',
+		expires_at DATETIME NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_oidc_states_expires ON oidc_states(expires_at);
 	`
 	_, err := db.conn.Exec(schema)
 	if err != nil {
@@ -1743,6 +1750,48 @@ func (db *DB) DeleteAppSpec(id string) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// SaveOIDCState stores an OIDC CSRF state token with its redirect URL and expiry.
+func (db *DB) SaveOIDCState(state, redirectURL string, expiresAt time.Time) error {
+	_, err := db.conn.Exec(
+		"INSERT INTO oidc_states (state, redirect_url, expires_at) VALUES (?, ?, ?)",
+		state, redirectURL, expiresAt,
+	)
+	return err
+}
+
+// ConsumeOIDCState atomically loads and deletes an OIDC state token.
+// Returns the redirect URL and expiry, or empty string if not found.
+func (db *DB) ConsumeOIDCState(state string) (redirectURL string, expiresAt time.Time, err error) {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	defer tx.Rollback()
+
+	err = tx.QueryRow(
+		"SELECT redirect_url, expires_at FROM oidc_states WHERE state = ?", state,
+	).Scan(&redirectURL, &expiresAt)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	_, err = tx.Exec("DELETE FROM oidc_states WHERE state = ?", state)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", time.Time{}, err
+	}
+	return redirectURL, expiresAt, nil
+}
+
+// CleanupExpiredOIDCStates removes expired OIDC state tokens.
+func (db *DB) CleanupExpiredOIDCStates() error {
+	_, err := db.conn.Exec("DELETE FROM oidc_states WHERE expires_at < ?", time.Now())
+	return err
 }
 
 // SeedTemplatesFromData loads templates from JSON data if the templates table is empty
