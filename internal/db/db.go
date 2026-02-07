@@ -168,6 +168,11 @@ func (db *DB) Close() error {
 	return db.conn.Close()
 }
 
+// Ping verifies the database connection is alive.
+func (db *DB) Ping() error {
+	return db.conn.Ping()
+}
+
 // migrate creates the necessary tables
 func (db *DB) migrate() error {
 	schema := `

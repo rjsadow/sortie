@@ -4,11 +4,12 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"expvar"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -16,10 +17,11 @@ import (
 
 	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/launchpad/internal/guacamole"
 	"github.com/rjsadow/launchpad/internal/k8s"
 	"github.com/rjsadow/launchpad/internal/middleware"
+	"github.com/rjsadow/launchpad/internal/plugins"
 	"github.com/rjsadow/launchpad/internal/plugins/auth"
-	"github.com/rjsadow/launchpad/internal/guacamole"
 	"github.com/rjsadow/launchpad/internal/sessions"
 	"github.com/rjsadow/launchpad/internal/websocket"
 )
@@ -36,6 +38,12 @@ var appConfig *config.Config
 var jwtAuthProvider *auth.JWTAuthProvider
 
 func main() {
+	// Initialize structured logging with JSON handler for production
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	// Parse command-line flags (can override env vars)
 	port := flag.Int("port", config.DefaultPort, "Port to listen on")
 	dbPath := flag.String("db", config.DefaultDBPath, "Path to SQLite database")
@@ -46,7 +54,8 @@ func main() {
 	var err error
 	appConfig, err = config.LoadWithFlags(*port, *dbPath, *seedPath)
 	if err != nil {
-		log.Fatalf("Configuration error:\n%v\n\nSee .env.example for configuration options.", err)
+		slog.Error("configuration error", "error", err, "hint", "See .env.example for configuration options.")
+		os.Exit(1)
 	}
 
 	// Initialize Kubernetes configuration
@@ -56,20 +65,21 @@ func main() {
 	// Initialize database
 	database, err = db.Open(appConfig.DB)
 	if err != nil {
-		log.Fatal("Failed to open database:", err)
+		slog.Error("failed to open database", "error", err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
 	// Seed from JSON if provided and database is empty
 	if appConfig.Seed != "" {
 		if err := database.SeedFromJSON(appConfig.Seed); err != nil {
-			log.Printf("Warning: failed to seed from JSON: %v", err)
+			slog.Warn("failed to seed from JSON", "error", err)
 		}
 	}
 
 	// Seed templates from embedded templates.json if templates table is empty
 	if err := database.SeedTemplatesFromData(embeddedTemplates); err != nil {
-		log.Printf("Warning: failed to seed templates: %v", err)
+		slog.Warn("failed to seed templates", "error", err)
 	}
 
 	// Initialize JWT auth provider
@@ -81,7 +91,8 @@ func main() {
 			"refresh_expiry": appConfig.JWTRefreshExpiry.String(),
 		}
 		if err := jwtAuthProvider.Initialize(context.Background(), authConfig); err != nil {
-			log.Fatalf("Failed to initialize JWT auth provider: %v", err)
+			slog.Error("failed to initialize JWT auth provider", "error", err)
+			os.Exit(1)
 		}
 		jwtAuthProvider.SetDatabase(database)
 
@@ -89,16 +100,17 @@ func main() {
 		if appConfig.AdminPassword != "" {
 			passwordHash, err := auth.HashPassword(appConfig.AdminPassword)
 			if err != nil {
-				log.Fatalf("Failed to hash admin password: %v", err)
+				slog.Error("failed to hash admin password", "error", err)
+				os.Exit(1)
 			}
 			if err := database.SeedAdminUser(appConfig.AdminUsername, passwordHash); err != nil {
-				log.Printf("Warning: failed to seed admin user: %v", err)
+				slog.Warn("failed to seed admin user", "error", err)
 			} else {
-				log.Printf("Admin user '%s' ready", appConfig.AdminUsername)
+				slog.Info("admin user ready", "username", appConfig.AdminUsername)
 			}
 		}
 	} else {
-		log.Println("Warning: LAUNCHPAD_JWT_SECRET not set - authentication disabled")
+		slog.Warn("LAUNCHPAD_JWT_SECRET not set - authentication disabled")
 	}
 
 	// Initialize session manager with config
@@ -116,14 +128,24 @@ func main() {
 	// Get the subdirectory from the embedded filesystem
 	distFS, err := fs.Sub(embeddedFiles, "web/dist")
 	if err != nil {
-		log.Fatal("Failed to access embedded files:", err)
+		slog.Error("failed to access embedded files", "error", err)
+		os.Exit(1)
 	}
 
 	// Create file server handler
 	fileServer := http.FileServer(http.FS(distFS))
 
+	// Publish basic application metrics via expvar
+	expvar.NewString("app.name").Set("sortie")
+	expvar.NewString("app.start_time").Set(time.Now().UTC().Format(time.RFC3339))
+
 	// Create a custom mux for better control
 	mux := http.NewServeMux()
+
+	// Observability endpoints (public, no auth required)
+	mux.Handle("/metrics", expvar.Handler())
+	mux.HandleFunc("/healthz", handleHealthz)
+	mux.HandleFunc("/readyz", handleReadyz)
 
 	// Auth routes (public - no authentication required)
 	mux.HandleFunc("/api/auth/login", handleLogin)
@@ -201,13 +223,13 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%d", appConfig.Port)
-	log.Printf("Sortie server starting on http://localhost%s", addr)
+	slog.Info("Sortie server starting", "addr", "http://localhost"+addr)
 
-	// Wrap mux with security headers middleware
-	handler := middleware.SecurityHeaders(mux)
+	// Wrap mux with request ID and security headers middleware
+	handler := middleware.SecurityHeaders(middleware.RequestID(mux))
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatal("Server error:", err)
+		slog.Error("server error", "error", err)
 		os.Exit(1)
 	}
 }
@@ -221,7 +243,7 @@ func handleAppsJSON(w http.ResponseWriter, r *http.Request) {
 
 	apps, err := database.ListApps()
 	if err != nil {
-		log.Printf("Error listing apps: %v", err)
+		slog.Error("error listing apps", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -242,7 +264,7 @@ func handleApps(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		apps, err := database.ListApps()
 		if err != nil {
-			log.Printf("Error listing apps: %v", err)
+			slog.Error("error listing apps", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -288,7 +310,7 @@ func handleApps(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Application with this ID already exists", http.StatusConflict)
 				return
 			}
-			log.Printf("Error creating app: %v", err)
+			slog.Error("error creating app", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -319,7 +341,7 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		app, err := database.GetApp(id)
 		if err != nil {
-			log.Printf("Error getting app: %v", err)
+			slog.Error("error getting app", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -368,7 +390,7 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Application not found", http.StatusNotFound)
 				return
 			}
-			log.Printf("Error updating app: %v", err)
+			slog.Error("error updating app", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -384,7 +406,7 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 		// Get app name before deleting for audit log
 		app, err := database.GetApp(id)
 		if err != nil {
-			log.Printf("Error getting app: %v", err)
+			slog.Error("error getting app", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -394,7 +416,7 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := database.DeleteApp(id); err != nil {
-			log.Printf("Error deleting app: %v", err)
+			slog.Error("error deleting app", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -419,7 +441,7 @@ func handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 	logs, err := database.GetAuditLogs(100)
 	if err != nil {
-		log.Printf("Error getting audit logs: %v", err)
+		slog.Error("error getting audit logs", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -460,7 +482,7 @@ func handleAnalyticsLaunch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.RecordLaunch(req.AppID); err != nil {
-		log.Printf("Error recording launch: %v", err)
+		slog.Error("error recording launch", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -478,7 +500,7 @@ func handleAnalyticsStats(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := database.GetAnalyticsStats()
 	if err != nil {
-		log.Printf("Error getting analytics stats: %v", err)
+		slog.Error("error getting analytics stats", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -540,7 +562,7 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil {
-			log.Printf("Error listing sessions: %v", err)
+			slog.Error("error listing sessions", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -598,7 +620,7 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 
 		session, err := sessionManager.CreateSession(r.Context(), &req)
 		if err != nil {
-			log.Printf("Error creating session: %v", err)
+			slog.Error("error creating session", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -648,7 +670,7 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		session, err := sessionManager.GetSession(r.Context(), id)
 		if err != nil {
-			log.Printf("Error getting session: %v", err)
+			slog.Error("error getting session", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -682,7 +704,7 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		session, err := sessionManager.GetSession(r.Context(), id)
 		if err != nil {
-			log.Printf("Error getting session: %v", err)
+			slog.Error("error getting session", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -692,7 +714,7 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := sessionManager.TerminateSession(r.Context(), id); err != nil {
-			log.Printf("Error terminating session: %v", err)
+			slog.Error("error terminating session", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -743,7 +765,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	result, err := jwtAuthProvider.LoginWithCredentials(r.Context(), req.Username, req.Password)
 	if err != nil {
-		log.Printf("Login failed for user %s: %v", req.Username, err)
+		slog.Warn("login failed", "username", req.Username, "error", err)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -821,7 +843,7 @@ func handleRefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	result, err := jwtAuthProvider.RefreshAccessToken(r.Context(), req.RefreshToken)
 	if err != nil {
-		log.Printf("Token refresh failed: %v", err)
+		slog.Warn("token refresh failed", "error", err)
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
 	}
@@ -940,7 +962,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Check if username already exists
 	existing, err := database.GetUserByUsername(req.Username)
 	if err != nil {
-		log.Printf("Error checking username: %v", err)
+		slog.Error("error checking username", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -952,7 +974,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Hash password
 	passwordHash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		log.Printf("Error hashing password: %v", err)
+		slog.Error("error hashing password", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -968,7 +990,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.CreateUser(user); err != nil {
-		log.Printf("Error creating user: %v", err)
+		slog.Error("error creating user", "error", err)
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
@@ -979,7 +1001,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Auto-login: generate tokens
 	result, err := jwtAuthProvider.LoginWithCredentials(r.Context(), req.Username, req.Password)
 	if err != nil {
-		log.Printf("Error generating tokens after registration: %v", err)
+		slog.Error("error generating tokens after registration", "error", err)
 		// Registration succeeded, but login failed - still return success
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]string{"message": "Registration successful, please login"})
@@ -1016,7 +1038,7 @@ func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		settings, err := database.GetAllSettings()
 		if err != nil {
-			log.Printf("Error getting settings: %v", err)
+			slog.Error("error getting settings", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1050,7 +1072,7 @@ func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		// Update each setting
 		for key, value := range req {
 			if err := database.SetSetting(key, value); err != nil {
-				log.Printf("Error setting %s: %v", key, err)
+				slog.Error("error updating setting", "key", key, "error", err)
 				http.Error(w, "Failed to update settings", http.StatusInternalServerError)
 				return
 			}
@@ -1081,7 +1103,7 @@ func handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 
 	sessionList, err := sessionManager.ListSessions(r.Context())
 	if err != nil {
-		log.Printf("Error listing sessions: %v", err)
+		slog.Error("error listing sessions", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -1126,7 +1148,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		users, err := database.ListUsers()
 		if err != nil {
-			log.Printf("Error listing users: %v", err)
+			slog.Error("error listing users", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1188,7 +1210,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		// Check if username already exists
 		existing, err := database.GetUserByUsername(req.Username)
 		if err != nil {
-			log.Printf("Error checking username: %v", err)
+			slog.Error("error checking username", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1200,7 +1222,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		// Hash password
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			log.Printf("Error hashing password: %v", err)
+			slog.Error("error hashing password", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1222,7 +1244,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := database.CreateUser(user); err != nil {
-			log.Printf("Error creating user: %v", err)
+			slog.Error("error creating user", "error", err)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
@@ -1269,7 +1291,7 @@ func handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 		// Get user info for audit log
 		user, err := database.GetUserByID(id)
 		if err != nil {
-			log.Printf("Error getting user: %v", err)
+			slog.Error("error getting user", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1279,7 +1301,7 @@ func handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := database.DeleteUser(id); err != nil {
-			log.Printf("Error deleting user: %v", err)
+			slog.Error("error deleting user", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1303,7 +1325,7 @@ func handleTemplates(w http.ResponseWriter, r *http.Request) {
 
 	templates, err := database.ListTemplates()
 	if err != nil {
-		log.Printf("Error listing templates: %v", err)
+		slog.Error("error listing templates", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -1331,7 +1353,7 @@ func handleTemplateByID(w http.ResponseWriter, r *http.Request) {
 
 	template, err := database.GetTemplate(templateID)
 	if err != nil {
-		log.Printf("Error getting template: %v", err)
+		slog.Error("error getting template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -1355,7 +1377,7 @@ func handleAdminTemplates(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		templates, err := database.ListTemplates()
 		if err != nil {
-			log.Printf("Error listing templates: %v", err)
+			slog.Error("error listing templates", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1411,7 +1433,7 @@ func handleAdminTemplates(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Template with this ID already exists", http.StatusConflict)
 				return
 			}
-			log.Printf("Error creating template: %v", err)
+			slog.Error("error creating template", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1446,7 +1468,7 @@ func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		template, err := database.GetTemplate(templateID)
 		if err != nil {
-			log.Printf("Error getting template: %v", err)
+			slog.Error("error getting template", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1485,7 +1507,7 @@ func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Template not found", http.StatusNotFound)
 				return
 			}
-			log.Printf("Error updating template: %v", err)
+			slog.Error("error updating template", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1501,7 +1523,7 @@ func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
 		// Get template info for audit log
 		template, err := database.GetTemplate(templateID)
 		if err != nil {
-			log.Printf("Error getting template: %v", err)
+			slog.Error("error getting template", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1511,7 +1533,7 @@ func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := database.DeleteTemplate(templateID); err != nil {
-			log.Printf("Error deleting template: %v", err)
+			slog.Error("error deleting template", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1525,4 +1547,62 @@ func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleHealthz is a liveness probe that returns 200 if the server is running.
+func handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// handleReadyz is a readiness probe that checks database connectivity and plugin health.
+func handleReadyz(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ready := true
+	checks := make(map[string]interface{})
+
+	// Check database connectivity
+	if err := database.Ping(); err != nil {
+		ready = false
+		checks["database"] = map[string]string{"status": "unhealthy", "error": err.Error()}
+	} else {
+		checks["database"] = map[string]string{"status": "healthy"}
+	}
+
+	// Check plugin health via the global registry
+	pluginStatuses := plugins.Global().HealthCheck(r.Context())
+	pluginChecks := make([]map[string]interface{}, 0, len(pluginStatuses))
+	for _, ps := range pluginStatuses {
+		entry := map[string]interface{}{
+			"name":    ps.PluginName,
+			"type":    ps.PluginType,
+			"healthy": ps.Healthy,
+			"message": ps.Message,
+		}
+		if !ps.Healthy {
+			ready = false
+		}
+		pluginChecks = append(pluginChecks, entry)
+	}
+	checks["plugins"] = pluginChecks
+
+	w.Header().Set("Content-Type", "application/json")
+	if ready {
+		checks["status"] = "ready"
+		w.WriteHeader(http.StatusOK)
+	} else {
+		checks["status"] = "not_ready"
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	json.NewEncoder(w).Encode(checks)
 }
