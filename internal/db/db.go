@@ -119,14 +119,15 @@ const (
 
 // Session represents an active container session
 type Session struct {
-	ID        string        `json:"id"`
-	UserID    string        `json:"user_id"`
-	AppID     string        `json:"app_id"`
-	PodName   string        `json:"pod_name"`
-	PodIP     string        `json:"pod_ip,omitempty"`
-	Status    SessionStatus `json:"status"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
+	ID          string        `json:"id"`
+	UserID      string        `json:"user_id"`
+	AppID       string        `json:"app_id"`
+	PodName     string        `json:"pod_name"`
+	PodIP       string        `json:"pod_ip,omitempty"`
+	Status      SessionStatus `json:"status"`
+	IdleTimeout int64         `json:"idle_timeout,omitempty"` // Per-session idle timeout in seconds (0 = use global default)
+	CreatedAt   time.Time     `json:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
 }
 
 // DB wraps the sql.DB connection
@@ -216,6 +217,7 @@ func (db *DB) migrate() error {
 		pod_name TEXT NOT NULL,
 		pod_ip TEXT DEFAULT '',
 		status TEXT NOT NULL DEFAULT 'pending',
+		idle_timeout INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (app_id) REFERENCES applications(id)
@@ -290,6 +292,7 @@ func (db *DB) migrate() error {
 		"ALTER TABLE applications ADD COLUMN memory_limit TEXT DEFAULT ''",
 		"ALTER TABLE applications ADD COLUMN os_type TEXT DEFAULT 'linux'",
 		"ALTER TABLE templates ADD COLUMN os_type TEXT DEFAULT 'linux'",
+		"ALTER TABLE sessions ADD COLUMN idle_timeout INTEGER DEFAULT 0",
 	}
 
 	for _, migration := range migrations {
@@ -612,8 +615,8 @@ func (db *DB) GetAnalyticsStats() (*AnalyticsStats, error) {
 // CreateSession creates a new session
 func (db *DB) CreateSession(session Session) error {
 	_, err := db.conn.Exec(
-		"INSERT INTO sessions (id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		session.ID, session.UserID, session.AppID, session.PodName, session.PodIP, string(session.Status), session.CreatedAt, session.UpdatedAt,
+		"INSERT INTO sessions (id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		session.ID, session.UserID, session.AppID, session.PodName, session.PodIP, string(session.Status), session.IdleTimeout, session.CreatedAt, session.UpdatedAt,
 	)
 	return err
 }
@@ -623,9 +626,9 @@ func (db *DB) GetSession(id string) (*Session, error) {
 	var session Session
 	var status string
 	err := db.conn.QueryRow(
-		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE id = ?",
+		"SELECT id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, created_at, updated_at FROM sessions WHERE id = ?",
 		id,
-	).Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt)
+	).Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.IdleTimeout, &session.CreatedAt, &session.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -640,7 +643,7 @@ func (db *DB) GetSession(id string) (*Session, error) {
 // ListSessions returns all active sessions
 func (db *DB) ListSessions() ([]Session, error) {
 	rows, err := db.conn.Query(
-		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE status NOT IN ('terminated', 'failed') ORDER BY created_at DESC",
+		"SELECT id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, created_at, updated_at FROM sessions WHERE status NOT IN ('terminated', 'failed') ORDER BY created_at DESC",
 	)
 	if err != nil {
 		return nil, err
@@ -651,7 +654,7 @@ func (db *DB) ListSessions() ([]Session, error) {
 	for rows.Next() {
 		var session Session
 		var status string
-		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt); err != nil {
+		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.IdleTimeout, &session.CreatedAt, &session.UpdatedAt); err != nil {
 			return nil, err
 		}
 		session.Status = SessionStatus(status)
@@ -664,7 +667,7 @@ func (db *DB) ListSessions() ([]Session, error) {
 // ListSessionsByUser returns all sessions for a specific user
 func (db *DB) ListSessionsByUser(userID string) ([]Session, error) {
 	rows, err := db.conn.Query(
-		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE user_id = ? AND status NOT IN ('terminated', 'failed') ORDER BY created_at DESC",
+		"SELECT id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, created_at, updated_at FROM sessions WHERE user_id = ? AND status NOT IN ('terminated', 'failed') ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -676,7 +679,7 @@ func (db *DB) ListSessionsByUser(userID string) ([]Session, error) {
 	for rows.Next() {
 		var session Session
 		var status string
-		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt); err != nil {
+		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.IdleTimeout, &session.CreatedAt, &session.UpdatedAt); err != nil {
 			return nil, err
 		}
 		session.Status = SessionStatus(status)
@@ -746,6 +749,26 @@ func (db *DB) UpdateSessionPodIPAndStatus(id string, podIP string, status Sessio
 	return nil
 }
 
+// UpdateSessionRestart updates a session for restart with a new pod name and creating status
+func (db *DB) UpdateSessionRestart(id string, podName string) error {
+	result, err := db.conn.Exec(
+		"UPDATE sessions SET pod_name = ?, pod_ip = '', status = ?, updated_at = ? WHERE id = ?",
+		podName, string(SessionStatusCreating), time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // DeleteSession removes a session by ID
 func (db *DB) DeleteSession(id string) error {
 	result, err := db.conn.Exec("DELETE FROM sessions WHERE id = ?", id)
@@ -763,12 +786,22 @@ func (db *DB) DeleteSession(id string) error {
 	return nil
 }
 
-// GetStaleSessions returns sessions that have been in a non-terminal state for longer than the timeout
-func (db *DB) GetStaleSessions(timeout time.Duration) ([]Session, error) {
-	cutoff := time.Now().Add(-timeout)
+// GetStaleSessions returns sessions that have exceeded their idle timeout.
+// Sessions with a per-session idle_timeout use that value; others use the global default.
+func (db *DB) GetStaleSessions(defaultTimeout time.Duration) ([]Session, error) {
+	now := time.Now()
+	defaultCutoff := now.Add(-defaultTimeout)
+
+	// Select sessions that are active and have exceeded either their per-session or global timeout
 	rows, err := db.conn.Query(
-		"SELECT id, user_id, app_id, pod_name, pod_ip, status, created_at, updated_at FROM sessions WHERE status NOT IN ('terminated', 'failed') AND updated_at < ?",
-		cutoff,
+		`SELECT id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, created_at, updated_at
+		 FROM sessions
+		 WHERE status NOT IN ('terminated', 'failed', 'stopped', 'expired')
+		 AND (
+		   (idle_timeout > 0 AND updated_at < datetime('now', '-' || idle_timeout || ' seconds'))
+		   OR (idle_timeout = 0 AND updated_at < ?)
+		 )`,
+		defaultCutoff,
 	)
 	if err != nil {
 		return nil, err
@@ -779,7 +812,7 @@ func (db *DB) GetStaleSessions(timeout time.Duration) ([]Session, error) {
 	for rows.Next() {
 		var session Session
 		var status string
-		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.CreatedAt, &session.UpdatedAt); err != nil {
+		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.IdleTimeout, &session.CreatedAt, &session.UpdatedAt); err != nil {
 			return nil, err
 		}
 		session.Status = SessionStatus(status)

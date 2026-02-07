@@ -658,11 +658,34 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSessionByID handles GET and DELETE for /api/sessions/{id}
+// and routes to sub-handlers for /api/sessions/{id}/stop and /api/sessions/{id}/restart
 func handleSessionByID(w http.ResponseWriter, r *http.Request) {
-	// Extract ID from path
-	id := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
-	if id == "" {
+	// Extract the path after /api/sessions/
+	remainder := strings.TrimPrefix(r.URL.Path, "/api/sessions/")
+	if remainder == "" {
 		http.Error(w, "Missing session ID", http.StatusBadRequest)
+		return
+	}
+
+	// Check for sub-path actions: {id}/stop, {id}/restart
+	parts := strings.SplitN(remainder, "/", 2)
+	id := parts[0]
+	action := ""
+	if len(parts) > 1 {
+		action = parts[1]
+	}
+
+	switch action {
+	case "stop":
+		handleSessionStop(w, r, id)
+		return
+	case "restart":
+		handleSessionRestart(w, r, id)
+		return
+	case "":
+		// Fall through to standard GET/DELETE handling
+	default:
+		http.Error(w, "Unknown session action", http.StatusNotFound)
 		return
 	}
 
@@ -728,6 +751,97 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleSessionStop handles POST /api/sessions/{id}/stop
+func handleSessionStop(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := sessionManager.StopSession(r.Context(), id); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Session not found", http.StatusNotFound)
+			return
+		}
+		if strings.Contains(err.Error(), "invalid session state") {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		slog.Error("error stopping session", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Fetch the updated session for the response
+	session, err := sessionManager.GetSession(r.Context(), id)
+	if err != nil {
+		slog.Error("error getting session after stop", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	app, _ := database.GetApp(session.AppID)
+	appName := ""
+	if app != nil {
+		appName = app.Name
+	}
+	response := sessions.SessionFromDB(session, appName, "", "", "")
+
+	// Log the action
+	database.LogAudit("user", "STOP_SESSION", fmt.Sprintf("Stopped session %s", id))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleSessionRestart handles POST /api/sessions/{id}/restart
+func handleSessionRestart(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	session, err := sessionManager.RestartSession(r.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Session not found", http.StatusNotFound)
+			return
+		}
+		if strings.Contains(err.Error(), "must be stopped") {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		slog.Error("error restarting session", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get app name and URL for response
+	app, _ := database.GetApp(session.AppID)
+	appName := ""
+	wsURL := ""
+	guacURL := ""
+	proxyURL := ""
+	if app != nil {
+		appName = app.Name
+		if app.LaunchType == db.LaunchTypeContainer || app.LaunchType == db.LaunchTypeWebProxy {
+			if app.OsType == "windows" {
+				guacURL = sessionManager.GetSessionGuacWebSocketURL(session)
+			} else {
+				wsURL = sessionManager.GetSessionWebSocketURL(session)
+			}
+		}
+	}
+
+	response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL)
+
+	// Log the action
+	database.LogAudit("user", "RESTART_SESSION", fmt.Sprintf("Restarted session %s", id))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // handleLogin handles POST /api/auth/login

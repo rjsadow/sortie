@@ -19,16 +19,20 @@ var ValidTransitions = map[db.SessionStatus][]db.SessionStatus{
 		db.SessionStatusExpired,
 		db.SessionStatusFailed,
 	},
-	// Terminal states have no valid transitions
-	db.SessionStatusStopped: {},
+	// Stopped sessions can be restarted
+	db.SessionStatusStopped: {
+		db.SessionStatusCreating, // restart
+	},
+	// Terminal states with no valid transitions
 	db.SessionStatusExpired: {},
 	db.SessionStatusFailed:  {},
 }
 
 // IsTerminalState returns true if the given status is a terminal state.
+// Note: "stopped" is not terminal since sessions can be restarted.
 func IsTerminalState(status db.SessionStatus) bool {
 	switch status {
-	case db.SessionStatusStopped, db.SessionStatusExpired, db.SessionStatusFailed:
+	case db.SessionStatusExpired, db.SessionStatusFailed:
 		return true
 	default:
 		return false

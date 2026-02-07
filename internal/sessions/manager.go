@@ -193,13 +193,14 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 	// Create session in database
 	now := time.Now()
 	session := &db.Session{
-		ID:        sessionID,
-		UserID:    req.UserID,
-		AppID:     req.AppID,
-		PodName:   createdPod.Name,
-		Status:    db.SessionStatusCreating,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          sessionID,
+		UserID:      req.UserID,
+		AppID:       req.AppID,
+		PodName:     createdPod.Name,
+		Status:      db.SessionStatusCreating,
+		IdleTimeout: req.IdleTimeout,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if err := m.db.CreateSession(*session); err != nil {
@@ -295,6 +296,125 @@ func (m *Manager) ListSessionsByUser(ctx context.Context, userID string) ([]db.S
 		return nil, fmt.Errorf("failed to list sessions by user: %w", err)
 	}
 	return sessions, nil
+}
+
+// StopSession stops a running session, deleting the pod but keeping the session
+// record so it can be restarted later.
+func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
+	session, err := m.GetSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	if err := ValidateAndLogTransition(sessionID, session.Status, db.SessionStatusStopped, "user stopped"); err != nil {
+		return err
+	}
+
+	// Delete the pod
+	if err := k8s.DeletePod(ctx, session.PodName); err != nil {
+		log.Printf("Warning: failed to delete pod %s: %v", session.PodName, err)
+	}
+
+	// Update status to stopped
+	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusStopped); err != nil {
+		return fmt.Errorf("failed to update session status: %w", err)
+	}
+
+	// Update cache
+	m.mu.Lock()
+	if s, ok := m.sessions[sessionID]; ok {
+		s.Status = db.SessionStatusStopped
+		s.PodIP = ""
+	}
+	m.mu.Unlock()
+
+	return nil
+}
+
+// RestartSession recreates the pod for a stopped session.
+func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Session, error) {
+	session, err := m.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	if err := ValidateAndLogTransition(sessionID, session.Status, db.SessionStatusCreating, "user restarted"); err != nil {
+		return nil, fmt.Errorf("session must be stopped to restart (current status: %s)", session.Status)
+	}
+
+	// Get the application to rebuild the pod
+	app, err := m.db.GetApp(session.AppID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get application: %w", err)
+	}
+	if app == nil {
+		return nil, fmt.Errorf("application not found: %s", session.AppID)
+	}
+
+	// Create pod configuration using the existing session ID
+	podConfig := k8s.DefaultPodConfig(sessionID, app.ID, app.Name, app.ContainerImage)
+	podConfig.ContainerPort = app.ContainerPort
+	podConfig.Args = app.ContainerArgs
+
+	if app.ResourceLimits != nil {
+		if app.ResourceLimits.CPURequest != "" {
+			podConfig.CPURequest = app.ResourceLimits.CPURequest
+		}
+		if app.ResourceLimits.CPULimit != "" {
+			podConfig.CPULimit = app.ResourceLimits.CPULimit
+		}
+		if app.ResourceLimits.MemoryRequest != "" {
+			podConfig.MemoryRequest = app.ResourceLimits.MemoryRequest
+		}
+		if app.ResourceLimits.MemoryLimit != "" {
+			podConfig.MemoryLimit = app.ResourceLimits.MemoryLimit
+		}
+	}
+
+	// Build and create the pod
+	var pod *corev1.Pod
+	switch app.LaunchType {
+	case db.LaunchTypeContainer:
+		if app.OsType == "windows" {
+			pod = k8s.BuildWindowsPodSpec(podConfig)
+		} else {
+			pod = k8s.BuildPodSpec(podConfig)
+		}
+	case db.LaunchTypeWebProxy:
+		pod = k8s.BuildWebProxyPodSpec(podConfig)
+	default:
+		return nil, fmt.Errorf("unsupported launch type: %s", app.LaunchType)
+	}
+
+	createdPod, err := k8s.CreatePod(ctx, pod)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pod: %w", err)
+	}
+
+	// Update session in database with new pod name and creating status
+	if err := m.db.UpdateSessionRestart(sessionID, createdPod.Name); err != nil {
+		k8s.DeletePod(ctx, createdPod.Name)
+		return nil, fmt.Errorf("failed to update session in database: %w", err)
+	}
+
+	// Update cache
+	m.mu.Lock()
+	session.PodName = createdPod.Name
+	session.PodIP = ""
+	session.Status = db.SessionStatusCreating
+	m.sessions[sessionID] = session
+	m.mu.Unlock()
+
+	// Wait for pod ready in background
+	go m.waitForPodReady(sessionID, createdPod.Name)
+
+	return session, nil
 }
 
 // TerminateSession stops a session (user-initiated) and deletes the pod

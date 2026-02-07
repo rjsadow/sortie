@@ -29,10 +29,13 @@ func TestCanTransition(t *testing.T) {
 		// Invalid transitions from running
 		{"running to creating", db.SessionStatusRunning, db.SessionStatusCreating, false},
 
-		// No transitions from terminal states
+		// Stopped sessions can be restarted
+		{"stopped to creating", db.SessionStatusStopped, db.SessionStatusCreating, true},
 		{"stopped to running", db.SessionStatusStopped, db.SessionStatusRunning, false},
-		{"stopped to creating", db.SessionStatusStopped, db.SessionStatusCreating, false},
+
+		// No transitions from terminal states
 		{"expired to running", db.SessionStatusExpired, db.SessionStatusRunning, false},
+		{"expired to creating", db.SessionStatusExpired, db.SessionStatusCreating, false},
 		{"failed to running", db.SessionStatusFailed, db.SessionStatusRunning, false},
 		{"failed to creating", db.SessionStatusFailed, db.SessionStatusCreating, false},
 	}
@@ -54,7 +57,7 @@ func TestIsTerminalState(t *testing.T) {
 	}{
 		{db.SessionStatusCreating, false},
 		{db.SessionStatusRunning, false},
-		{db.SessionStatusStopped, true},
+		{db.SessionStatusStopped, false},
 		{db.SessionStatusExpired, true},
 		{db.SessionStatusFailed, true},
 	}
@@ -111,9 +114,25 @@ func TestValidateAndLogTransition(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "invalid transition from terminal state",
+			name:      "valid transition stopped to creating (restart)",
 			sessionID: "test-session-5",
 			from:      db.SessionStatusStopped,
+			to:        db.SessionStatusCreating,
+			reason:    "user restarted",
+			wantErr:   false,
+		},
+		{
+			name:      "invalid transition stopped to running",
+			sessionID: "test-session-6",
+			from:      db.SessionStatusStopped,
+			to:        db.SessionStatusRunning,
+			reason:    "",
+			wantErr:   true,
+		},
+		{
+			name:      "invalid transition from terminal state",
+			sessionID: "test-session-7",
+			from:      db.SessionStatusExpired,
 			to:        db.SessionStatusRunning,
 			reason:    "",
 			wantErr:   true,
