@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-windows kind-teardown
+.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-windows kind-teardown migrate-up migrate-down migrate-status
 
 all: build
 
@@ -82,3 +82,13 @@ kind-windows:
 # Teardown Kind cluster
 kind-teardown:
 	@./scripts/kind-setup.sh teardown
+
+# Database migrations
+migrate-up:
+	go run ./cmd/migrate up
+
+migrate-down:
+	go run ./cmd/migrate down
+
+migrate-status:
+	go run ./cmd/migrate status
