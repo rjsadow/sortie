@@ -30,6 +30,14 @@ type ManagerConfig struct {
 	SessionTimeout  time.Duration
 	CleanupInterval time.Duration
 	PodReadyTimeout time.Duration
+
+	// Resource quota settings
+	MaxSessionsPerUser int    // Max concurrent sessions per user (0 = unlimited)
+	MaxGlobalSessions  int    // Max concurrent sessions globally (0 = unlimited)
+	DefaultCPURequest  string // Default CPU request for new sessions
+	DefaultCPULimit    string // Default CPU limit for new sessions
+	DefaultMemRequest  string // Default memory request for new sessions
+	DefaultMemLimit    string // Default memory limit for new sessions
 }
 
 // Manager handles session lifecycle
@@ -38,6 +46,14 @@ type Manager struct {
 	sessionTimeout  time.Duration
 	cleanupInterval time.Duration
 	podReadyTimeout time.Duration
+
+	// Resource quota settings
+	maxSessionsPerUser int
+	maxGlobalSessions  int
+	defaultCPURequest  string
+	defaultCPULimit    string
+	defaultMemRequest  string
+	defaultMemLimit    string
 
 	mu       sync.RWMutex
 	stopCh   chan struct{}
@@ -68,12 +84,18 @@ func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
 	}
 
 	return &Manager{
-		db:              database,
-		sessionTimeout:  cfg.SessionTimeout,
-		cleanupInterval: cfg.CleanupInterval,
-		podReadyTimeout: cfg.PodReadyTimeout,
-		stopCh:          make(chan struct{}),
-		sessions:        make(map[string]*db.Session),
+		db:                 database,
+		sessionTimeout:     cfg.SessionTimeout,
+		cleanupInterval:    cfg.CleanupInterval,
+		podReadyTimeout:    cfg.PodReadyTimeout,
+		maxSessionsPerUser: cfg.MaxSessionsPerUser,
+		maxGlobalSessions:  cfg.MaxGlobalSessions,
+		defaultCPURequest:  cfg.DefaultCPURequest,
+		defaultCPULimit:    cfg.DefaultCPULimit,
+		defaultMemRequest:  cfg.DefaultMemRequest,
+		defaultMemLimit:    cfg.DefaultMemLimit,
+		stopCh:             make(chan struct{}),
+		sessions:           make(map[string]*db.Session),
 	}
 }
 
@@ -122,6 +144,95 @@ func (m *Manager) cleanupStaleSessions() error {
 	return nil
 }
 
+// checkQuotas verifies that creating a new session for the given user would not exceed quotas.
+func (m *Manager) checkQuotas(userID string) error {
+	// Check per-user session limit
+	if m.maxSessionsPerUser > 0 {
+		count, err := m.db.CountActiveSessionsByUser(userID)
+		if err != nil {
+			return fmt.Errorf("failed to check user session count: %w", err)
+		}
+		if count >= m.maxSessionsPerUser {
+			return &QuotaExceededError{
+				Reason: fmt.Sprintf("user %s has %d active sessions (max %d)", userID, count, m.maxSessionsPerUser),
+			}
+		}
+	}
+
+	// Check global session limit
+	if m.maxGlobalSessions > 0 {
+		count, err := m.db.CountActiveSessions()
+		if err != nil {
+			return fmt.Errorf("failed to check global session count: %w", err)
+		}
+		if count >= m.maxGlobalSessions {
+			return &QuotaExceededError{
+				Reason: fmt.Sprintf("global session limit reached (%d/%d)", count, m.maxGlobalSessions),
+			}
+		}
+	}
+
+	return nil
+}
+
+// applyDefaultResourceLimits sets default CPU/memory on a pod config when no app-specific limits are configured.
+func (m *Manager) applyDefaultResourceLimits(podConfig *k8s.PodConfig, app *db.Application) {
+	// App-specific limits take priority
+	if app.ResourceLimits != nil {
+		if app.ResourceLimits.CPURequest != "" {
+			podConfig.CPURequest = app.ResourceLimits.CPURequest
+		}
+		if app.ResourceLimits.CPULimit != "" {
+			podConfig.CPULimit = app.ResourceLimits.CPULimit
+		}
+		if app.ResourceLimits.MemoryRequest != "" {
+			podConfig.MemoryRequest = app.ResourceLimits.MemoryRequest
+		}
+		if app.ResourceLimits.MemoryLimit != "" {
+			podConfig.MemoryLimit = app.ResourceLimits.MemoryLimit
+		}
+		return
+	}
+
+	// Apply global defaults from config
+	if m.defaultCPURequest != "" {
+		podConfig.CPURequest = m.defaultCPURequest
+	}
+	if m.defaultCPULimit != "" {
+		podConfig.CPULimit = m.defaultCPULimit
+	}
+	if m.defaultMemRequest != "" {
+		podConfig.MemoryRequest = m.defaultMemRequest
+	}
+	if m.defaultMemLimit != "" {
+		podConfig.MemoryLimit = m.defaultMemLimit
+	}
+}
+
+// GetQuotaStatus returns current quota usage information for a user.
+func (m *Manager) GetQuotaStatus(userID string) (*QuotaStatus, error) {
+	userCount, err := m.db.CountActiveSessionsByUser(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count user sessions: %w", err)
+	}
+
+	globalCount, err := m.db.CountActiveSessions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to count global sessions: %w", err)
+	}
+
+	return &QuotaStatus{
+		UserSessions:       userCount,
+		MaxSessionsPerUser: m.maxSessionsPerUser,
+		GlobalSessions:     globalCount,
+		MaxGlobalSessions:  m.maxGlobalSessions,
+		DefaultCPURequest:  m.defaultCPURequest,
+		DefaultCPULimit:    m.defaultCPULimit,
+		DefaultMemRequest:  m.defaultMemRequest,
+		DefaultMemLimit:    m.defaultMemLimit,
+	}, nil
+}
+
 // CreateSession creates a new session for an application
 func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) (*db.Session, error) {
 	// Get the application
@@ -139,6 +250,11 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		return nil, fmt.Errorf("application %s has no container image configured", req.AppID)
 	}
 
+	// Check quotas before creating resources
+	if err := m.checkQuotas(req.UserID); err != nil {
+		return nil, err
+	}
+
 	// Generate session ID
 	sessionID := uuid.New().String()
 
@@ -154,21 +270,8 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		podConfig.ScreenHeight = req.ScreenHeight
 	}
 
-	// Apply app-specific resource limits if configured
-	if app.ResourceLimits != nil {
-		if app.ResourceLimits.CPURequest != "" {
-			podConfig.CPURequest = app.ResourceLimits.CPURequest
-		}
-		if app.ResourceLimits.CPULimit != "" {
-			podConfig.CPULimit = app.ResourceLimits.CPULimit
-		}
-		if app.ResourceLimits.MemoryRequest != "" {
-			podConfig.MemoryRequest = app.ResourceLimits.MemoryRequest
-		}
-		if app.ResourceLimits.MemoryLimit != "" {
-			podConfig.MemoryLimit = app.ResourceLimits.MemoryLimit
-		}
-	}
+	// Apply resource limits (app-specific override global defaults)
+	m.applyDefaultResourceLimits(podConfig, app)
 
 	// Build and create the pod based on launch type and OS type
 	var pod *corev1.Pod
@@ -348,6 +451,11 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 		return nil, fmt.Errorf("session must be stopped to restart (current status: %s)", session.Status)
 	}
 
+	// Check quotas before recreating resources
+	if err := m.checkQuotas(session.UserID); err != nil {
+		return nil, err
+	}
+
 	// Get the application to rebuild the pod
 	app, err := m.db.GetApp(session.AppID)
 	if err != nil {
@@ -362,20 +470,8 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 	podConfig.ContainerPort = app.ContainerPort
 	podConfig.Args = app.ContainerArgs
 
-	if app.ResourceLimits != nil {
-		if app.ResourceLimits.CPURequest != "" {
-			podConfig.CPURequest = app.ResourceLimits.CPURequest
-		}
-		if app.ResourceLimits.CPULimit != "" {
-			podConfig.CPULimit = app.ResourceLimits.CPULimit
-		}
-		if app.ResourceLimits.MemoryRequest != "" {
-			podConfig.MemoryRequest = app.ResourceLimits.MemoryRequest
-		}
-		if app.ResourceLimits.MemoryLimit != "" {
-			podConfig.MemoryLimit = app.ResourceLimits.MemoryLimit
-		}
-	}
+	// Apply resource limits (app-specific override global defaults)
+	m.applyDefaultResourceLimits(podConfig, app)
 
 	// Build and create the pod
 	var pod *corev1.Pod

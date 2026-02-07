@@ -2047,3 +2047,97 @@ func TestSeedFromJSONWithContainerApp(t *testing.T) {
 		t.Errorf("got ResourceLimits = %+v, want CPURequest=100m", got.ResourceLimits)
 	}
 }
+
+// --- Session counting tests ---
+
+func TestCountActiveSessionsByUser(t *testing.T) {
+	database := setupTestDB(t)
+
+	// Create a test app
+	app := Application{
+		ID: "app-count", Name: "Count App", Description: "test",
+		URL: "", Icon: "i", Category: "test", LaunchType: LaunchTypeContainer,
+		ContainerImage: "test:latest",
+	}
+	if err := database.CreateApp(app); err != nil {
+		t.Fatalf("CreateApp error: %v", err)
+	}
+
+	now := time.Now()
+
+	// Create sessions with various statuses for user-a
+	sessions := []Session{
+		{ID: "s1", UserID: "user-a", AppID: "app-count", PodName: "p1", Status: SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "s2", UserID: "user-a", AppID: "app-count", PodName: "p2", Status: SessionStatusCreating, CreatedAt: now, UpdatedAt: now},
+		{ID: "s3", UserID: "user-a", AppID: "app-count", PodName: "p3", Status: SessionStatusStopped, CreatedAt: now, UpdatedAt: now},
+		{ID: "s4", UserID: "user-a", AppID: "app-count", PodName: "p4", Status: SessionStatusFailed, CreatedAt: now, UpdatedAt: now},
+		{ID: "s5", UserID: "user-b", AppID: "app-count", PodName: "p5", Status: SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, s := range sessions {
+		if err := database.CreateSession(s); err != nil {
+			t.Fatalf("CreateSession error: %v", err)
+		}
+	}
+
+	// user-a should have 2 active sessions (running + creating)
+	count, err := database.CountActiveSessionsByUser("user-a")
+	if err != nil {
+		t.Fatalf("CountActiveSessionsByUser error: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountActiveSessionsByUser(user-a) = %d, want 2", count)
+	}
+
+	// user-b should have 1 active session
+	count, err = database.CountActiveSessionsByUser("user-b")
+	if err != nil {
+		t.Fatalf("CountActiveSessionsByUser error: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("CountActiveSessionsByUser(user-b) = %d, want 1", count)
+	}
+
+	// nonexistent user should have 0
+	count, err = database.CountActiveSessionsByUser("user-c")
+	if err != nil {
+		t.Fatalf("CountActiveSessionsByUser error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("CountActiveSessionsByUser(user-c) = %d, want 0", count)
+	}
+}
+
+func TestCountActiveSessions(t *testing.T) {
+	database := setupTestDB(t)
+
+	app := Application{
+		ID: "app-global", Name: "Global App", Description: "test",
+		URL: "", Icon: "i", Category: "test", LaunchType: LaunchTypeContainer,
+		ContainerImage: "test:latest",
+	}
+	if err := database.CreateApp(app); err != nil {
+		t.Fatalf("CreateApp error: %v", err)
+	}
+
+	now := time.Now()
+	sessions := []Session{
+		{ID: "g1", UserID: "u1", AppID: "app-global", PodName: "p1", Status: SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "g2", UserID: "u2", AppID: "app-global", PodName: "p2", Status: SessionStatusCreating, CreatedAt: now, UpdatedAt: now},
+		{ID: "g3", UserID: "u3", AppID: "app-global", PodName: "p3", Status: SessionStatusStopped, CreatedAt: now, UpdatedAt: now},
+		{ID: "g4", UserID: "u4", AppID: "app-global", PodName: "p4", Status: SessionStatusExpired, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, s := range sessions {
+		if err := database.CreateSession(s); err != nil {
+			t.Fatalf("CreateSession error: %v", err)
+		}
+	}
+
+	// Only running + creating = 2 active
+	count, err := database.CountActiveSessions()
+	if err != nil {
+		t.Fatalf("CountActiveSessions error: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountActiveSessions() = %d, want 2", count)
+	}
+}

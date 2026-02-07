@@ -711,6 +711,113 @@ func TestValidationErrors_Single(t *testing.T) {
 	}
 }
 
+func TestLoad_QuotaDefaults(t *testing.T) {
+	clearEnvVars(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.MaxSessionsPerUser != DefaultMaxSessionsPerUser {
+		t.Errorf("MaxSessionsPerUser = %v, want %v", cfg.MaxSessionsPerUser, DefaultMaxSessionsPerUser)
+	}
+	if cfg.MaxGlobalSessions != DefaultMaxGlobalSessions {
+		t.Errorf("MaxGlobalSessions = %v, want %v", cfg.MaxGlobalSessions, DefaultMaxGlobalSessions)
+	}
+	if cfg.DefaultCPURequest != DefaultDefaultCPURequest {
+		t.Errorf("DefaultCPURequest = %v, want %v", cfg.DefaultCPURequest, DefaultDefaultCPURequest)
+	}
+	if cfg.DefaultCPULimit != DefaultDefaultCPULimit {
+		t.Errorf("DefaultCPULimit = %v, want %v", cfg.DefaultCPULimit, DefaultDefaultCPULimit)
+	}
+	if cfg.DefaultMemRequest != DefaultDefaultMemRequest {
+		t.Errorf("DefaultMemRequest = %v, want %v", cfg.DefaultMemRequest, DefaultDefaultMemRequest)
+	}
+	if cfg.DefaultMemLimit != DefaultDefaultMemLimit {
+		t.Errorf("DefaultMemLimit = %v, want %v", cfg.DefaultMemLimit, DefaultDefaultMemLimit)
+	}
+}
+
+func TestLoad_QuotaFromEnv(t *testing.T) {
+	clearEnvVars(t)
+
+	t.Setenv("LAUNCHPAD_MAX_SESSIONS_PER_USER", "10")
+	t.Setenv("LAUNCHPAD_MAX_GLOBAL_SESSIONS", "200")
+	t.Setenv("LAUNCHPAD_DEFAULT_CPU_REQUEST", "250m")
+	t.Setenv("LAUNCHPAD_DEFAULT_CPU_LIMIT", "4")
+	t.Setenv("LAUNCHPAD_DEFAULT_MEM_REQUEST", "1Gi")
+	t.Setenv("LAUNCHPAD_DEFAULT_MEM_LIMIT", "4Gi")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.MaxSessionsPerUser != 10 {
+		t.Errorf("MaxSessionsPerUser = %v, want 10", cfg.MaxSessionsPerUser)
+	}
+	if cfg.MaxGlobalSessions != 200 {
+		t.Errorf("MaxGlobalSessions = %v, want 200", cfg.MaxGlobalSessions)
+	}
+	if cfg.DefaultCPURequest != "250m" {
+		t.Errorf("DefaultCPURequest = %v, want 250m", cfg.DefaultCPURequest)
+	}
+	if cfg.DefaultCPULimit != "4" {
+		t.Errorf("DefaultCPULimit = %v, want 4", cfg.DefaultCPULimit)
+	}
+	if cfg.DefaultMemRequest != "1Gi" {
+		t.Errorf("DefaultMemRequest = %v, want 1Gi", cfg.DefaultMemRequest)
+	}
+	if cfg.DefaultMemLimit != "4Gi" {
+		t.Errorf("DefaultMemLimit = %v, want 4Gi", cfg.DefaultMemLimit)
+	}
+}
+
+func TestLoad_QuotaUnlimited(t *testing.T) {
+	clearEnvVars(t)
+
+	t.Setenv("LAUNCHPAD_MAX_SESSIONS_PER_USER", "0")
+	t.Setenv("LAUNCHPAD_MAX_GLOBAL_SESSIONS", "0")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.MaxSessionsPerUser != 0 {
+		t.Errorf("MaxSessionsPerUser = %v, want 0 (unlimited)", cfg.MaxSessionsPerUser)
+	}
+	if cfg.MaxGlobalSessions != 0 {
+		t.Errorf("MaxGlobalSessions = %v, want 0 (unlimited)", cfg.MaxGlobalSessions)
+	}
+}
+
+func TestLoad_QuotaInvalidValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{"negative per-user", "LAUNCHPAD_MAX_SESSIONS_PER_USER", "-1"},
+		{"non-numeric per-user", "LAUNCHPAD_MAX_SESSIONS_PER_USER", "abc"},
+		{"negative global", "LAUNCHPAD_MAX_GLOBAL_SESSIONS", "-5"},
+		{"non-numeric global", "LAUNCHPAD_MAX_GLOBAL_SESSIONS", "xyz"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearEnvVars(t)
+			t.Setenv(tt.key, tt.value)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("Load() expected error for %s=%s", tt.key, tt.value)
+			}
+		})
+	}
+}
+
 func clearEnvVars(t *testing.T) {
 	t.Helper()
 	envVars := []string{
@@ -735,6 +842,12 @@ func clearEnvVars(t *testing.T) {
 		"LAUNCHPAD_ADMIN_USERNAME",
 		"LAUNCHPAD_ADMIN_PASSWORD",
 		"LAUNCHPAD_ALLOW_REGISTRATION",
+		"LAUNCHPAD_MAX_SESSIONS_PER_USER",
+		"LAUNCHPAD_MAX_GLOBAL_SESSIONS",
+		"LAUNCHPAD_DEFAULT_CPU_REQUEST",
+		"LAUNCHPAD_DEFAULT_CPU_LIMIT",
+		"LAUNCHPAD_DEFAULT_MEM_REQUEST",
+		"LAUNCHPAD_DEFAULT_MEM_LIMIT",
 	}
 	for _, env := range envVars {
 		os.Unsetenv(env)

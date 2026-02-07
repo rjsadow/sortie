@@ -119,9 +119,15 @@ func main() {
 
 	// Initialize session manager with config
 	sessionManager = sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
-		SessionTimeout:  appConfig.SessionTimeout,
-		CleanupInterval: appConfig.SessionCleanupInterval,
-		PodReadyTimeout: appConfig.PodReadyTimeout,
+		SessionTimeout:     appConfig.SessionTimeout,
+		CleanupInterval:    appConfig.SessionCleanupInterval,
+		PodReadyTimeout:    appConfig.PodReadyTimeout,
+		MaxSessionsPerUser: appConfig.MaxSessionsPerUser,
+		MaxGlobalSessions:  appConfig.MaxGlobalSessions,
+		DefaultCPURequest:  appConfig.DefaultCPURequest,
+		DefaultCPULimit:    appConfig.DefaultCPULimit,
+		DefaultMemRequest:  appConfig.DefaultMemRequest,
+		DefaultMemLimit:    appConfig.DefaultMemLimit,
 	})
 	sessionManager.Start()
 	defer sessionManager.Stop()
@@ -216,6 +222,9 @@ func main() {
 	// Session API routes (any authenticated user)
 	mux.Handle("/api/sessions", authMiddleware(http.HandlerFunc(handleSessions)))
 	mux.Handle("/api/sessions/", authMiddleware(http.HandlerFunc(handleSessionByID)))
+
+	// Quota API route (any authenticated user)
+	mux.Handle("/api/quotas", authMiddleware(http.HandlerFunc(handleQuotas)))
 
 	// WebSocket routes for session streams (VNC + Guacamole/RDP)
 	// When auth is configured, the gateway enforces authorization and rate limiting.
@@ -976,6 +985,10 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 
 		session, err := sessionManager.CreateSession(r.Context(), &req)
 		if err != nil {
+			if _, ok := err.(*sessions.QuotaExceededError); ok {
+				http.Error(w, err.Error(), http.StatusTooManyRequests)
+				return
+			}
 			slog.Error("error creating session", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1165,6 +1178,10 @@ func handleSessionRestart(w http.ResponseWriter, r *http.Request, id string) {
 
 	session, err := sessionManager.RestartSession(r.Context(), id)
 	if err != nil {
+		if _, ok := err.(*sessions.QuotaExceededError); ok {
+			http.Error(w, err.Error(), http.StatusTooManyRequests)
+			return
+		}
 		if strings.Contains(err.Error(), "not found") {
 			http.Error(w, "Session not found", http.StatusNotFound)
 			return
@@ -1487,6 +1504,30 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+// handleQuotas handles GET /api/quotas - returns quota status for the current user
+func handleQuotas(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := middleware.GetUserFromContext(r.Context())
+	userID := "anonymous"
+	if user != nil {
+		userID = user.ID
+	}
+
+	status, err := sessionManager.GetQuotaStatus(userID)
+	if err != nil {
+		slog.Error("error getting quota status", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
 // handleAdminSettings handles GET/PUT /api/admin/settings
 func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -1500,7 +1541,13 @@ func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 
 		// Include default values for settings not in DB
 		response := map[string]interface{}{
-			"allow_registration": isRegistrationAllowed(),
+			"allow_registration":      isRegistrationAllowed(),
+			"max_sessions_per_user":   appConfig.MaxSessionsPerUser,
+			"max_global_sessions":     appConfig.MaxGlobalSessions,
+			"default_cpu_request":     appConfig.DefaultCPURequest,
+			"default_cpu_limit":       appConfig.DefaultCPULimit,
+			"default_memory_request":  appConfig.DefaultMemRequest,
+			"default_memory_limit":    appConfig.DefaultMemLimit,
 		}
 
 		// Override with DB settings

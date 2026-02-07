@@ -1,10 +1,32 @@
 package sessions
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/rjsadow/launchpad/internal/db"
 )
+
+// QuotaExceededError is returned when a session cannot be created due to quota limits.
+type QuotaExceededError struct {
+	Reason string
+}
+
+func (e *QuotaExceededError) Error() string {
+	return fmt.Sprintf("quota exceeded: %s", e.Reason)
+}
+
+// QuotaStatus represents the current quota usage for a user.
+type QuotaStatus struct {
+	UserSessions       int    `json:"user_sessions"`
+	MaxSessionsPerUser int    `json:"max_sessions_per_user"` // 0 = unlimited
+	GlobalSessions     int    `json:"global_sessions"`
+	MaxGlobalSessions  int    `json:"max_global_sessions"` // 0 = unlimited
+	DefaultCPURequest  string `json:"default_cpu_request,omitempty"`
+	DefaultCPULimit    string `json:"default_cpu_limit,omitempty"`
+	DefaultMemRequest  string `json:"default_mem_request,omitempty"`
+	DefaultMemLimit    string `json:"default_mem_limit,omitempty"`
+}
 
 // CreateSessionRequest represents a request to create a new session
 type CreateSessionRequest struct {

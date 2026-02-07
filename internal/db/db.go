@@ -953,6 +953,25 @@ func (db *DB) DeleteSession(id string) error {
 	return nil
 }
 
+// CountActiveSessionsByUser returns the number of active (creating or running) sessions for a user.
+func (db *DB) CountActiveSessionsByUser(userID string) (int, error) {
+	var count int
+	err := db.conn.QueryRow(
+		"SELECT COUNT(*) FROM sessions WHERE user_id = ? AND status IN ('creating', 'running')",
+		userID,
+	).Scan(&count)
+	return count, err
+}
+
+// CountActiveSessions returns the total number of active (creating or running) sessions globally.
+func (db *DB) CountActiveSessions() (int, error) {
+	var count int
+	err := db.conn.QueryRow(
+		"SELECT COUNT(*) FROM sessions WHERE status IN ('creating', 'running')",
+	).Scan(&count)
+	return count, err
+}
+
 // GetStaleSessions returns sessions that have exceeded their idle timeout.
 // Sessions with a per-session idle_timeout use that value; others use the global default.
 func (db *DB) GetStaleSessions(defaultTimeout time.Duration) ([]Session, error) {

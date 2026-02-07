@@ -51,6 +51,14 @@ type Config struct {
 	// Gateway configuration
 	GatewayRateLimit float64 // Requests per second per IP (0 = disabled)
 	GatewayBurst     int     // Maximum burst size for rate limiter
+
+	// Resource quota configuration
+	MaxSessionsPerUser int    // Maximum concurrent sessions per user (0 = unlimited)
+	MaxGlobalSessions  int    // Maximum concurrent sessions globally (0 = unlimited)
+	DefaultCPURequest  string // Default CPU request for sessions (e.g., "500m")
+	DefaultCPULimit    string // Default CPU limit for sessions (e.g., "2")
+	DefaultMemRequest  string // Default memory request for sessions (e.g., "512Mi")
+	DefaultMemLimit    string // Default memory limit for sessions (e.g., "2Gi")
 }
 
 // ValidationError represents a configuration validation error.
@@ -97,6 +105,12 @@ const (
 	DefaultMaxUploadSize         = int64(100 * 1024 * 1024) // 100MB
 	DefaultGatewayRateLimit      = float64(10)              // 10 requests/sec per IP
 	DefaultGatewayBurst          = 20                       // burst of 20
+	DefaultMaxSessionsPerUser    = 5
+	DefaultMaxGlobalSessions     = 100
+	DefaultDefaultCPURequest     = "500m"
+	DefaultDefaultCPULimit       = "2"
+	DefaultDefaultMemRequest     = "512Mi"
+	DefaultDefaultMemLimit       = "2Gi"
 )
 
 // Load reads configuration from environment variables and returns a Config.
@@ -135,6 +149,14 @@ func Load() (*Config, error) {
 		// Gateway defaults
 		GatewayRateLimit: DefaultGatewayRateLimit,
 		GatewayBurst:     DefaultGatewayBurst,
+
+		// Resource quota defaults
+		MaxSessionsPerUser: DefaultMaxSessionsPerUser,
+		MaxGlobalSessions:  DefaultMaxGlobalSessions,
+		DefaultCPURequest:  DefaultDefaultCPURequest,
+		DefaultCPULimit:    DefaultDefaultCPULimit,
+		DefaultMemRequest:  DefaultDefaultMemRequest,
+		DefaultMemLimit:    DefaultDefaultMemLimit,
 	}
 
 	// Load from environment variables
@@ -367,6 +389,57 @@ func (c *Config) loadFromEnv() error {
 		} else {
 			c.GatewayBurst = b
 		}
+	}
+
+	// Resource quota configuration
+	if v := os.Getenv("LAUNCHPAD_MAX_SESSIONS_PER_USER"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_MAX_SESSIONS_PER_USER",
+				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
+			})
+		} else if n < 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_MAX_SESSIONS_PER_USER",
+				Message: fmt.Sprintf("value must be non-negative: %d", n),
+			})
+		} else {
+			c.MaxSessionsPerUser = n
+		}
+	}
+
+	if v := os.Getenv("LAUNCHPAD_MAX_GLOBAL_SESSIONS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_MAX_GLOBAL_SESSIONS",
+				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
+			})
+		} else if n < 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_MAX_GLOBAL_SESSIONS",
+				Message: fmt.Sprintf("value must be non-negative: %d", n),
+			})
+		} else {
+			c.MaxGlobalSessions = n
+		}
+	}
+
+	if v := os.Getenv("LAUNCHPAD_DEFAULT_CPU_REQUEST"); v != "" {
+		c.DefaultCPURequest = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_DEFAULT_CPU_LIMIT"); v != "" {
+		c.DefaultCPULimit = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_DEFAULT_MEM_REQUEST"); v != "" {
+		c.DefaultMemRequest = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_DEFAULT_MEM_LIMIT"); v != "" {
+		c.DefaultMemLimit = v
 	}
 
 	if len(parseErrors) > 0 {

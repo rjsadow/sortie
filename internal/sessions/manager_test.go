@@ -2,10 +2,12 @@ package sessions
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/launchpad/internal/k8s"
 )
 
 // newTestDB creates an in-memory SQLite database for testing.
@@ -697,5 +699,263 @@ func TestExpireSession_AlreadyFailed(t *testing.T) {
 	err := m.ExpireSession(context.Background(), "s1")
 	if err != nil {
 		t.Errorf("ExpireSession() on already-failed session should return nil, got %v", err)
+	}
+}
+
+// --- Quota enforcement tests ---
+
+func TestCheckQuotas_PerUserLimit(t *testing.T) {
+	database := newTestDB(t)
+	m := NewManagerWithConfig(database, ManagerConfig{
+		MaxSessionsPerUser: 2,
+	})
+
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+
+	// Create 2 active sessions for user-a
+	for _, s := range []db.Session{
+		{ID: "s1", UserID: "user-a", AppID: "app1", PodName: "p1", Status: db.SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "s2", UserID: "user-a", AppID: "app1", PodName: "p2", Status: db.SessionStatusCreating, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := database.CreateSession(s); err != nil {
+			t.Fatalf("CreateSession error: %v", err)
+		}
+	}
+
+	// user-a should be blocked
+	err := m.checkQuotas("user-a")
+	if err == nil {
+		t.Fatal("checkQuotas() expected error for user at limit, got nil")
+	}
+	if _, ok := err.(*QuotaExceededError); !ok {
+		t.Errorf("checkQuotas() expected QuotaExceededError, got %T: %v", err, err)
+	}
+
+	// user-b should be allowed
+	err = m.checkQuotas("user-b")
+	if err != nil {
+		t.Errorf("checkQuotas() for user-b should succeed, got %v", err)
+	}
+}
+
+func TestCheckQuotas_GlobalLimit(t *testing.T) {
+	database := newTestDB(t)
+	m := NewManagerWithConfig(database, ManagerConfig{
+		MaxGlobalSessions: 3,
+	})
+
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+
+	// Create 3 active sessions globally
+	for _, s := range []db.Session{
+		{ID: "s1", UserID: "u1", AppID: "app1", PodName: "p1", Status: db.SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "s2", UserID: "u2", AppID: "app1", PodName: "p2", Status: db.SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "s3", UserID: "u3", AppID: "app1", PodName: "p3", Status: db.SessionStatusCreating, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := database.CreateSession(s); err != nil {
+			t.Fatalf("CreateSession error: %v", err)
+		}
+	}
+
+	// Any user should be blocked
+	err := m.checkQuotas("u4")
+	if err == nil {
+		t.Fatal("checkQuotas() expected error for global limit, got nil")
+	}
+	if _, ok := err.(*QuotaExceededError); !ok {
+		t.Errorf("checkQuotas() expected QuotaExceededError, got %T: %v", err, err)
+	}
+}
+
+func TestCheckQuotas_UnlimitedWhenZero(t *testing.T) {
+	database := newTestDB(t)
+	m := NewManagerWithConfig(database, ManagerConfig{
+		MaxSessionsPerUser: 0, // unlimited
+		MaxGlobalSessions:  0, // unlimited
+	})
+
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+
+	// Create many sessions
+	for i := 0; i < 10; i++ {
+		s := db.Session{
+			ID: fmt.Sprintf("s%d", i), UserID: "user-a", AppID: "app1",
+			PodName: fmt.Sprintf("p%d", i), Status: db.SessionStatusRunning,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := database.CreateSession(s); err != nil {
+			t.Fatalf("CreateSession error: %v", err)
+		}
+	}
+
+	// Should still be allowed
+	err := m.checkQuotas("user-a")
+	if err != nil {
+		t.Errorf("checkQuotas() with unlimited quotas should succeed, got %v", err)
+	}
+}
+
+func TestCheckQuotas_StoppedSessionsDontCount(t *testing.T) {
+	database := newTestDB(t)
+	m := NewManagerWithConfig(database, ManagerConfig{
+		MaxSessionsPerUser: 2,
+	})
+
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+
+	// Create sessions: 1 running, 1 stopped, 1 failed
+	for _, s := range []db.Session{
+		{ID: "s1", UserID: "user-a", AppID: "app1", PodName: "p1", Status: db.SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "s2", UserID: "user-a", AppID: "app1", PodName: "p2", Status: db.SessionStatusStopped, CreatedAt: now, UpdatedAt: now},
+		{ID: "s3", UserID: "user-a", AppID: "app1", PodName: "p3", Status: db.SessionStatusFailed, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := database.CreateSession(s); err != nil {
+			t.Fatalf("CreateSession error: %v", err)
+		}
+	}
+
+	// Only 1 active session, limit is 2, should be allowed
+	err := m.checkQuotas("user-a")
+	if err != nil {
+		t.Errorf("checkQuotas() should succeed (1 active of 2 max), got %v", err)
+	}
+}
+
+func TestGetQuotaStatus(t *testing.T) {
+	database := newTestDB(t)
+	m := NewManagerWithConfig(database, ManagerConfig{
+		MaxSessionsPerUser: 5,
+		MaxGlobalSessions:  100,
+		DefaultCPURequest:  "500m",
+		DefaultCPULimit:    "2",
+		DefaultMemRequest:  "512Mi",
+		DefaultMemLimit:    "2Gi",
+	})
+
+	seedContainerApp(t, database, "app1", "Test App", "test:latest")
+	now := time.Now()
+
+	// Create 2 sessions for user-a, 1 for user-b
+	for _, s := range []db.Session{
+		{ID: "s1", UserID: "user-a", AppID: "app1", PodName: "p1", Status: db.SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "s2", UserID: "user-a", AppID: "app1", PodName: "p2", Status: db.SessionStatusCreating, CreatedAt: now, UpdatedAt: now},
+		{ID: "s3", UserID: "user-b", AppID: "app1", PodName: "p3", Status: db.SessionStatusRunning, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := database.CreateSession(s); err != nil {
+			t.Fatalf("CreateSession error: %v", err)
+		}
+	}
+
+	status, err := m.GetQuotaStatus("user-a")
+	if err != nil {
+		t.Fatalf("GetQuotaStatus() error: %v", err)
+	}
+
+	if status.UserSessions != 2 {
+		t.Errorf("UserSessions = %d, want 2", status.UserSessions)
+	}
+	if status.MaxSessionsPerUser != 5 {
+		t.Errorf("MaxSessionsPerUser = %d, want 5", status.MaxSessionsPerUser)
+	}
+	if status.GlobalSessions != 3 {
+		t.Errorf("GlobalSessions = %d, want 3", status.GlobalSessions)
+	}
+	if status.MaxGlobalSessions != 100 {
+		t.Errorf("MaxGlobalSessions = %d, want 100", status.MaxGlobalSessions)
+	}
+	if status.DefaultCPURequest != "500m" {
+		t.Errorf("DefaultCPURequest = %q, want 500m", status.DefaultCPURequest)
+	}
+	if status.DefaultCPULimit != "2" {
+		t.Errorf("DefaultCPULimit = %q, want 2", status.DefaultCPULimit)
+	}
+	if status.DefaultMemRequest != "512Mi" {
+		t.Errorf("DefaultMemRequest = %q, want 512Mi", status.DefaultMemRequest)
+	}
+	if status.DefaultMemLimit != "2Gi" {
+		t.Errorf("DefaultMemLimit = %q, want 2Gi", status.DefaultMemLimit)
+	}
+}
+
+func TestApplyDefaultResourceLimits_AppOverridesDefaults(t *testing.T) {
+	database := newTestDB(t)
+	m := NewManagerWithConfig(database, ManagerConfig{
+		DefaultCPURequest: "100m",
+		DefaultCPULimit:   "1",
+		DefaultMemRequest: "256Mi",
+		DefaultMemLimit:   "1Gi",
+	})
+
+	// App with custom limits
+	app := &db.Application{
+		ResourceLimits: &db.ResourceLimits{
+			CPURequest:    "200m",
+			CPULimit:      "4",
+			MemoryRequest: "512Mi",
+			MemoryLimit:   "4Gi",
+		},
+	}
+
+	podConfig := &k8s.PodConfig{
+		CPURequest:    "500m",
+		CPULimit:      "2",
+		MemoryRequest: "512Mi",
+		MemoryLimit:   "2Gi",
+	}
+
+	m.applyDefaultResourceLimits(podConfig, app)
+
+	// App-specific limits should be applied
+	if podConfig.CPURequest != "200m" {
+		t.Errorf("CPURequest = %q, want 200m", podConfig.CPURequest)
+	}
+	if podConfig.CPULimit != "4" {
+		t.Errorf("CPULimit = %q, want 4", podConfig.CPULimit)
+	}
+	if podConfig.MemoryRequest != "512Mi" {
+		t.Errorf("MemoryRequest = %q, want 512Mi", podConfig.MemoryRequest)
+	}
+	if podConfig.MemoryLimit != "4Gi" {
+		t.Errorf("MemoryLimit = %q, want 4Gi", podConfig.MemoryLimit)
+	}
+}
+
+func TestApplyDefaultResourceLimits_GlobalDefaultsWhenNoAppLimits(t *testing.T) {
+	database := newTestDB(t)
+	m := NewManagerWithConfig(database, ManagerConfig{
+		DefaultCPURequest: "100m",
+		DefaultCPULimit:   "1",
+		DefaultMemRequest: "256Mi",
+		DefaultMemLimit:   "1Gi",
+	})
+
+	// App with no custom limits
+	app := &db.Application{}
+
+	podConfig := &k8s.PodConfig{
+		CPURequest:    "500m",
+		CPULimit:      "2",
+		MemoryRequest: "512Mi",
+		MemoryLimit:   "2Gi",
+	}
+
+	m.applyDefaultResourceLimits(podConfig, app)
+
+	// Global defaults should be applied
+	if podConfig.CPURequest != "100m" {
+		t.Errorf("CPURequest = %q, want 100m", podConfig.CPURequest)
+	}
+	if podConfig.CPULimit != "1" {
+		t.Errorf("CPULimit = %q, want 1", podConfig.CPULimit)
+	}
+	if podConfig.MemoryRequest != "256Mi" {
+		t.Errorf("MemoryRequest = %q, want 256Mi", podConfig.MemoryRequest)
+	}
+	if podConfig.MemoryLimit != "1Gi" {
+		t.Errorf("MemoryLimit = %q, want 1Gi", podConfig.MemoryLimit)
 	}
 }
