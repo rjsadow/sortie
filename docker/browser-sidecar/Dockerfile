@@ -1,7 +1,7 @@
 # Browser Sidecar Container for Launchpad
 # Provides X11 display and VNC server via TigerVNC Xvnc, WebSocket, and Firefox browser
 # Used for web_proxy apps - browser connects to localhost web service
-FROM ubuntu:22.04
+FROM ubuntu:22.04@sha256:34577a83cd7a8f1e55f6eb173fd9bb70c16127a83d6bf06f56f6b1fff9e406b9
 
 LABEL org.opencontainers.image.source="https://github.com/rjsadow/launchpad"
 LABEL org.opencontainers.image.description="Browser sidecar for viewing web applications via VNC"
