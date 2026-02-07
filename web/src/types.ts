@@ -1,6 +1,13 @@
 export type LaunchType = 'url' | 'container' | 'web_proxy';
 export type OsType = 'linux' | 'windows';
 
+// Clipboard policy controls what clipboard operations are allowed between local and remote.
+//   'none'          - clipboard sync disabled entirely
+//   'read'          - remote → local only (copy from remote)
+//   'write'         - local → remote only (paste into remote)
+//   'bidirectional' - full two-way clipboard sync
+export type ClipboardPolicy = 'none' | 'read' | 'write' | 'bidirectional';
+
 // ResourceLimits defines CPU and memory constraints for container applications
 export interface ResourceLimits {
   cpu_request?: string;    // CPU request (e.g., "100m", "0.5")

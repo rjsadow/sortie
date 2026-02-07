@@ -1,12 +1,18 @@
 import { useEffect, useRef, useCallback } from 'react';
+import type { ClipboardPolicy } from '../types';
 
 interface GuacamoleViewerProps {
   wsUrl: string;
   onConnect?: () => void;
   onDisconnect?: (clean: boolean) => void;
   onError?: (message: string) => void;
+  onReconnecting?: (attempt: number, maxAttempts: number) => void;
+  onReconnected?: () => void;
   viewOnly?: boolean;
   scaleViewport?: boolean;
+  clipboardPolicy?: ClipboardPolicy;
+  maxReconnectAttempts?: number;
+  reconnectBackoffMs?: number;
 }
 
 export function GuacamoleViewer({
@@ -14,22 +20,71 @@ export function GuacamoleViewer({
   onConnect,
   onDisconnect,
   onError,
+  onReconnecting,
+  onReconnected,
   viewOnly = false,
   scaleViewport = true,
+  clipboardPolicy = 'bidirectional',
+  maxReconnectAttempts = 3,
+  reconnectBackoffMs = 1000,
 }: GuacamoleViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientRef = useRef<any>(null);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasConnectedRef = useRef(false);
+  const unmountedRef = useRef(false);
+
+  const canReadRemote = clipboardPolicy === 'read' || clipboardPolicy === 'bidirectional';
+  const canWriteRemote = clipboardPolicy === 'write' || clipboardPolicy === 'bidirectional';
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  // Forward-declare so disconnect handler can schedule reconnects
+  const connectGuacRef = useRef<() => void>(() => {});
 
   const handleConnect = useCallback(() => {
     console.log('Guacamole connected');
+    const wasReconnect = reconnectAttemptRef.current > 0;
+    reconnectAttemptRef.current = 0;
+    wasConnectedRef.current = true;
+    if (wasReconnect) {
+      onReconnected?.();
+    }
     onConnect?.();
-  }, [onConnect]);
+  }, [onConnect, onReconnected]);
 
   const handleDisconnect = useCallback((clean: boolean) => {
     console.log('Guacamole disconnected, clean:', clean);
+
+    if (clientRef.current) {
+      clientRef.current = null;
+    }
+
+    if (!clean && wasConnectedRef.current && !unmountedRef.current) {
+      const attempt = reconnectAttemptRef.current + 1;
+      if (attempt <= maxReconnectAttempts) {
+        reconnectAttemptRef.current = attempt;
+        const delay = reconnectBackoffMs * Math.pow(2, attempt - 1);
+        console.log(`Guacamole reconnect attempt ${attempt}/${maxReconnectAttempts} in ${delay}ms`);
+        onReconnecting?.(attempt, maxReconnectAttempts);
+        reconnectTimerRef.current = setTimeout(() => {
+          if (!unmountedRef.current) {
+            connectGuacRef.current();
+          }
+        }, delay);
+        return;
+      }
+    }
+
     onDisconnect?.(clean);
-  }, [onDisconnect]);
+  }, [maxReconnectAttempts, reconnectBackoffMs, onDisconnect, onReconnecting]);
 
   const handleError = useCallback((message: string) => {
     console.error('Guacamole error:', message);
@@ -37,91 +92,75 @@ export function GuacamoleViewer({
   }, [onError]);
 
   useEffect(() => {
-    if (!containerRef.current || !wsUrl) {
-      return;
-    }
+    if (!containerRef.current || !wsUrl) return;
 
-    // Build full WebSocket URL
+    unmountedRef.current = false;
+    reconnectAttemptRef.current = 0;
+    wasConnectedRef.current = false;
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const fullWsUrl = wsUrl.startsWith('ws') ? wsUrl : `${protocol}//${window.location.host}${wsUrl}`;
 
-    const initGuacamole = async () => {
+    const connectGuacamole = async () => {
+      if (unmountedRef.current || !containerRef.current) return;
+
       try {
-        // Dynamic import of guacamole-common-js
-        const Guacamole = (await import('guacamole-common-js')).default;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const Guacamole = (await import('guacamole-common-js')).default as any;
+        if (unmountedRef.current || !containerRef.current) return;
 
-        if (!containerRef.current) return;
+        // Clear container on reconnect
+        if (reconnectAttemptRef.current > 0) {
+          containerRef.current.innerHTML = '';
+        }
 
-        // Create WebSocket tunnel
         const tunnel = new Guacamole.WebSocketTunnel(fullWsUrl);
-
-        // Create Guacamole client
         const client = new Guacamole.Client(tunnel);
         clientRef.current = client;
 
-        // Get the display element and add it to our container
         const displayElement = client.getDisplay().getElement();
         displayElement.style.width = '100%';
         displayElement.style.height = '100%';
         containerRef.current.appendChild(displayElement);
 
-        // Handle state changes
+        // State changes
         client.onstatechange = (state: number) => {
-          // Guacamole.Client.State: IDLE=0, CONNECTING=1, WAITING=2, CONNECTED=3, DISCONNECTING=4, DISCONNECTED=5
+          // IDLE=0, CONNECTING=1, WAITING=2, CONNECTED=3, DISCONNECTING=4, DISCONNECTED=5
           switch (state) {
-            case 3: // CONNECTED
+            case 3:
               handleConnect();
               break;
-            case 5: // DISCONNECTED
+            case 5:
               handleDisconnect(true);
               break;
           }
         };
 
-        // Handle errors
         client.onerror = (status: { code: number; message: string }) => {
           handleError(status?.message || `Error code: ${status?.code}`);
         };
 
-        // Scale display to fit container
+        // Scale display
         if (scaleViewport) {
           const display = client.getDisplay();
-          const resizeObserver = new ResizeObserver(() => {
+          const doScale = () => {
             if (!containerRef.current) return;
             const containerWidth = containerRef.current.clientWidth;
             const containerHeight = containerRef.current.clientHeight;
             const displayWidth = display.getWidth();
             const displayHeight = display.getHeight();
-
             if (displayWidth > 0 && displayHeight > 0) {
-              const scale = Math.min(
-                containerWidth / displayWidth,
-                containerHeight / displayHeight
-              );
-              display.scale(scale);
-            }
-          });
-          resizeObserver.observe(containerRef.current);
-
-          // Also listen for display size changes from guacd
-          display.onresize = () => {
-            if (!containerRef.current) return;
-            const containerWidth = containerRef.current.clientWidth;
-            const containerHeight = containerRef.current.clientHeight;
-            const displayWidth = display.getWidth();
-            const displayHeight = display.getHeight();
-
-            if (displayWidth > 0 && displayHeight > 0) {
-              const scale = Math.min(
-                containerWidth / displayWidth,
-                containerHeight / displayHeight
-              );
+              const scale = Math.min(containerWidth / displayWidth, containerHeight / displayHeight);
               display.scale(scale);
             }
           };
+
+          const resizeObserver = new ResizeObserver(doScale);
+          resizeObserver.observe(containerRef.current);
+          display.onresize = doScale;
         }
 
-        // Set up keyboard and mouse input (unless viewOnly)
+        // Keyboard & mouse input
         if (!viewOnly) {
           const mouse = new Guacamole.Mouse(displayElement);
           mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = (mouseState: unknown) => {
@@ -137,24 +176,46 @@ export function GuacamoleViewer({
           };
         }
 
-        // Handle clipboard sync from remote to local
-        client.onclipboard = (stream: { onblob: ((data: string) => void) | null; onend: (() => void) | null }, mimetype: string) => {
-          if (mimetype === 'text/plain') {
-            let clipboardData = '';
-            stream.onblob = (data: string) => {
-              clipboardData += atob(data);
-            };
-            stream.onend = () => {
-              if (clipboardData && navigator.clipboard) {
-                navigator.clipboard.writeText(clipboardData).catch((err) => {
-                  console.warn('Failed to write to clipboard:', err);
-                });
-              }
-            };
-          }
-        };
+        // Clipboard: remote → local (gated by policy)
+        if (canReadRemote) {
+          client.onclipboard = (stream: { onblob: ((data: string) => void) | null; onend: (() => void) | null }, mimetype: string) => {
+            if (mimetype === 'text/plain') {
+              let clipboardData = '';
+              stream.onblob = (data: string) => {
+                clipboardData += atob(data);
+              };
+              stream.onend = () => {
+                if (clipboardData && navigator.clipboard) {
+                  navigator.clipboard.writeText(clipboardData).catch((err) => {
+                    console.warn('Failed to write to clipboard:', err);
+                  });
+                }
+              };
+            }
+          };
+        }
 
-        // Connect
+        // Clipboard: local → remote (gated by policy)
+        if (canWriteRemote && !viewOnly) {
+          const syncClipboard = async () => {
+            if (!clientRef.current) return;
+            try {
+              const text = await navigator.clipboard.readText();
+              if (text) {
+                const stream = clientRef.current.createClipboardStream('text/plain');
+                const encoded = btoa(text);
+                stream.sendBlob(encoded);
+                stream.sendEnd();
+              }
+            } catch {
+              // Clipboard access may be denied
+            }
+          };
+
+          containerRef.current.addEventListener('focus', syncClipboard);
+          containerRef.current.addEventListener('click', syncClipboard);
+        }
+
         client.connect();
       } catch (err) {
         console.error('Failed to initialize Guacamole:', err);
@@ -162,19 +223,22 @@ export function GuacamoleViewer({
       }
     };
 
-    initGuacamole();
+    connectGuacRef.current = connectGuacamole;
+    connectGuacamole();
 
-    // Cleanup on unmount
+    const container = containerRef.current;
     return () => {
+      unmountedRef.current = true;
+      clearReconnectTimer();
       if (clientRef.current) {
         clientRef.current.disconnect();
         clientRef.current = null;
       }
-      if (containerRef.current) {
-        containerRef.current.innerHTML = '';
+      if (container) {
+        container.innerHTML = '';
       }
     };
-  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleError, onError]);
+  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleError, canReadRemote, canWriteRemote, onError, clearReconnectTimer]);
 
   return (
     <div

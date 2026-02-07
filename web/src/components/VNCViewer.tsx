@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type RFB from '@novnc/novnc/lib/rfb.js';
+import type { ClipboardPolicy } from '../types';
 
 export interface VNCStats {
   fps: number;
@@ -12,9 +13,14 @@ interface VNCViewerProps {
   onConnect?: () => void;
   onDisconnect?: (clean: boolean) => void;
   onError?: (message: string) => void;
+  onReconnecting?: (attempt: number, maxAttempts: number) => void;
+  onReconnected?: () => void;
   viewOnly?: boolean;
   scaleViewport?: boolean;
   showStats?: boolean;
+  clipboardPolicy?: ClipboardPolicy;
+  maxReconnectAttempts?: number;
+  reconnectBackoffMs?: number;
 }
 
 export function VNCViewer({
@@ -22,25 +28,84 @@ export function VNCViewer({
   onConnect,
   onDisconnect,
   onError,
+  onReconnecting,
+  onReconnected,
   viewOnly = false,
   scaleViewport = true,
   showStats = false,
+  clipboardPolicy = 'bidirectional',
+  maxReconnectAttempts = 3,
+  reconnectBackoffMs = 1000,
 }: VNCViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RFB | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasConnectedRef = useRef(false);
+  const unmountedRef = useRef(false);
   const [stats, setStats] = useState<VNCStats>({ fps: 0, frameTime: 0, drawOps: 0 });
+
+  const canReadRemote = clipboardPolicy === 'read' || clipboardPolicy === 'bidirectional';
+  const canWriteRemote = clipboardPolicy === 'write' || clipboardPolicy === 'bidirectional';
+
+  // Build full WebSocket URL once
+  const fullWsUrl = useRef('');
+  useEffect(() => {
+    if (!wsUrl) return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    fullWsUrl.current = wsUrl.startsWith('ws') ? wsUrl : `${protocol}//${window.location.host}${wsUrl}`;
+  }, [wsUrl]);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  // Forward-declare connectRFB so disconnect handler can schedule reconnects
+  const connectRFBRef = useRef<() => void>(() => {});
 
   const handleConnect = useCallback(() => {
     console.log('VNC connected');
+    const wasReconnect = reconnectAttemptRef.current > 0;
+    reconnectAttemptRef.current = 0;
+    wasConnectedRef.current = true;
+    if (wasReconnect) {
+      onReconnected?.();
+    }
     onConnect?.();
-  }, [onConnect]);
+  }, [onConnect, onReconnected]);
 
   const handleDisconnect = useCallback((e: unknown) => {
     const event = e as { detail?: { clean?: boolean } };
     const clean = event?.detail?.clean ?? false;
     console.log('VNC disconnected, clean:', clean);
+
+    // Clean up the old RFB instance
+    if (rfbRef.current) {
+      rfbRef.current = null;
+    }
+
+    if (!clean && wasConnectedRef.current && !unmountedRef.current) {
+      // Unclean disconnect while we were connected — attempt reconnect
+      const attempt = reconnectAttemptRef.current + 1;
+      if (attempt <= maxReconnectAttempts) {
+        reconnectAttemptRef.current = attempt;
+        const delay = reconnectBackoffMs * Math.pow(2, attempt - 1);
+        console.log(`VNC reconnect attempt ${attempt}/${maxReconnectAttempts} in ${delay}ms`);
+        onReconnecting?.(attempt, maxReconnectAttempts);
+        reconnectTimerRef.current = setTimeout(() => {
+          if (!unmountedRef.current) {
+            connectRFBRef.current();
+          }
+        }, delay);
+        return;
+      }
+    }
+
     onDisconnect?.(clean);
-  }, [onDisconnect]);
+  }, [maxReconnectAttempts, reconnectBackoffMs, onDisconnect, onReconnecting]);
 
   const handleSecurityFailure = useCallback((e: unknown) => {
     const event = e as { detail?: { reason?: string } };
@@ -49,8 +114,9 @@ export function VNCViewer({
     onError?.(reason);
   }, [onError]);
 
-  // Handle clipboard from remote VNC -> local
+  // Handle clipboard from remote VNC -> local (gated by policy)
   const handleClipboard = useCallback((e: unknown) => {
+    if (!canReadRemote) return;
     const event = e as { detail?: { text?: string } };
     const text = event?.detail?.text;
     if (text && navigator.clipboard) {
@@ -58,11 +124,11 @@ export function VNCViewer({
         console.warn('Failed to write to clipboard:', err);
       });
     }
-  }, []);
+  }, [canReadRemote]);
 
-  // Sync local clipboard to remote VNC when container is focused
+  // Sync local clipboard to remote VNC when container is focused (gated by policy)
   const syncClipboardToRemote = useCallback(async () => {
-    if (!rfbRef.current || viewOnly) return;
+    if (!rfbRef.current || viewOnly || !canWriteRemote) return;
     try {
       if (navigator.clipboard) {
         const text = await navigator.clipboard.readText();
@@ -70,21 +136,20 @@ export function VNCViewer({
           rfbRef.current.clipboardPasteFrom(text);
         }
       }
-    } catch (err) {
+    } catch {
       // Clipboard access may be denied - that's ok
-      console.debug('Clipboard read not available:', err);
     }
-  }, [viewOnly]);
+  }, [viewOnly, canWriteRemote]);
 
-  // Handle paste event (Ctrl+V / Cmd+V) - more reliable than clipboard API
+  // Handle paste event (Ctrl+V / Cmd+V) - gated by policy
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    if (!rfbRef.current || viewOnly) return;
+    if (!rfbRef.current || viewOnly || !canWriteRemote) return;
     const text = e.clipboardData.getData('text/plain');
     if (text) {
       e.preventDefault();
       rfbRef.current.clipboardPasteFrom(text);
     }
-  }, [viewOnly]);
+  }, [viewOnly, canWriteRemote]);
 
   // FPS instrumentation: intercept canvas drawImage to count visible VNC frame updates
   useEffect(() => {
@@ -102,7 +167,6 @@ export function VNCViewer({
       ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Intercept drawImage on the visible canvas context to detect VNC blits
       origDrawImage = ctx.drawImage;
       const interceptedCtx = ctx;
       interceptedCtx.drawImage = function (this: CanvasRenderingContext2D, ...args: Parameters<CanvasRenderingContext2D['drawImage']>) {
@@ -133,7 +197,6 @@ export function VNCViewer({
       rafId = requestAnimationFrame(tick);
     };
 
-    // noVNC dynamically inserts its canvas — watch for it
     const existing = containerRef.current.querySelector('canvas');
     let observer: MutationObserver | null = null;
 
@@ -167,42 +230,43 @@ export function VNCViewer({
     return () => {
       cancelAnimationFrame(rafId);
       observer?.disconnect();
-      // Restore original drawImage
       if (ctx && origDrawImage) {
         ctx.drawImage = origDrawImage;
       }
     };
   }, [showStats]);
 
+  // Main connection effect
   useEffect(() => {
-    if (!containerRef.current || !wsUrl) {
-      return;
-    }
+    if (!containerRef.current || !wsUrl) return;
 
-    // Build full WebSocket URL
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const fullWsUrl = wsUrl.startsWith('ws') ? wsUrl : `${protocol}//${window.location.host}${wsUrl}`;
+    unmountedRef.current = false;
+    reconnectAttemptRef.current = 0;
+    wasConnectedRef.current = false;
 
-    // Dynamically import noVNC
-    const initRFB = async () => {
+    const connectRFB = async () => {
+      if (unmountedRef.current || !containerRef.current) return;
+
       try {
-        // Dynamic import
         const { default: RFBClass } = await import('@novnc/novnc/lib/rfb.js');
+        if (unmountedRef.current || !containerRef.current) return;
 
-        if (!containerRef.current) return;
+        // Clear container of any previous noVNC elements before reconnect
+        // (noVNC appends its own canvas/screen elements)
+        if (reconnectAttemptRef.current > 0) {
+          const screen = containerRef.current.querySelector('.noVNC_screen');
+          if (screen) screen.remove();
+        }
 
-        // Create RFB connection
-        const rfb = new RFBClass(containerRef.current, fullWsUrl, {
+        const rfb = new RFBClass(containerRef.current, fullWsUrl.current, {
           shared: true,
         });
 
-        // Configure RFB
         rfb.scaleViewport = scaleViewport;
         rfb.resizeSession = true;
         rfb.viewOnly = viewOnly;
         rfb.clipViewport = false;
 
-        // Add event listeners
         rfb.addEventListener('connect', handleConnect);
         rfb.addEventListener('disconnect', handleDisconnect);
         rfb.addEventListener('securityfailure', handleSecurityFailure);
@@ -210,18 +274,21 @@ export function VNCViewer({
 
         rfbRef.current = rfb;
 
-        // Sync local clipboard to remote when focused
-        syncClipboardToRemote();
+        if (canWriteRemote) {
+          syncClipboardToRemote();
+        }
       } catch (err) {
         console.error('Failed to load or initialize noVNC:', err);
         onError?.(err instanceof Error ? err.message : 'Failed to load VNC viewer');
       }
     };
 
-    initRFB();
+    connectRFBRef.current = connectRFB;
+    connectRFB();
 
-    // Cleanup on unmount
     return () => {
+      unmountedRef.current = true;
+      clearReconnectTimer();
       if (rfbRef.current) {
         rfbRef.current.removeEventListener('connect', handleConnect);
         rfbRef.current.removeEventListener('disconnect', handleDisconnect);
@@ -231,16 +298,16 @@ export function VNCViewer({
         rfbRef.current = null;
       }
     };
-  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleSecurityFailure, handleClipboard, syncClipboardToRemote, onError]);
+  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleSecurityFailure, handleClipboard, syncClipboardToRemote, canWriteRemote, onError, clearReconnectTimer]);
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full bg-black relative"
       style={{ minHeight: '400px' }}
-      onFocus={syncClipboardToRemote}
-      onClick={syncClipboardToRemote}
-      onPaste={handlePaste}
+      onFocus={canWriteRemote ? syncClipboardToRemote : undefined}
+      onClick={canWriteRemote ? syncClipboardToRemote : undefined}
+      onPaste={canWriteRemote ? handlePaste : undefined}
       tabIndex={0}
     >
       {showStats && (

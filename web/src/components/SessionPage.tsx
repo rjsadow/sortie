@@ -1,34 +1,31 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../hooks/useSession';
-import { VNCViewer } from './VNCViewer';
-import { GuacamoleViewer } from './GuacamoleViewer';
-import type { Application } from '../types';
+import { SessionViewer } from './SessionViewer';
+import type { Application, ClipboardPolicy } from '../types';
 
 interface SessionPageProps {
   app: Application;
   onClose: () => void;
   darkMode: boolean;
   sessionId?: string; // If provided, reconnect to this existing session instead of creating a new one
+  clipboardPolicy?: ClipboardPolicy;
 }
 
 type ConnectionState = 'idle' | 'creating' | 'waiting' | 'connecting' | 'connected' | 'error';
 
-export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPageProps) {
+export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy = 'bidirectional' }: SessionPageProps) {
   const { session, isLoading, error, createSession, reconnectToSession, terminateSession } = useSession();
-  const [vncConnectionState, setVncConnectionState] = useState<'idle' | 'connected' | 'error'>('idle');
-  const [vncErrorMessage, setVncErrorMessage] = useState('');
+  const [viewerConnectionState, setViewerConnectionState] = useState<'idle' | 'connected' | 'error'>('idle');
+  const [viewerErrorMessage, setViewerErrorMessage] = useState('');
   const [sessionCreationStarted, setSessionCreationStarted] = useState(false);
-  const [showStats, setShowStats] = useState(false);
 
   // Handle close - defined early so it can be used in effects below
   const handleClose = useCallback(async () => {
     // Only terminate if not already in a terminal state AND this is not a reconnection
-    // (for reconnections, user may want to reconnect again later)
     const terminalStates = ['stopped', 'expired', 'failed'];
     if (session && !terminalStates.includes(session.status) && !sessionId) {
       await terminateSession();
     }
-    // Go back in history if we pushed a state
     if (window.history.state?.sessionPage) {
       window.history.back();
     }
@@ -40,10 +37,8 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
     if (!session && !sessionCreationStarted) {
       setSessionCreationStarted(true);
       if (sessionId) {
-        // Reconnect to existing session
         reconnectToSession(sessionId);
       } else {
-        // Measure viewport: full width, height minus 48px header
         const screenWidth = window.innerWidth;
         const screenHeight = window.innerHeight - 48;
         createSession(app.id, screenWidth, screenHeight);
@@ -53,11 +48,9 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
 
   // Handle browser back button via History API
   useEffect(() => {
-    // Push a state so we can detect back button
     window.history.pushState({ sessionPage: true }, '');
 
     const handlePopState = (event: PopStateEvent) => {
-      // User pressed back button
       if (!event.state?.sessionPage) {
         handleClose();
       }
@@ -83,15 +76,13 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
 
   // Derive connection state and status message from session
   const { connectionState, statusMessage } = useMemo((): { connectionState: ConnectionState; statusMessage: string } => {
-    // VNC-level errors take precedence
-    if (vncConnectionState === 'error') {
-      return { connectionState: 'error', statusMessage: vncErrorMessage || 'Connection error' };
+    if (viewerConnectionState === 'error') {
+      return { connectionState: 'error', statusMessage: viewerErrorMessage || 'Connection error' };
     }
-    if (vncConnectionState === 'connected') {
+    if (viewerConnectionState === 'connected') {
       return { connectionState: 'connected', statusMessage: '' };
     }
 
-    // No session yet - we're creating
     if (!session) {
       if (sessionCreationStarted || isLoading) {
         return { connectionState: 'creating', statusMessage: 'Creating session...' };
@@ -99,12 +90,11 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
       return { connectionState: 'idle', statusMessage: '' };
     }
 
-    // Derive from session status
     switch (session.status) {
       case 'creating':
         return { connectionState: 'waiting', statusMessage: 'Starting container...' };
       case 'running':
-        if (session.websocket_url || session.guacamole_url) {
+        if (session.websocket_url || session.guacamole_url || session.proxy_url) {
           return { connectionState: 'connecting', statusMessage: 'Connecting to display...' };
         }
         return { connectionState: 'waiting', statusMessage: 'Waiting for container...' };
@@ -116,23 +106,22 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
       default:
         return { connectionState: 'idle', statusMessage: '' };
     }
-  }, [session, sessionCreationStarted, vncConnectionState, vncErrorMessage, isLoading, error]);
+  }, [session, sessionCreationStarted, viewerConnectionState, viewerErrorMessage, isLoading, error]);
 
-  // Handle VNC connection events
-  const handleVNCConnect = useCallback(() => {
-    setVncConnectionState('connected');
+  const handleViewerConnect = useCallback(() => {
+    setViewerConnectionState('connected');
   }, []);
 
-  const handleVNCDisconnect = useCallback((clean: boolean) => {
-    if (!clean && vncConnectionState === 'connected') {
-      setVncConnectionState('error');
-      setVncErrorMessage('Connection lost');
+  const handleViewerDisconnect = useCallback((clean: boolean) => {
+    if (!clean && viewerConnectionState === 'connected') {
+      setViewerConnectionState('error');
+      setViewerErrorMessage('Connection lost');
     }
-  }, [vncConnectionState]);
+  }, [viewerConnectionState]);
 
-  const handleVNCError = useCallback((message: string) => {
-    setVncConnectionState('error');
-    setVncErrorMessage(message);
+  const handleViewerError = useCallback((message: string) => {
+    setViewerConnectionState('error');
+    setViewerErrorMessage(message);
   }, []);
 
   const bgColor = darkMode ? 'bg-gray-900' : 'bg-gray-100';
@@ -201,20 +190,8 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
           )}
         </div>
 
-        {/* Right side - Stats toggle and Close button */}
+        {/* Right side - Close button */}
         <div className="flex items-center gap-1">
-          {connectionState === 'connected' && (
-            <button
-              onClick={() => setShowStats((s) => !s)}
-              className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${showStats ? 'text-green-500' : textColor}`}
-              aria-label="Toggle performance stats"
-              title="Toggle FPS stats"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </button>
-          )}
           <button
             onClick={handleClose}
             className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
@@ -230,8 +207,8 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
 
       {/* Content - fills remaining space */}
       <div className="flex-1 relative overflow-hidden">
-        {/* Loading/Status overlay */}
-        {connectionState !== 'connected' && (
+        {/* Loading/Status overlay (shown when not yet connected to a viewer) */}
+        {connectionState !== 'connected' && !session?.websocket_url && !session?.guacamole_url && !session?.proxy_url && (
           <div className={`absolute inset-0 flex flex-col items-center justify-center ${bgColor} z-10`}>
             {connectionState === 'error' ? (
               <>
@@ -250,7 +227,6 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
               </>
             ) : (
               <>
-                {/* Loading spinner */}
                 <div className="mb-4">
                   <svg className="w-12 h-12 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -268,24 +244,16 @@ export function SessionPage({ app, onClose, darkMode, sessionId }: SessionPagePr
           </div>
         )}
 
-        {/* VNC Viewer - for Linux container apps */}
-        {session?.websocket_url && !session?.guacamole_url && connectionState !== 'error' && (
-          <VNCViewer
-            wsUrl={session.websocket_url}
-            onConnect={handleVNCConnect}
-            onDisconnect={handleVNCDisconnect}
-            onError={handleVNCError}
-            showStats={showStats}
-          />
-        )}
-
-        {/* Guacamole Viewer - for Windows RDP apps */}
-        {session?.guacamole_url && connectionState !== 'error' && (
-          <GuacamoleViewer
-            wsUrl={session.guacamole_url}
-            onConnect={handleVNCConnect}
-            onDisconnect={handleVNCDisconnect}
-            onError={handleVNCError}
+        {/* SessionViewer - renders when session has a viewer URL */}
+        {session && (session.websocket_url || session.guacamole_url || session.proxy_url) && connectionState !== 'error' && (
+          <SessionViewer
+            session={session}
+            app={app}
+            darkMode={darkMode}
+            clipboardPolicy={clipboardPolicy}
+            onConnect={handleViewerConnect}
+            onDisconnect={handleViewerDisconnect}
+            onError={handleViewerError}
           />
         )}
       </div>
