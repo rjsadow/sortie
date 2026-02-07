@@ -11,10 +11,14 @@ import {
   deleteTemplate,
   listAdminSessions,
   terminateAdminSession,
+  listApps,
+  createApp,
+  updateApp,
+  deleteApp,
   type AdminUser,
   type AdminTemplate,
 } from '../services/auth';
-import type { Session, SessionStatus } from '../types';
+import type { Application, Session, SessionStatus } from '../types';
 import { formatDuration } from '../utils/time';
 
 interface AdminProps {
@@ -60,8 +64,28 @@ const emptyTemplate: Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'> = {
   },
 };
 
+const emptyApp: Application = {
+  id: '',
+  name: '',
+  description: '',
+  url: '',
+  icon: '',
+  category: '',
+  launch_type: 'url',
+  os_type: 'linux',
+  container_image: '',
+  container_port: 8080,
+  container_args: [],
+  resource_limits: {
+    cpu_request: '',
+    cpu_limit: '',
+    memory_request: '',
+    memory_limit: '',
+  },
+};
+
 export function Admin({ darkMode, onClose }: AdminProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'templates' | 'sessions'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'apps' | 'templates' | 'sessions'>('settings');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -83,6 +107,14 @@ export function Admin({ darkMode, onClose }: AdminProps) {
   // Sessions state
   const [adminSessions, setAdminSessions] = useState<Session[]>([]);
 
+  // Apps state
+  const [apps, setApps] = useState<Application[]>([]);
+  const [showAppForm, setShowAppForm] = useState(false);
+  const [editingApp, setEditingApp] = useState<Application | null>(null);
+  const [appForm, setAppForm] = useState<Application>(emptyApp);
+  const [appContainerArgsInput, setAppContainerArgsInput] = useState('');
+  const [appSearch, setAppSearch] = useState('');
+
   // Templates state
   const [templates, setTemplates] = useState<AdminTemplate[]>([]);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -99,14 +131,16 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     setLoading(true);
     setError('');
     try {
-      const [settings, userList, templateList, sessionList] = await Promise.all([
+      const [settings, userList, appList, templateList, sessionList] = await Promise.all([
         getAdminSettings(),
         listUsers(),
+        listApps(),
         listTemplates(),
         listAdminSessions(),
       ]);
       setAllowRegistration(settings.allow_registration === true || settings.allow_registration === 'true');
       setUsers(userList);
+      setApps(appList);
       setTemplates(templateList);
       setAdminSessions(sessionList);
     } catch (err) {
@@ -168,6 +202,90 @@ export function Admin({ darkMode, onClose }: AdminProps) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
     }
   };
+
+  // App CRUD handlers
+  const handleOpenAppForm = (app?: Application) => {
+    if (app) {
+      setEditingApp(app);
+      setAppForm({ ...app });
+      setAppContainerArgsInput((app.container_args || []).join(', '));
+    } else {
+      setEditingApp(null);
+      setAppForm({ ...emptyApp });
+      setAppContainerArgsInput('');
+    }
+    setShowAppForm(true);
+  };
+
+  const handleCloseAppForm = () => {
+    setShowAppForm(false);
+    setEditingApp(null);
+    setAppForm({ ...emptyApp });
+    setAppContainerArgsInput('');
+  };
+
+  const handleSaveApp = async () => {
+    setError('');
+
+    if (!appForm.id) {
+      setError('App ID is required');
+      return;
+    }
+    if (!appForm.name) {
+      setError('App name is required');
+      return;
+    }
+    if (appForm.launch_type === 'url' && !appForm.url) {
+      setError('URL is required for URL apps');
+      return;
+    }
+    if ((appForm.launch_type === 'container' || appForm.launch_type === 'web_proxy') && !appForm.container_image) {
+      setError('Container image is required for container/web proxy apps');
+      return;
+    }
+
+    const containerArgs = appContainerArgsInput.split(',').map(a => a.trim()).filter(a => a);
+
+    const appData: Application = {
+      ...appForm,
+      container_args: containerArgs,
+    };
+
+    try {
+      if (editingApp) {
+        await updateApp(editingApp.id, appData);
+        setSuccess('App updated successfully');
+      } else {
+        await createApp(appData);
+        setSuccess('App created successfully');
+      }
+      handleCloseAppForm();
+      await loadData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save app');
+    }
+  };
+
+  const handleDeleteApp = async (app: Application) => {
+    if (!confirm(`Are you sure you want to delete app "${app.name}"?`)) {
+      return;
+    }
+    setError('');
+    try {
+      await deleteApp(app.id);
+      await loadData();
+      setSuccess('App deleted successfully');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete app');
+    }
+  };
+
+  const filteredApps = apps.filter((app) => {
+    const q = appSearch.toLowerCase();
+    return !q || app.name.toLowerCase().includes(q) || app.id.toLowerCase().includes(q) || app.category.toLowerCase().includes(q);
+  });
 
   const handleOpenTemplateForm = (template?: AdminTemplate) => {
     if (template) {
@@ -329,6 +447,14 @@ export function Admin({ darkMode, onClose }: AdminProps) {
               : mutedText}`}
           >
             Users
+          </button>
+          <button
+            onClick={() => setActiveTab('apps')}
+            className={`pb-2 px-1 ${activeTab === 'apps'
+              ? 'border-b-2 border-brand-accent text-brand-accent'
+              : mutedText}`}
+          >
+            Apps
           </button>
           <button
             onClick={() => setActiveTab('templates')}
@@ -521,6 +647,365 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                   </table>
                   {users.length === 0 && (
                     <p className={`text-center py-8 ${mutedText}`}>No users found</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Apps Tab */}
+            {activeTab === 'apps' && (
+              <div className={`${cardBg} rounded-lg p-6`}>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className={`text-lg font-semibold ${textColor}`}>App Catalog</h2>
+                  <button
+                    onClick={() => handleOpenAppForm()}
+                    className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
+                  >
+                    Create App
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    placeholder="Search apps by name, ID, or category..."
+                    value={appSearch}
+                    onChange={(e) => setAppSearch(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                  />
+                </div>
+
+                {/* App Form Modal */}
+                {showAppForm && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className={`${cardBg} rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto`}>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className={`text-lg font-semibold ${textColor}`}>
+                          {editingApp ? 'Edit App' : 'Create New App'}
+                        </h3>
+                        <button
+                          onClick={handleCloseAppForm}
+                          className={`p-1 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
+                        >
+                          <svg className={`w-5 h-5 ${textColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* App ID - readonly when editing */}
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>App ID *</label>
+                          <input
+                            type="text"
+                            value={appForm.id}
+                            onChange={(e) => setAppForm({ ...appForm, id: e.target.value })}
+                            disabled={!!editingApp}
+                            placeholder="e.g., my-app"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText} ${editingApp ? 'opacity-50' : ''}`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Name *</label>
+                          <input
+                            type="text"
+                            value={appForm.name}
+                            onChange={(e) => setAppForm({ ...appForm, name: e.target.value })}
+                            placeholder="e.g., My Application"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div className="col-span-2">
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Description</label>
+                          <textarea
+                            value={appForm.description}
+                            onChange={(e) => setAppForm({ ...appForm, description: e.target.value })}
+                            placeholder="Brief description of the application"
+                            rows={2}
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Category *</label>
+                          <input
+                            type="text"
+                            value={appForm.category}
+                            onChange={(e) => setAppForm({ ...appForm, category: e.target.value })}
+                            placeholder="e.g., Development"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Launch Type *</label>
+                          <select
+                            value={appForm.launch_type}
+                            onChange={(e) => setAppForm({ ...appForm, launch_type: e.target.value as Application['launch_type'] })}
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          >
+                            {LAUNCH_TYPES.map((type) => (
+                              <option key={type} value={type}>
+                                {type === 'url' ? 'URL' : type === 'container' ? 'Container (VNC)' : 'Web Proxy'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* URL for url launch type */}
+                        {appForm.launch_type === 'url' && (
+                          <div className="col-span-2">
+                            <label className={`block text-sm mb-1 ${mutedText}`}>URL *</label>
+                            <input
+                              type="text"
+                              value={appForm.url}
+                              onChange={(e) => setAppForm({ ...appForm, url: e.target.value })}
+                              placeholder="https://example.com"
+                              className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                            />
+                          </div>
+                        )}
+
+                        {/* OS Type - only for container apps */}
+                        {appForm.launch_type === 'container' && (
+                          <div>
+                            <label className={`block text-sm mb-1 ${mutedText}`}>OS Type</label>
+                            <select
+                              value={appForm.os_type || 'linux'}
+                              onChange={(e) => setAppForm({ ...appForm, os_type: e.target.value as Application['os_type'] })}
+                              className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                            >
+                              {OS_TYPES.map((type) => (
+                                <option key={type} value={type}>
+                                  {type === 'linux' ? 'Linux (VNC)' : 'Windows (RDP)'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Container-specific fields */}
+                        {(appForm.launch_type === 'container' || appForm.launch_type === 'web_proxy') && (
+                          <>
+                            <div>
+                              <label className={`block text-sm mb-1 ${mutedText}`}>Container Image *</label>
+                              <input
+                                type="text"
+                                value={appForm.container_image || ''}
+                                onChange={(e) => setAppForm({ ...appForm, container_image: e.target.value })}
+                                placeholder="e.g., nginx:latest"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+
+                            <div>
+                              <label className={`block text-sm mb-1 ${mutedText}`}>Container Port</label>
+                              <input
+                                type="number"
+                                value={appForm.container_port || 8080}
+                                onChange={(e) => setAppForm({ ...appForm, container_port: parseInt(e.target.value) || 8080 })}
+                                placeholder="8080"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+
+                            <div className="col-span-2">
+                              <label className={`block text-sm mb-1 ${mutedText}`}>Container Args (comma-separated)</label>
+                              <input
+                                type="text"
+                                value={appContainerArgsInput}
+                                onChange={(e) => setAppContainerArgsInput(e.target.value)}
+                                placeholder="e.g., --auth, none, --bind-addr, 0.0.0.0:8080"
+                                className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Icon URL</label>
+                          <input
+                            type="text"
+                            value={appForm.icon}
+                            onChange={(e) => setAppForm({ ...appForm, icon: e.target.value })}
+                            placeholder="https://example.com/icon.png"
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          />
+                        </div>
+
+                        {/* Resource Limits */}
+                        {(appForm.launch_type === 'container' || appForm.launch_type === 'web_proxy') && (
+                          <div className="col-span-2">
+                            <label className={`block text-sm mb-2 ${mutedText}`}>Resource Limits</label>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className={`block text-xs mb-1 ${mutedText}`}>CPU Request</label>
+                                <input
+                                  type="text"
+                                  value={appForm.resource_limits?.cpu_request || ''}
+                                  onChange={(e) => setAppForm({
+                                    ...appForm,
+                                    resource_limits: {
+                                      ...appForm.resource_limits,
+                                      cpu_request: e.target.value,
+                                    },
+                                  })}
+                                  placeholder="e.g., 100m"
+                                  className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                                />
+                              </div>
+                              <div>
+                                <label className={`block text-xs mb-1 ${mutedText}`}>CPU Limit</label>
+                                <input
+                                  type="text"
+                                  value={appForm.resource_limits?.cpu_limit || ''}
+                                  onChange={(e) => setAppForm({
+                                    ...appForm,
+                                    resource_limits: {
+                                      ...appForm.resource_limits,
+                                      cpu_limit: e.target.value,
+                                    },
+                                  })}
+                                  placeholder="e.g., 1"
+                                  className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                                />
+                              </div>
+                              <div>
+                                <label className={`block text-xs mb-1 ${mutedText}`}>Memory Request</label>
+                                <input
+                                  type="text"
+                                  value={appForm.resource_limits?.memory_request || ''}
+                                  onChange={(e) => setAppForm({
+                                    ...appForm,
+                                    resource_limits: {
+                                      ...appForm.resource_limits,
+                                      memory_request: e.target.value,
+                                    },
+                                  })}
+                                  placeholder="e.g., 256Mi"
+                                  className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                                />
+                              </div>
+                              <div>
+                                <label className={`block text-xs mb-1 ${mutedText}`}>Memory Limit</label>
+                                <input
+                                  type="text"
+                                  value={appForm.resource_limits?.memory_limit || ''}
+                                  onChange={(e) => setAppForm({
+                                    ...appForm,
+                                    resource_limits: {
+                                      ...appForm.resource_limits,
+                                      memory_limit: e.target.value,
+                                    },
+                                  })}
+                                  placeholder="e.g., 1Gi"
+                                  className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end gap-3 mt-6">
+                        <button
+                          onClick={handleCloseAppForm}
+                          className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} ${textColor}`}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveApp}
+                          className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
+                        >
+                          {editingApp ? 'Update App' : 'Create App'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Apps List */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <th className={`text-left py-2 ${mutedText}`}>Name</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Category</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Launch Type</th>
+                        <th className={`text-left py-2 ${mutedText}`}>URL / Image</th>
+                        <th className={`text-right py-2 ${mutedText}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredApps.map((app) => (
+                        <tr
+                          key={app.id}
+                          className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}
+                        >
+                          <td className={`py-3 ${textColor}`}>
+                            <div className="flex items-center gap-2">
+                              {app.icon && (
+                                <img
+                                  src={app.icon}
+                                  alt=""
+                                  className="w-6 h-6 rounded"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              )}
+                              <div>
+                                <div className="font-medium">{app.name}</div>
+                                <div className={`text-xs ${mutedText}`}>{app.id}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className={`py-3 ${mutedText}`}>
+                            <span className="inline-block px-2 py-0.5 text-xs rounded bg-blue-500/20 text-blue-400">
+                              {app.category}
+                            </span>
+                          </td>
+                          <td className={`py-3 ${mutedText}`}>
+                            <span className={`inline-block px-2 py-0.5 text-xs rounded ${
+                              app.launch_type === 'url'
+                                ? 'bg-green-500/20 text-green-400'
+                                : app.launch_type === 'web_proxy'
+                                ? 'bg-purple-500/20 text-purple-400'
+                                : 'bg-orange-500/20 text-orange-400'
+                            }`}>
+                              {app.launch_type}
+                            </span>
+                          </td>
+                          <td className={`py-3 ${mutedText} text-sm truncate max-w-[200px]`}>
+                            {app.launch_type === 'url' ? app.url : app.container_image}
+                          </td>
+                          <td className="py-3 text-right">
+                            <button
+                              onClick={() => handleOpenAppForm(app)}
+                              className="text-blue-500 hover:text-blue-400 text-sm mr-3"
+                              title="Edit app"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteApp(app)}
+                              className="text-red-500 hover:text-red-400 text-sm"
+                              title="Delete app"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filteredApps.length === 0 && (
+                    <p className={`text-center py-8 ${mutedText}`}>
+                      {appSearch ? 'No apps match your search.' : 'No apps found. Click "Create App" to add one.'}
+                    </p>
                   )}
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import type { User, Session } from '../types';
+import type { User, Session, Application } from '../types';
 
 // Auth response types
 export interface AuthResponse {
@@ -429,5 +429,62 @@ export async function deleteTemplate(templateId: string): Promise<void> {
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || 'Failed to delete template');
+  }
+}
+
+// App catalog: List apps
+export async function listApps(): Promise<Application[]> {
+  const response = await fetchWithAuth('/api/apps');
+  if (!response.ok) {
+    throw new Error('Failed to list apps');
+  }
+  return response.json();
+}
+
+// App catalog: Get app by ID
+export async function getApp(id: string): Promise<Application> {
+  const response = await fetchWithAuth(`/api/apps/${id}`);
+  if (!response.ok) {
+    throw new Error('Failed to get app');
+  }
+  return response.json();
+}
+
+// App catalog: Create app
+export async function createApp(app: Application): Promise<Application> {
+  const response = await fetchWithAuth('/api/apps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(app),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to create app');
+  }
+  return response.json();
+}
+
+// App catalog: Update app
+export async function updateApp(id: string, app: Partial<Application>): Promise<Application> {
+  const response = await fetchWithAuth(`/api/apps/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(app),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to update app');
+  }
+  return response.json();
+}
+
+// App catalog: Delete app
+export async function deleteApp(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/apps/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to delete app');
   }
 }
