@@ -327,3 +327,404 @@ func TestNewManager_InvalidConfig(t *testing.T) {
 		t.Error("NewManager() should fail with invalid config")
 	}
 }
+
+func TestNewManager_UnknownProvider(t *testing.T) {
+	cfg := &Config{Provider: "redis"}
+	// Will fail at validation, not at provider creation
+	_, err := NewManager(cfg)
+	if err == nil {
+		t.Error("NewManager() should fail with unknown provider")
+	}
+}
+
+func TestManager_Get(t *testing.T) {
+	os.Setenv("LAUNCHPAD_SECRET_MGR_TEST", "manager-value")
+	defer os.Unsetenv("LAUNCHPAD_SECRET_MGR_TEST")
+
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer mgr.Close()
+
+	ctx := context.Background()
+
+	value, err := mgr.Get(ctx, "mgr_test")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if value != "manager-value" {
+		t.Errorf("Get() = %v, want manager-value", value)
+	}
+}
+
+func TestManager_GetNotFound(t *testing.T) {
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer mgr.Close()
+
+	_, err = mgr.Get(context.Background(), "definitely_not_set_12345")
+	if err != ErrSecretNotFound {
+		t.Errorf("Get() error = %v, want ErrSecretNotFound", err)
+	}
+}
+
+func TestManager_GetWithMetadata(t *testing.T) {
+	os.Setenv("LAUNCHPAD_SECRET_META_TEST", "meta-value")
+	defer os.Unsetenv("LAUNCHPAD_SECRET_META_TEST")
+
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer mgr.Close()
+
+	secret, err := mgr.GetWithMetadata(context.Background(), "meta_test")
+	if err != nil {
+		t.Fatalf("GetWithMetadata() error = %v", err)
+	}
+	if secret.Value != "meta-value" {
+		t.Errorf("Value = %v, want meta-value", secret.Value)
+	}
+}
+
+func TestManager_List(t *testing.T) {
+	os.Setenv("LAUNCHPAD_SECRET_LIST_A", "a")
+	os.Setenv("LAUNCHPAD_SECRET_LIST_B", "b")
+	defer func() {
+		os.Unsetenv("LAUNCHPAD_SECRET_LIST_A")
+		os.Unsetenv("LAUNCHPAD_SECRET_LIST_B")
+	}()
+
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer mgr.Close()
+
+	keys, err := mgr.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	found := make(map[string]bool)
+	for _, k := range keys {
+		found[k] = true
+	}
+	if !found["LIST_A"] {
+		t.Error("List() should contain LIST_A")
+	}
+	if !found["LIST_B"] {
+		t.Error("List() should contain LIST_B")
+	}
+}
+
+func TestManager_MustGet_Success(t *testing.T) {
+	os.Setenv("LAUNCHPAD_SECRET_MUST_GET", "required-value")
+	defer os.Unsetenv("LAUNCHPAD_SECRET_MUST_GET")
+
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer mgr.Close()
+
+	value := mgr.MustGet(context.Background(), "must_get")
+	if value != "required-value" {
+		t.Errorf("MustGet() = %v, want required-value", value)
+	}
+}
+
+func TestManager_MustGet_Panics(t *testing.T) {
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer mgr.Close()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Error("MustGet() should panic when secret not found")
+		}
+	}()
+
+	mgr.MustGet(context.Background(), "definitely_not_set_panic_test")
+}
+
+func TestManager_Close_NilProvider(t *testing.T) {
+	mgr := &Manager{provider: nil}
+	if err := mgr.Close(); err != nil {
+		t.Errorf("Close() with nil provider error = %v", err)
+	}
+}
+
+func TestManager_Close(t *testing.T) {
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	if err := mgr.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestDefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Provider != ProviderTypeEnv {
+		t.Errorf("Provider = %v, want env", cfg.Provider)
+	}
+	if cfg.VaultMountPath != "secret" {
+		t.Errorf("VaultMountPath = %v, want secret", cfg.VaultMountPath)
+	}
+	if cfg.K8sNamespace != "default" {
+		t.Errorf("K8sNamespace = %v, want default", cfg.K8sNamespace)
+	}
+	if !cfg.K8sInCluster {
+		t.Error("K8sInCluster should default to true")
+	}
+}
+
+func TestLoadConfig_VaultFallback(t *testing.T) {
+	// Clear relevant env vars
+	envVars := []string{
+		"LAUNCHPAD_SECRETS_PROVIDER", "LAUNCHPAD_VAULT_ADDR", "VAULT_ADDR",
+		"LAUNCHPAD_VAULT_TOKEN", "VAULT_TOKEN", "LAUNCHPAD_VAULT_MOUNT_PATH",
+		"LAUNCHPAD_VAULT_NAMESPACE", "VAULT_NAMESPACE",
+	}
+	for _, v := range envVars {
+		os.Unsetenv(v)
+	}
+
+	// Test VAULT_ADDR fallback
+	os.Setenv("VAULT_ADDR", "http://vault-fallback:8200")
+	defer os.Unsetenv("VAULT_ADDR")
+
+	cfg := LoadConfig()
+	if cfg.VaultAddr != "http://vault-fallback:8200" {
+		t.Errorf("VaultAddr = %v, want http://vault-fallback:8200", cfg.VaultAddr)
+	}
+}
+
+func TestLoadConfig_VaultToken(t *testing.T) {
+	os.Unsetenv("LAUNCHPAD_VAULT_TOKEN")
+	os.Unsetenv("VAULT_TOKEN")
+
+	// Test LAUNCHPAD_VAULT_TOKEN
+	os.Setenv("LAUNCHPAD_VAULT_TOKEN", "lp-token")
+	defer os.Unsetenv("LAUNCHPAD_VAULT_TOKEN")
+
+	cfg := LoadConfig()
+	if cfg.VaultToken != "lp-token" {
+		t.Errorf("VaultToken = %v, want lp-token", cfg.VaultToken)
+	}
+}
+
+func TestLoadConfig_VaultTokenFallback(t *testing.T) {
+	os.Unsetenv("LAUNCHPAD_VAULT_TOKEN")
+	os.Setenv("VAULT_TOKEN", "fallback-token")
+	defer os.Unsetenv("VAULT_TOKEN")
+
+	cfg := LoadConfig()
+	if cfg.VaultToken != "fallback-token" {
+		t.Errorf("VaultToken = %v, want fallback-token", cfg.VaultToken)
+	}
+}
+
+func TestLoadConfig_VaultMountPath(t *testing.T) {
+	os.Setenv("LAUNCHPAD_VAULT_MOUNT_PATH", "custom/mount")
+	defer os.Unsetenv("LAUNCHPAD_VAULT_MOUNT_PATH")
+
+	cfg := LoadConfig()
+	if cfg.VaultMountPath != "custom/mount" {
+		t.Errorf("VaultMountPath = %v, want custom/mount", cfg.VaultMountPath)
+	}
+}
+
+func TestLoadConfig_VaultNamespace(t *testing.T) {
+	os.Unsetenv("LAUNCHPAD_VAULT_NAMESPACE")
+	os.Unsetenv("VAULT_NAMESPACE")
+
+	os.Setenv("LAUNCHPAD_VAULT_NAMESPACE", "my-namespace")
+	defer os.Unsetenv("LAUNCHPAD_VAULT_NAMESPACE")
+
+	cfg := LoadConfig()
+	if cfg.VaultNamespace != "my-namespace" {
+		t.Errorf("VaultNamespace = %v, want my-namespace", cfg.VaultNamespace)
+	}
+}
+
+func TestLoadConfig_VaultNamespaceFallback(t *testing.T) {
+	os.Unsetenv("LAUNCHPAD_VAULT_NAMESPACE")
+	os.Setenv("VAULT_NAMESPACE", "fallback-ns")
+	defer os.Unsetenv("VAULT_NAMESPACE")
+
+	cfg := LoadConfig()
+	if cfg.VaultNamespace != "fallback-ns" {
+		t.Errorf("VaultNamespace = %v, want fallback-ns", cfg.VaultNamespace)
+	}
+}
+
+func TestLoadConfig_AWSRegionFallbacks(t *testing.T) {
+	os.Unsetenv("LAUNCHPAD_AWS_REGION")
+	os.Unsetenv("AWS_REGION")
+	os.Unsetenv("AWS_DEFAULT_REGION")
+
+	// Test AWS_REGION fallback
+	os.Setenv("AWS_REGION", "eu-west-1")
+	defer os.Unsetenv("AWS_REGION")
+
+	cfg := LoadConfig()
+	if cfg.AWSRegion != "eu-west-1" {
+		t.Errorf("AWSRegion = %v, want eu-west-1", cfg.AWSRegion)
+	}
+
+	// Test AWS_DEFAULT_REGION fallback
+	os.Unsetenv("AWS_REGION")
+	os.Setenv("AWS_DEFAULT_REGION", "ap-southeast-1")
+	defer os.Unsetenv("AWS_DEFAULT_REGION")
+
+	cfg = LoadConfig()
+	if cfg.AWSRegion != "ap-southeast-1" {
+		t.Errorf("AWSRegion = %v, want ap-southeast-1", cfg.AWSRegion)
+	}
+}
+
+func TestLoadConfig_AWSSecretPrefix(t *testing.T) {
+	os.Setenv("LAUNCHPAD_AWS_SECRET_PREFIX", "prod/launchpad")
+	defer os.Unsetenv("LAUNCHPAD_AWS_SECRET_PREFIX")
+
+	cfg := LoadConfig()
+	if cfg.AWSSecretPrefix != "prod/launchpad" {
+		t.Errorf("AWSSecretPrefix = %v, want prod/launchpad", cfg.AWSSecretPrefix)
+	}
+}
+
+func TestLoadConfig_K8sNamespace(t *testing.T) {
+	os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAMESPACE")
+	os.Unsetenv("LAUNCHPAD_NAMESPACE")
+
+	os.Setenv("LAUNCHPAD_K8S_SECRET_NAMESPACE", "k8s-ns")
+	defer os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAMESPACE")
+
+	cfg := LoadConfig()
+	if cfg.K8sNamespace != "k8s-ns" {
+		t.Errorf("K8sNamespace = %v, want k8s-ns", cfg.K8sNamespace)
+	}
+}
+
+func TestLoadConfig_K8sNamespaceFallback(t *testing.T) {
+	os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAMESPACE")
+	os.Setenv("LAUNCHPAD_NAMESPACE", "fallback-ns")
+	defer os.Unsetenv("LAUNCHPAD_NAMESPACE")
+
+	cfg := LoadConfig()
+	if cfg.K8sNamespace != "fallback-ns" {
+		t.Errorf("K8sNamespace = %v, want fallback-ns", cfg.K8sNamespace)
+	}
+}
+
+func TestLoadConfig_K8sSecretName(t *testing.T) {
+	os.Setenv("LAUNCHPAD_K8S_SECRET_NAME", "my-secret")
+	defer os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAME")
+
+	cfg := LoadConfig()
+	if cfg.K8sSecretName != "my-secret" {
+		t.Errorf("K8sSecretName = %v, want my-secret", cfg.K8sSecretName)
+	}
+}
+
+func TestLoadConfig_Kubeconfig(t *testing.T) {
+	os.Setenv("KUBECONFIG", "/tmp/kubeconfig")
+	defer os.Unsetenv("KUBECONFIG")
+
+	cfg := LoadConfig()
+	if cfg.K8sKubeconfig != "/tmp/kubeconfig" {
+		t.Errorf("K8sKubeconfig = %v, want /tmp/kubeconfig", cfg.K8sKubeconfig)
+	}
+	if cfg.K8sInCluster {
+		t.Error("K8sInCluster should be false when KUBECONFIG is set")
+	}
+}
+
+func TestEnvProvider_Name(t *testing.T) {
+	p := NewEnvProvider()
+	if got := p.Name(); got != "env" {
+		t.Errorf("Name() = %v, want env", got)
+	}
+}
+
+func TestEnvProvider_Close(t *testing.T) {
+	p := NewEnvProvider()
+	if err := p.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestNewEnvProviderWithPrefix(t *testing.T) {
+	p := NewEnvProviderWithPrefix("CUSTOM_PREFIX_")
+
+	os.Setenv("CUSTOM_PREFIX_MY_KEY", "custom-value")
+	defer os.Unsetenv("CUSTOM_PREFIX_MY_KEY")
+
+	value, err := p.Get(context.Background(), "my_key")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if value != "custom-value" {
+		t.Errorf("Get() = %v, want custom-value", value)
+	}
+}
+
+func TestEnvProvider_GetWithMetadata_NotFound(t *testing.T) {
+	p := NewEnvProvider()
+	_, err := p.GetWithMetadata(context.Background(), "definitely_not_set_meta_test")
+	if err != ErrSecretNotFound {
+		t.Errorf("GetWithMetadata() error = %v, want ErrSecretNotFound", err)
+	}
+}
+
+func TestEnvProvider_ListEmpty(t *testing.T) {
+	// Use a custom prefix that no env vars should match
+	p := NewEnvProviderWithPrefix("XYZZY_TEST_PREFIX_")
+	keys, err := p.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(keys) != 0 {
+		t.Errorf("List() returned %d keys, want 0", len(keys))
+	}
+}
+
+func TestProviderInterface(t *testing.T) {
+	// Verify that EnvProvider implements the Provider interface
+	var _ Provider = (*EnvProvider)(nil)
+	var _ Provider = (*VaultProvider)(nil)
+	var _ Provider = (*AWSProvider)(nil)
+	var _ Provider = (*KubernetesProvider)(nil)
+}
+
+func TestNewManager_EnvProvider(t *testing.T) {
+	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer mgr.Close()
+
+	if mgr.ProviderName() != "env" {
+		t.Errorf("ProviderName() = %v, want env", mgr.ProviderName())
+	}
+}
+
+func TestLoadConfig_ProviderCaseInsensitive(t *testing.T) {
+	os.Setenv("LAUNCHPAD_SECRETS_PROVIDER", "VAULT")
+	defer os.Unsetenv("LAUNCHPAD_SECRETS_PROVIDER")
+
+	cfg := LoadConfig()
+	if cfg.Provider != ProviderType("vault") {
+		t.Errorf("Provider = %v, want vault (lowercase)", cfg.Provider)
+	}
+}
