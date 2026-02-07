@@ -1221,6 +1221,146 @@ func TestAppSpecCRUD(t *testing.T) {
 	})
 }
 
+func TestQueryAuditLogs(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Insert test audit entries
+	actions := []struct {
+		user, action, details string
+	}{
+		{"alice", "LOGIN", "User alice logged in"},
+		{"bob", "LOGIN", "User bob logged in"},
+		{"alice", "CREATE_SESSION", "Created session for app-1"},
+		{"alice", "STOP_SESSION", "Stopped session sess-1"},
+		{"admin", "CREATE_APP", "Created app: TestApp"},
+		{"bob", "CREATE_SESSION", "Created session for app-2"},
+	}
+	for _, a := range actions {
+		if err := db.LogAudit(a.user, a.action, a.details); err != nil {
+			t.Fatalf("LogAudit() error = %v", err)
+		}
+	}
+
+	t.Run("unfiltered returns all", func(t *testing.T) {
+		page, err := db.QueryAuditLogs(AuditLogFilter{Limit: 50})
+		if err != nil {
+			t.Fatalf("QueryAuditLogs() error = %v", err)
+		}
+		if page.Total != 6 {
+			t.Errorf("got Total = %d, want 6", page.Total)
+		}
+		if len(page.Logs) != 6 {
+			t.Errorf("got %d logs, want 6", len(page.Logs))
+		}
+	})
+
+	t.Run("filter by user", func(t *testing.T) {
+		page, err := db.QueryAuditLogs(AuditLogFilter{User: "alice", Limit: 50})
+		if err != nil {
+			t.Fatalf("QueryAuditLogs() error = %v", err)
+		}
+		if page.Total != 3 {
+			t.Errorf("got Total = %d, want 3", page.Total)
+		}
+		for _, log := range page.Logs {
+			if log.User != "alice" {
+				t.Errorf("got User = %s, want alice", log.User)
+			}
+		}
+	})
+
+	t.Run("filter by action", func(t *testing.T) {
+		page, err := db.QueryAuditLogs(AuditLogFilter{Action: "LOGIN", Limit: 50})
+		if err != nil {
+			t.Fatalf("QueryAuditLogs() error = %v", err)
+		}
+		if page.Total != 2 {
+			t.Errorf("got Total = %d, want 2", page.Total)
+		}
+	})
+
+	t.Run("filter by user and action", func(t *testing.T) {
+		page, err := db.QueryAuditLogs(AuditLogFilter{User: "alice", Action: "CREATE_SESSION", Limit: 50})
+		if err != nil {
+			t.Fatalf("QueryAuditLogs() error = %v", err)
+		}
+		if page.Total != 1 {
+			t.Errorf("got Total = %d, want 1", page.Total)
+		}
+	})
+
+	t.Run("pagination", func(t *testing.T) {
+		page1, err := db.QueryAuditLogs(AuditLogFilter{Limit: 2, Offset: 0})
+		if err != nil {
+			t.Fatalf("QueryAuditLogs() error = %v", err)
+		}
+		if len(page1.Logs) != 2 {
+			t.Errorf("got %d logs, want 2", len(page1.Logs))
+		}
+		if page1.Total != 6 {
+			t.Errorf("got Total = %d, want 6", page1.Total)
+		}
+
+		page2, err := db.QueryAuditLogs(AuditLogFilter{Limit: 2, Offset: 2})
+		if err != nil {
+			t.Fatalf("QueryAuditLogs() error = %v", err)
+		}
+		if len(page2.Logs) != 2 {
+			t.Errorf("got %d logs, want 2", len(page2.Logs))
+		}
+		// Pages should have different entries
+		if page1.Logs[0].ID == page2.Logs[0].ID {
+			t.Error("page1 and page2 should have different entries")
+		}
+	})
+
+	t.Run("default limit applied", func(t *testing.T) {
+		page, err := db.QueryAuditLogs(AuditLogFilter{})
+		if err != nil {
+			t.Fatalf("QueryAuditLogs() error = %v", err)
+		}
+		if page.Total != 6 {
+			t.Errorf("got Total = %d, want 6", page.Total)
+		}
+		// Default limit is 50, which is more than 6, so all returned
+		if len(page.Logs) != 6 {
+			t.Errorf("got %d logs, want 6", len(page.Logs))
+		}
+	})
+}
+
+func TestGetAuditLogActions(t *testing.T) {
+	db := setupTestDB(t)
+
+	db.LogAudit("alice", "LOGIN", "test")
+	db.LogAudit("bob", "CREATE_SESSION", "test")
+	db.LogAudit("alice", "LOGIN", "test2")
+
+	actions, err := db.GetAuditLogActions()
+	if err != nil {
+		t.Fatalf("GetAuditLogActions() error = %v", err)
+	}
+	if len(actions) != 2 {
+		t.Fatalf("got %d actions, want 2", len(actions))
+	}
+}
+
+func TestGetAuditLogUsers(t *testing.T) {
+	db := setupTestDB(t)
+
+	db.LogAudit("alice", "LOGIN", "test")
+	db.LogAudit("bob", "LOGIN", "test")
+	db.LogAudit("alice", "LOGOUT", "test")
+
+	users, err := db.GetAuditLogUsers()
+	if err != nil {
+		t.Fatalf("GetAuditLogUsers() error = %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("got %d users, want 2", len(users))
+	}
+}
+
 // --- Stale sessions tests ---
 
 func TestGetStaleSessions(t *testing.T) {

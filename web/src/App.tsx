@@ -5,6 +5,7 @@ import { SessionPage } from './components/SessionPage';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
 import { Admin } from './components/Admin';
+import { AuditLog } from './components/AuditLog';
 import { SessionManager } from './components/SessionManager';
 import { TemplateBrowser } from './components/templates/TemplateBrowser';
 import {
@@ -50,6 +51,7 @@ function App() {
   const [isTemplateBrowserOpen, setIsTemplateBrowserOpen] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showAuditLog, setShowAuditLog] = useState(false);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [allowRegistration, setAllowRegistration] = useState(false);
   const [showKeyboardHint, setShowKeyboardHint] = useState(false);
@@ -436,6 +438,19 @@ function App() {
                   </span>
                 )}
               </button>
+              {/* Audit Log button (only for admins) */}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAuditLog(true)}
+                  className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                  aria-label="Audit log"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="hidden sm:inline">Audit</span>
+                </button>
+              )}
               {/* Admin button (only for admins) */}
               {isAdmin && (
                 <button
@@ -869,6 +884,14 @@ function App() {
         <Admin
           darkMode={darkMode}
           onClose={() => setShowAdmin(false)}
+        />
+      )}
+
+      {/* Audit Log */}
+      {showAuditLog && isAdmin && (
+        <AuditLog
+          darkMode={darkMode}
+          onClose={() => setShowAuditLog(false)}
         />
       )}
 

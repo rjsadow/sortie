@@ -105,3 +105,22 @@ export interface TemplateCatalog {
   version: string;
   templates: ApplicationTemplate[];
 }
+
+// Audit log types
+export interface AuditLogEntry {
+  id: number;
+  timestamp: string;
+  user: string;
+  action: string;
+  details: string;
+}
+
+export interface AuditLogPage {
+  logs: AuditLogEntry[];
+  total: number;
+}
+
+export interface AuditLogFilters {
+  actions: string[];
+  users: string[];
+}

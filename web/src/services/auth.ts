@@ -488,3 +488,56 @@ export async function deleteApp(id: string): Promise<void> {
     throw new Error(error || 'Failed to delete app');
   }
 }
+
+// Audit log types
+import type { AuditLogPage, AuditLogFilters } from '../types';
+
+// Audit: Query audit logs with filtering and pagination
+export async function queryAuditLogs(params: {
+  user?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<AuditLogPage> {
+  const searchParams = new URLSearchParams();
+  if (params.user) searchParams.set('user', params.user);
+  if (params.action) searchParams.set('action', params.action);
+  if (params.from) searchParams.set('from', params.from);
+  if (params.to) searchParams.set('to', params.to);
+  if (params.limit) searchParams.set('limit', String(params.limit));
+  if (params.offset) searchParams.set('offset', String(params.offset));
+
+  const response = await fetchWithAuth(`/api/audit?${searchParams.toString()}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch audit logs');
+  }
+  return response.json();
+}
+
+// Audit: Get available filter values (distinct users and actions)
+export async function getAuditFilters(): Promise<AuditLogFilters> {
+  const response = await fetchWithAuth('/api/audit/filters');
+  if (!response.ok) {
+    throw new Error('Failed to fetch audit filters');
+  }
+  return response.json();
+}
+
+// Audit: Get export URL for downloading audit logs
+export function getAuditExportUrl(params: {
+  format: 'json' | 'csv';
+  user?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+}): string {
+  const searchParams = new URLSearchParams();
+  searchParams.set('format', params.format);
+  if (params.user) searchParams.set('user', params.user);
+  if (params.action) searchParams.set('action', params.action);
+  if (params.from) searchParams.set('from', params.from);
+  if (params.to) searchParams.set('to', params.to);
+  return `/api/audit/export?${searchParams.toString()}`;
+}

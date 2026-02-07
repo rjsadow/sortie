@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -186,6 +187,8 @@ func main() {
 
 	// Audit logs: admin only
 	mux.Handle("/api/audit", authMiddleware(requireAdmin(http.HandlerFunc(handleAuditLogs))))
+	mux.Handle("/api/audit/export", authMiddleware(requireAdmin(http.HandlerFunc(handleAuditExport))))
+	mux.Handle("/api/audit/filters", authMiddleware(requireAdmin(http.HandlerFunc(handleAuditFilters))))
 
 	// Analytics: stats admin-only, launch recording any authenticated user
 	mux.Handle("/api/analytics/launch", authMiddleware(http.HandlerFunc(handleAnalyticsLaunch)))
@@ -624,26 +627,168 @@ func handleAppSpecByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAuditLogs returns recent audit log entries
+// handleAuditLogs returns audit log entries with optional filtering and pagination.
+// Query params: user, action, from, to (RFC3339), limit, offset
 func handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	logs, err := database.GetAuditLogs(100)
+	filter, err := parseAuditFilter(r)
 	if err != nil {
-		slog.Error("error getting audit logs", "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	page, err := database.QueryAuditLogs(filter)
+	if err != nil {
+		slog.Error("error querying audit logs", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	if logs == nil {
-		logs = []db.AuditLog{}
+	if page.Logs == nil {
+		page.Logs = []db.AuditLog{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(logs)
+	json.NewEncoder(w).Encode(page)
+}
+
+// handleAuditExport exports audit logs as JSON or CSV.
+// Query params: same as handleAuditLogs plus format=json|csv
+func handleAuditExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	filter, err := parseAuditFilter(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// For export, allow up to 10000 rows
+	if filter.Limit <= 0 || filter.Limit > 10000 {
+		filter.Limit = 10000
+	}
+	filter.Offset = 0
+
+	page, err := database.QueryAuditLogs(filter)
+	if err != nil {
+		slog.Error("error exporting audit logs", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if page.Logs == nil {
+		page.Logs = []db.AuditLog{}
+	}
+
+	format := r.URL.Query().Get("format")
+	if format == "csv" {
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename=audit_log.csv")
+		writeAuditCSV(w, page.Logs)
+		return
+	}
+
+	// Default: JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", "attachment; filename=audit_log.json")
+	json.NewEncoder(w).Encode(page.Logs)
+}
+
+// handleAuditFilters returns distinct users and actions for filter dropdowns
+func handleAuditFilters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	actions, err := database.GetAuditLogActions()
+	if err != nil {
+		slog.Error("error getting audit actions", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	users, err := database.GetAuditLogUsers()
+	if err != nil {
+		slog.Error("error getting audit users", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if actions == nil {
+		actions = []string{}
+	}
+	if users == nil {
+		users = []string{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string][]string{
+		"actions": actions,
+		"users":   users,
+	})
+}
+
+// parseAuditFilter extracts audit log filter parameters from the request
+func parseAuditFilter(r *http.Request) (db.AuditLogFilter, error) {
+	q := r.URL.Query()
+	filter := db.AuditLogFilter{
+		User:   q.Get("user"),
+		Action: q.Get("action"),
+	}
+
+	if from := q.Get("from"); from != "" {
+		t, err := time.Parse(time.RFC3339, from)
+		if err != nil {
+			return filter, fmt.Errorf("invalid 'from' date: %w", err)
+		}
+		filter.From = t
+	}
+	if to := q.Get("to"); to != "" {
+		t, err := time.Parse(time.RFC3339, to)
+		if err != nil {
+			return filter, fmt.Errorf("invalid 'to' date: %w", err)
+		}
+		filter.To = t
+	}
+	if limitStr := q.Get("limit"); limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil {
+			return filter, fmt.Errorf("invalid 'limit': %w", err)
+		}
+		filter.Limit = limit
+	}
+	if offsetStr := q.Get("offset"); offsetStr != "" {
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil {
+			return filter, fmt.Errorf("invalid 'offset': %w", err)
+		}
+		filter.Offset = offset
+	}
+
+	return filter, nil
+}
+
+// writeAuditCSV writes audit log entries as CSV to the writer
+func writeAuditCSV(w io.Writer, logs []db.AuditLog) {
+	fmt.Fprintf(w, "ID,Timestamp,User,Action,Details\n")
+	for _, log := range logs {
+		// Escape CSV fields that may contain commas or quotes
+		details := strings.ReplaceAll(log.Details, "\"", "\"\"")
+		fmt.Fprintf(w, "%d,%s,%s,%s,\"%s\"\n",
+			log.ID,
+			log.Timestamp.Format(time.RFC3339),
+			log.User,
+			log.Action,
+			details,
+		)
+	}
 }
 
 // handleAnalyticsLaunch records an app launch

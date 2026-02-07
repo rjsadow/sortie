@@ -605,6 +605,120 @@ func (db *DB) GetAuditLogs(limit int) ([]AuditLog, error) {
 	return logs, rows.Err()
 }
 
+// AuditLogFilter holds query parameters for filtering audit logs
+type AuditLogFilter struct {
+	User   string
+	Action string
+	From   time.Time
+	To     time.Time
+	Limit  int
+	Offset int
+}
+
+// AuditLogPage holds a page of audit log results with total count
+type AuditLogPage struct {
+	Logs  []AuditLog `json:"logs"`
+	Total int        `json:"total"`
+}
+
+// QueryAuditLogs returns audit logs matching the given filter with pagination
+func (db *DB) QueryAuditLogs(filter AuditLogFilter) (*AuditLogPage, error) {
+	where := "WHERE 1=1"
+	args := []any{}
+
+	if filter.User != "" {
+		where += " AND user = ?"
+		args = append(args, filter.User)
+	}
+	if filter.Action != "" {
+		where += " AND action = ?"
+		args = append(args, filter.Action)
+	}
+	if !filter.From.IsZero() {
+		where += " AND timestamp >= ?"
+		args = append(args, filter.From)
+	}
+	if !filter.To.IsZero() {
+		where += " AND timestamp <= ?"
+		args = append(args, filter.To)
+	}
+
+	// Get total count
+	var total int
+	countQuery := "SELECT COUNT(*) FROM audit_log " + where
+	if err := db.conn.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to count audit logs: %w", err)
+	}
+
+	// Apply pagination defaults
+	limit := filter.Limit
+	if limit <= 0 || limit > 1000 {
+		limit = 50
+	}
+	offset := max(filter.Offset, 0)
+
+	query := "SELECT id, timestamp, user, action, details FROM audit_log " + where + " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+	queryArgs := append(args, limit, offset)
+
+	rows, err := db.conn.Query(query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query audit logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []AuditLog
+	for rows.Next() {
+		var log AuditLog
+		if err := rows.Scan(&log.ID, &log.Timestamp, &log.User, &log.Action, &log.Details); err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &AuditLogPage{Logs: logs, Total: total}, nil
+}
+
+// GetAuditLogActions returns all distinct action values in the audit log
+func (db *DB) GetAuditLogActions() ([]string, error) {
+	rows, err := db.conn.Query("SELECT DISTINCT action FROM audit_log ORDER BY action")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var actions []string
+	for rows.Next() {
+		var action string
+		if err := rows.Scan(&action); err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+	return actions, rows.Err()
+}
+
+// GetAuditLogUsers returns all distinct user values in the audit log
+func (db *DB) GetAuditLogUsers() ([]string, error) {
+	rows, err := db.conn.Query("SELECT DISTINCT user FROM audit_log ORDER BY user")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []string
+	for rows.Next() {
+		var user string
+		if err := rows.Scan(&user); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
 // RecordLaunch records an app launch for analytics
 func (db *DB) RecordLaunch(appID string) error {
 	_, err := db.conn.Exec("INSERT INTO analytics (app_id) VALUES (?)", appID)
