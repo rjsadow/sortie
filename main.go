@@ -159,29 +159,34 @@ func main() {
 
 	// Protected API routes - wrapped with auth middleware
 	authMiddleware := middleware.AuthMiddleware(jwtAuthProvider)
-
-	// Admin routes (protected, admin-only checked in handlers)
-	mux.Handle("/api/admin/settings", authMiddleware(http.HandlerFunc(handleAdminSettings)))
-	mux.Handle("/api/admin/users", authMiddleware(http.HandlerFunc(handleAdminUsers)))
-	mux.Handle("/api/admin/users/", authMiddleware(http.HandlerFunc(handleAdminUserByID)))
-	mux.Handle("/api/admin/sessions", authMiddleware(http.HandlerFunc(handleAdminSessions)))
-	mux.Handle("/api/admin/templates", authMiddleware(http.HandlerFunc(handleAdminTemplates)))
-	mux.Handle("/api/admin/templates/", authMiddleware(http.HandlerFunc(handleAdminTemplateByID)))
+	requireAdmin := middleware.RequireRole(middleware.RoleAdmin)
+	// Admin routes (protected, admin-only via RBAC middleware)
+	mux.Handle("/api/admin/settings", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminSettings))))
+	mux.Handle("/api/admin/users", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminUsers))))
+	mux.Handle("/api/admin/users/", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminUserByID))))
+	mux.Handle("/api/admin/sessions", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminSessions))))
+	mux.Handle("/api/admin/templates", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminTemplates))))
+	mux.Handle("/api/admin/templates/", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminTemplateByID))))
 
 	// Public template endpoints (for template marketplace)
 	mux.HandleFunc("/api/templates", handleTemplates)
 	mux.HandleFunc("/api/templates/", handleTemplateByID)
 
+	// App and AppSpec routes: GET is any authenticated user, mutations require app-author or admin
 	mux.Handle("/api/appspecs", authMiddleware(http.HandlerFunc(handleAppSpecs)))
 	mux.Handle("/api/appspecs/", authMiddleware(http.HandlerFunc(handleAppSpecByID)))
 
 	mux.Handle("/api/apps", authMiddleware(http.HandlerFunc(handleApps)))
 	mux.Handle("/api/apps/", authMiddleware(http.HandlerFunc(handleAppByID)))
-	mux.Handle("/api/audit", authMiddleware(http.HandlerFunc(handleAuditLogs)))
-	mux.Handle("/api/analytics/launch", authMiddleware(http.HandlerFunc(handleAnalyticsLaunch)))
-	mux.Handle("/api/analytics/stats", authMiddleware(http.HandlerFunc(handleAnalyticsStats)))
 
-	// Session API routes (protected)
+	// Audit logs: admin only
+	mux.Handle("/api/audit", authMiddleware(requireAdmin(http.HandlerFunc(handleAuditLogs))))
+
+	// Analytics: stats admin-only, launch recording any authenticated user
+	mux.Handle("/api/analytics/launch", authMiddleware(http.HandlerFunc(handleAnalyticsLaunch)))
+	mux.Handle("/api/analytics/stats", authMiddleware(requireAdmin(http.HandlerFunc(handleAnalyticsStats))))
+
+	// Session API routes (any authenticated user)
 	mux.Handle("/api/sessions", authMiddleware(http.HandlerFunc(handleSessions)))
 	mux.Handle("/api/sessions/", authMiddleware(http.HandlerFunc(handleSessionByID)))
 
@@ -280,6 +285,12 @@ func handleApps(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(apps)
 
 	case http.MethodPost:
+		user := middleware.GetUserFromContext(r.Context())
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
 		var app db.Application
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -320,7 +331,7 @@ func handleApps(w http.ResponseWriter, r *http.Request) {
 
 		// Log the action
 		details := fmt.Sprintf("Created app: %s (%s)", app.Name, app.ID)
-		database.LogAudit("admin", "CREATE_APP", details)
+		database.LogAudit(user.Username, "CREATE_APP", details)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -357,6 +368,12 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(app)
 
 	case http.MethodPut:
+		user := middleware.GetUserFromContext(r.Context())
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
 		var app db.Application
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -400,12 +417,18 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 
 		// Log the action
 		details := fmt.Sprintf("Updated app: %s (%s)", app.Name, app.ID)
-		database.LogAudit("admin", "UPDATE_APP", details)
+		database.LogAudit(user.Username, "UPDATE_APP", details)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(app)
 
 	case http.MethodDelete:
+		user := middleware.GetUserFromContext(r.Context())
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
 		// Get app name before deleting for audit log
 		app, err := database.GetApp(id)
 		if err != nil {
@@ -426,7 +449,7 @@ func handleAppByID(w http.ResponseWriter, r *http.Request) {
 
 		// Log the action
 		details := fmt.Sprintf("Deleted app: %s (%s)", app.Name, id)
-		database.LogAudit("admin", "DELETE_APP", details)
+		database.LogAudit(user.Username, "DELETE_APP", details)
 
 		w.WriteHeader(http.StatusNoContent)
 
@@ -454,6 +477,12 @@ func handleAppSpecs(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(specs)
 
 	case http.MethodPost:
+		user := middleware.GetUserFromContext(r.Context())
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
 		var spec db.AppSpec
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -481,12 +510,7 @@ func handleAppSpecs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		user := middleware.GetUserFromContext(r.Context())
-		username := "unknown"
-		if user != nil {
-			username = user.Username
-		}
-		database.LogAudit(username, "CREATE_APPSPEC", fmt.Sprintf("Created app spec: %s (%s)", spec.Name, spec.ID))
+		database.LogAudit(user.Username, "CREATE_APPSPEC", fmt.Sprintf("Created app spec: %s (%s)", spec.Name, spec.ID))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -522,6 +546,12 @@ func handleAppSpecByID(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(spec)
 
 	case http.MethodPut:
+		user := middleware.GetUserFromContext(r.Context())
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
 		var spec db.AppSpec
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -551,17 +581,18 @@ func handleAppSpecByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		user := middleware.GetUserFromContext(r.Context())
-		username := "unknown"
-		if user != nil {
-			username = user.Username
-		}
-		database.LogAudit(username, "UPDATE_APPSPEC", fmt.Sprintf("Updated app spec: %s (%s)", spec.Name, spec.ID))
+		database.LogAudit(user.Username, "UPDATE_APPSPEC", fmt.Sprintf("Updated app spec: %s (%s)", spec.Name, spec.ID))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(spec)
 
 	case http.MethodDelete:
+		user := middleware.GetUserFromContext(r.Context())
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
 		spec, err := database.GetAppSpec(id)
 		if err != nil {
 			slog.Error("error getting app spec", "error", err)
@@ -579,12 +610,7 @@ func handleAppSpecByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		user := middleware.GetUserFromContext(r.Context())
-		username := "unknown"
-		if user != nil {
-			username = user.Username
-		}
-		database.LogAudit(username, "DELETE_APPSPEC", fmt.Sprintf("Deleted app spec: %s (%s)", spec.Name, id))
+		database.LogAudit(user.Username, "DELETE_APPSPEC", fmt.Sprintf("Deleted app spec: %s (%s)", spec.Name, id))
 
 		w.WriteHeader(http.StatusNoContent)
 
@@ -1288,27 +1314,8 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-// isAdmin checks if the user from context has admin role
-func isAdmin(r *http.Request) bool {
-	user := middleware.GetUserFromContext(r.Context())
-	if user == nil {
-		return false
-	}
-	for _, role := range user.Roles {
-		if role == "admin" {
-			return true
-		}
-	}
-	return false
-}
-
 // handleAdminSettings handles GET/PUT /api/admin/settings
 func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
-	if !isAdmin(r) {
-		http.Error(w, "Admin access required", http.StatusForbidden)
-		return
-	}
-
 	switch r.Method {
 	case http.MethodGet:
 		settings, err := database.GetAllSettings()
@@ -1366,11 +1373,6 @@ func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminSessions handles GET /api/admin/sessions (admin only)
 func handleAdminSessions(w http.ResponseWriter, r *http.Request) {
-	if !isAdmin(r) {
-		http.Error(w, "Admin access required", http.StatusForbidden)
-		return
-	}
-
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -1414,11 +1416,6 @@ func handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminUsers handles GET/POST /api/admin/users
 func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
-	if !isAdmin(r) {
-		http.Error(w, "Admin access required", http.StatusForbidden)
-		return
-	}
-
 	switch r.Method {
 	case http.MethodGet:
 		users, err := database.ListUsers()
@@ -1543,11 +1540,6 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminUserByID handles DELETE /api/admin/users/{id}
 func handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
-	if !isAdmin(r) {
-		http.Error(w, "Admin access required", http.StatusForbidden)
-		return
-	}
-
 	id := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
 	if id == "" {
 		http.Error(w, "User ID required", http.StatusBadRequest)
@@ -1643,11 +1635,6 @@ func handleTemplateByID(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminTemplates handles GET/POST /api/admin/templates (admin only)
 func handleAdminTemplates(w http.ResponseWriter, r *http.Request) {
-	if !isAdmin(r) {
-		http.Error(w, "Admin access required", http.StatusForbidden)
-		return
-	}
-
 	switch r.Method {
 	case http.MethodGet:
 		templates, err := database.ListTemplates()
@@ -1728,11 +1715,6 @@ func handleAdminTemplates(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminTemplateByID handles PUT/DELETE /api/admin/templates/{id} (admin only)
 func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
-	if !isAdmin(r) {
-		http.Error(w, "Admin access required", http.StatusForbidden)
-		return
-	}
-
 	templateID := strings.TrimPrefix(r.URL.Path, "/api/admin/templates/")
 	if templateID == "" {
 		http.Error(w, "Template ID required", http.StatusBadRequest)

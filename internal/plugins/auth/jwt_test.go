@@ -445,8 +445,8 @@ func TestHasPermission(t *testing.T) {
 		}
 	})
 
-	t.Run("regular user lacks permission", func(t *testing.T) {
-		has, err := provider.HasPermission(context.Background(), regular.ID, "anything")
+	t.Run("regular user lacks admin permission", func(t *testing.T) {
+		has, err := provider.HasPermission(context.Background(), regular.ID, "admin")
 		if err != nil {
 			t.Fatalf("HasPermission failed: %v", err)
 		}
@@ -455,8 +455,39 @@ func TestHasPermission(t *testing.T) {
 		}
 	})
 
+	t.Run("regular user lacks app-author permission", func(t *testing.T) {
+		has, err := provider.HasPermission(context.Background(), regular.ID, "app-author")
+		if err != nil {
+			t.Fatalf("HasPermission failed: %v", err)
+		}
+		if has {
+			t.Error("regular user should not have app-author permission")
+		}
+	})
+
+	t.Run("regular user has basic permission", func(t *testing.T) {
+		has, err := provider.HasPermission(context.Background(), regular.ID, "view")
+		if err != nil {
+			t.Fatalf("HasPermission failed: %v", err)
+		}
+		if !has {
+			t.Error("regular user should have basic permissions")
+		}
+	})
+
+	t.Run("app-author has app-author permission", func(t *testing.T) {
+		author := seedTestUser(t, database, "author", "pass", []string{"app-author", "user"})
+		has, err := provider.HasPermission(context.Background(), author.ID, "app-author")
+		if err != nil {
+			t.Fatalf("HasPermission failed: %v", err)
+		}
+		if !has {
+			t.Error("app-author should have app-author permission")
+		}
+	})
+
 	t.Run("nonexistent user", func(t *testing.T) {
-		has, err := provider.HasPermission(context.Background(), "nonexistent", "anything")
+		has, err := provider.HasPermission(context.Background(), "nonexistent", "admin")
 		if err != nil {
 			t.Fatalf("HasPermission failed: %v", err)
 		}

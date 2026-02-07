@@ -330,7 +330,9 @@ func (p *JWTAuthProvider) GetUser(ctx context.Context, userID string) (*plugins.
 	}, nil
 }
 
-// HasPermission checks if a user has a specific permission
+// HasPermission checks if a user has a specific permission.
+// Permissions map to roles: "admin" requires admin, "app-author" requires
+// admin or app-author, all other permissions require any authenticated user.
 func (p *JWTAuthProvider) HasPermission(ctx context.Context, userID, permission string) (bool, error) {
 	if p.database == nil {
 		return false, errors.New("database not configured")
@@ -344,8 +346,20 @@ func (p *JWTAuthProvider) HasPermission(ctx context.Context, userID, permission 
 		return false, nil
 	}
 
-	// Simple role-based check: admin has all permissions
-	return slices.Contains(user.Roles, "admin"), nil
+	// Admin has all permissions
+	if slices.Contains(user.Roles, "admin") {
+		return true, nil
+	}
+
+	switch permission {
+	case "admin":
+		return false, nil
+	case "app-author":
+		return slices.Contains(user.Roles, "app-author"), nil
+	default:
+		// Any authenticated user has basic permissions
+		return true, nil
+	}
 }
 
 // GetLoginURL returns the URL for initiating login
