@@ -23,7 +23,7 @@ type KubernetesProvider struct {
 // NewKubernetesProvider creates a new Kubernetes secrets provider.
 func NewKubernetesProvider(cfg *Config) (*KubernetesProvider, error) {
 	if cfg.K8sSecretName == "" {
-		return nil, fmt.Errorf("Kubernetes secret name is required")
+		return nil, fmt.Errorf("kubernetes secret name is required")
 	}
 
 	var config *rest.Config

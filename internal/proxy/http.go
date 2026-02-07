@@ -178,7 +178,7 @@ func (p *HTTPProxy) handleWebSocket(w http.ResponseWriter, r *http.Request, targ
 	defer rawConn.Close()
 
 	// Wrap with TLS if needed
-	var backendConn net.Conn = rawConn
+	backendConn := net.Conn(rawConn)
 	if useTLS {
 		tlsConn := tls.Client(rawConn, &tls.Config{
 			InsecureSkipVerify: true, // Internal pod connections use self-signed certs
