@@ -52,6 +52,7 @@ function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [allowRegistration, setAllowRegistration] = useState(false);
+  const [showKeyboardHint, setShowKeyboardHint] = useState(false);
   const appRefs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
 
   const { sessions } = useSessions(true);
@@ -222,22 +223,26 @@ function App() {
       switch (e.key) {
         case 'ArrowRight':
           e.preventDefault();
+          setShowKeyboardHint(true);
           setFocusedIndex((prev) =>
             prev < visibleApps.length - 1 ? prev + 1 : prev
           );
           break;
         case 'ArrowLeft':
           e.preventDefault();
+          setShowKeyboardHint(true);
           setFocusedIndex((prev) => (prev > 0 ? prev - 1 : prev));
           break;
         case 'ArrowDown':
           e.preventDefault();
+          setShowKeyboardHint(true);
           setFocusedIndex((prev) =>
             prev + columns < visibleApps.length ? prev + columns : prev
           );
           break;
         case 'ArrowUp':
           e.preventDefault();
+          setShowKeyboardHint(true);
           setFocusedIndex((prev) => (prev - columns >= 0 ? prev - columns : prev));
           break;
         case 'Enter':
@@ -272,10 +277,10 @@ function App() {
     }
   }, [focusedIndex]);
 
-  // Reset focus when search changes
+  // Reset focus when search or category filter changes
   useEffect(() => {
     setFocusedIndex(-1);
-  }, [search]);
+  }, [search, selectedCategory]);
 
   const handleLogin = (loggedInUser: User) => {
     setStoredUser(loggedInUser);
@@ -362,7 +367,7 @@ function App() {
   let appIndex = 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col">
       {/* Header */}
       <header className="bg-brand-primary text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -501,11 +506,13 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {/* Keyboard hint */}
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Use arrow keys to navigate, Enter to launch, Escape to clear focus
-        </p>
+      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 flex-grow w-full">
+        {/* Keyboard hint - shown after first arrow key press */}
+        {showKeyboardHint && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 animate-in fade-in">
+            Use arrow keys to navigate, Enter to launch, Escape to clear focus
+          </p>
+        )}
 
         {/* Category filter tabs */}
         {allCategories.length > 1 && (
@@ -568,9 +575,12 @@ function App() {
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Favorites Section */}
-            {favoriteApps.length > 0 && (
+          <div className="space-y-4">
+            {/* Favorites Section - hidden when redundant with visible categories */}
+            {favoriteApps.length > 0 && apps.length > 3 && (() => {
+              const favCategories = new Set(favoriteApps.map(a => a.category));
+              return favCategories.size > 1 || [...favCategories].some(c => collapsedCategories.has(c));
+            })() && (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-yellow-200 dark:border-yellow-700 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20">
                   <svg className="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
@@ -588,29 +598,23 @@ function App() {
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
                             <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
-                            {isContainerApp && (
-                              <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
-                                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                              </div>
-                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent truncate">{app.name}</h3>
+                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent line-clamp-2">{app.name}</h3>
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{app.description}</p>
+                            {isContainerApp && (
+                              <span className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${app.launch_type === 'web_proxy' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                {app.launch_type === 'web_proxy' ? 'Web App' : 'Container'}
+                              </span>
+                            )}
                           </div>
-                          <div className="flex flex-col gap-1 flex-shrink-0">
+                          <div className="flex-shrink-0">
                             <button onClick={(e) => toggleFavorite(app.id, e)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" aria-label="Remove from favorites" title="Remove from favorites">
                               <svg className="w-4 h-4 text-yellow-500 fill-yellow-500" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                               </svg>
                             </button>
-                            <svg className="w-4 h-4 text-gray-400 group-hover:text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              {isContainerApp ? (
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                              ) : (
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              )}
-                            </svg>
                           </div>
                         </div>
                       );
@@ -625,8 +629,11 @@ function App() {
               </div>
             )}
 
-            {/* Recent Apps Section */}
-            {recentAppsList.length > 0 && (
+            {/* Recent Apps Section - hidden when redundant with visible categories */}
+            {recentAppsList.length > 0 && apps.length > 3 && (() => {
+              const recentCategories = new Set(recentAppsList.map(a => a.category));
+              return recentCategories.size > 1 || [...recentCategories].some(c => collapsedCategories.has(c));
+            })() && (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-blue-200 dark:border-blue-700 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20">
                   <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -645,29 +652,23 @@ function App() {
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
                             <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
-                            {isContainerApp && (
-                              <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
-                                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                              </div>
-                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent truncate">{app.name}</h3>
+                            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent line-clamp-2">{app.name}</h3>
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{app.description}</p>
+                            {isContainerApp && (
+                              <span className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${app.launch_type === 'web_proxy' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                {app.launch_type === 'web_proxy' ? 'Web App' : 'Container'}
+                              </span>
+                            )}
                           </div>
-                          <div className="flex flex-col gap-1 flex-shrink-0">
+                          <div className="flex-shrink-0">
                             <button onClick={(e) => toggleFavorite(app.id, e)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'} title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}>
                               <svg className={`w-4 h-4 ${isFavorited ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 group-hover:text-gray-500'}`} fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                               </svg>
                             </button>
-                            <svg className="w-4 h-4 text-gray-400 group-hover:text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              {isContainerApp ? (
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                              ) : (
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              )}
-                            </svg>
                           </div>
                         </div>
                       );
@@ -691,7 +692,7 @@ function App() {
                   {/* Category header - clickable to collapse */}
                   <button
                     onClick={() => toggleCategory(category)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <svg
@@ -702,15 +703,15 @@ function App() {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{category}</h2>
+                      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{category}</h2>
                       <span className="text-sm text-gray-500 dark:text-gray-400">({categoryApps.length})</span>
                     </div>
                   </button>
 
                   {/* Category apps */}
                   {!isCollapsed && (
-                    <div className="p-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="px-4 py-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {categoryApps.map((app) => {
                           const currentIndex = appIndex++;
                           const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
@@ -735,23 +736,22 @@ function App() {
                                       '</text></svg>';
                                   }}
                                 />
-                                {isContainerApp && (
-                                  <div className={`absolute -top-1 -right-1 w-4 h-4 ${app.launch_type === 'web_proxy' ? 'bg-purple-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`} title={app.launch_type === 'web_proxy' ? 'Web App' : 'Container App'}>
-                                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                                    </svg>
-                                  </div>
-                                )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent truncate">
+                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-accent line-clamp-2">
                                   {app.name}
                                 </h3>
                                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                                   {app.description}
                                 </p>
+                                {isContainerApp && (
+                                  <span className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${app.launch_type === 'web_proxy' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                    {app.launch_type === 'web_proxy' ? 'Web App' : 'Container'}
+                                  </span>
+                                )}
                               </div>
-                              <div className="flex flex-col gap-1 flex-shrink-0">
+                              <div className="flex-shrink-0">
                                 <button
                                   onClick={(e) => toggleFavorite(app.id, e)}
                                   className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
@@ -772,28 +772,6 @@ function App() {
                                     />
                                   </svg>
                                 </button>
-                                <svg
-                                  className="w-4 h-4 text-gray-400 group-hover:text-brand-accent"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  {isContainerApp ? (
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                    />
-                                  ) : (
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                                    />
-                                  )}
-                                </svg>
                               </div>
                             </div>
                           );
@@ -843,6 +821,28 @@ function App() {
                 </div>
               );
             })}
+
+            {/* Getting started prompt for sparse dashboards */}
+            {apps.length <= 1 && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center">
+                <svg className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                </svg>
+                <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Get started</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Browse the Template Marketplace to add pre-configured applications
+                </p>
+                <button
+                  onClick={() => setIsTemplateBrowserOpen(true)}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-accent text-white text-sm font-medium hover:bg-brand-accent/90 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  Browse Templates
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
