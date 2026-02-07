@@ -19,13 +19,14 @@ import (
 	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
 	"github.com/rjsadow/launchpad/internal/files"
-	"github.com/rjsadow/launchpad/internal/guacamole"
+	"github.com/rjsadow/launchpad/internal/gateway"
 	"github.com/rjsadow/launchpad/internal/k8s"
 	"github.com/rjsadow/launchpad/internal/middleware"
 	"github.com/rjsadow/launchpad/internal/plugins"
 	"github.com/rjsadow/launchpad/internal/plugins/auth"
 	"github.com/rjsadow/launchpad/internal/sessions"
-	"github.com/rjsadow/launchpad/internal/websocket"
+
+	"golang.org/x/time/rate"
 )
 
 //go:embed all:web/dist
@@ -125,8 +126,26 @@ func main() {
 	sessionManager.Start()
 	defer sessionManager.Stop()
 
-	// Initialize WebSocket handler
-	wsHandler := websocket.NewHandler(sessionManager)
+	// Initialize gateway handler (WebSocket proxy with auth + rate limiting)
+	var gwHandler *gateway.Handler
+	if appConfig.JWTSecret != "" {
+		var rl *gateway.RateLimiter
+		if appConfig.GatewayRateLimit > 0 {
+			rl = gateway.NewRateLimiter(rate.Limit(appConfig.GatewayRateLimit), appConfig.GatewayBurst)
+			slog.Info("Gateway rate limiter enabled",
+				"rate", appConfig.GatewayRateLimit,
+				"burst", appConfig.GatewayBurst)
+		}
+		gwHandler = gateway.NewHandler(gateway.Config{
+			SessionManager: sessionManager,
+			AuthProvider:   jwtAuthProvider,
+			Database:       database,
+			RateLimiter:    rl,
+		})
+		slog.Info("Gateway service initialized with auth and rate limiting")
+	} else {
+		slog.Warn("Gateway disabled: LAUNCHPAD_JWT_SECRET not set, WebSocket endpoints unprotected")
+	}
 
 	// Initialize file transfer handler
 	fileHandler = files.NewHandler(sessionManager, database, appConfig.MaxUploadSize)
@@ -198,12 +217,12 @@ func main() {
 	mux.Handle("/api/sessions", authMiddleware(http.HandlerFunc(handleSessions)))
 	mux.Handle("/api/sessions/", authMiddleware(http.HandlerFunc(handleSessionByID)))
 
-	// WebSocket route for session VNC streams
-	mux.Handle("/ws/sessions/", wsHandler)
-
-	// WebSocket route for Guacamole (Windows RDP) streams
-	guacHandler := guacamole.NewHandler(sessionManager)
-	mux.Handle("/ws/guac/sessions/", guacHandler)
+	// WebSocket routes for session streams (VNC + Guacamole/RDP)
+	// When auth is configured, the gateway enforces authorization and rate limiting.
+	if gwHandler != nil {
+		mux.Handle("/ws/sessions/", gwHandler)
+		mux.Handle("/ws/guac/sessions/", gwHandler)
+	}
 
 	// Serve apps.json from database (for frontend compatibility)
 	mux.HandleFunc("/apps.json", handleAppsJSON)

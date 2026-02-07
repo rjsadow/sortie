@@ -47,6 +47,10 @@ type Config struct {
 
 	// File transfer configuration
 	MaxUploadSize int64 // Maximum upload file size in bytes
+
+	// Gateway configuration
+	GatewayRateLimit float64 // Requests per second per IP (0 = disabled)
+	GatewayBurst     int     // Maximum burst size for rate limiter
 }
 
 // ValidationError represents a configuration validation error.
@@ -91,6 +95,8 @@ const (
 	DefaultJWTRefreshExpiry       = 24 * time.Hour
 	DefaultAdminUsername          = "admin"
 	DefaultMaxUploadSize         = int64(100 * 1024 * 1024) // 100MB
+	DefaultGatewayRateLimit      = float64(10)              // 10 requests/sec per IP
+	DefaultGatewayBurst          = 20                       // burst of 20
 )
 
 // Load reads configuration from environment variables and returns a Config.
@@ -125,6 +131,10 @@ func Load() (*Config, error) {
 
 		// File transfer defaults
 		MaxUploadSize: DefaultMaxUploadSize,
+
+		// Gateway defaults
+		GatewayRateLimit: DefaultGatewayRateLimit,
+		GatewayBurst:     DefaultGatewayBurst,
 	}
 
 	// Load from environment variables
@@ -321,6 +331,41 @@ func (c *Config) loadFromEnv() error {
 			})
 		} else {
 			c.MaxUploadSize = size
+		}
+	}
+
+	// Gateway configuration
+	if v := os.Getenv("LAUNCHPAD_GATEWAY_RATE_LIMIT"); v != "" {
+		rl, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_GATEWAY_RATE_LIMIT",
+				Message: fmt.Sprintf("invalid rate: %q (must be a number)", v),
+			})
+		} else if rl < 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_GATEWAY_RATE_LIMIT",
+				Message: fmt.Sprintf("rate must be non-negative: %v", rl),
+			})
+		} else {
+			c.GatewayRateLimit = rl
+		}
+	}
+
+	if v := os.Getenv("LAUNCHPAD_GATEWAY_BURST"); v != "" {
+		b, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_GATEWAY_BURST",
+				Message: fmt.Sprintf("invalid burst: %q (must be an integer)", v),
+			})
+		} else if b < 1 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_GATEWAY_BURST",
+				Message: fmt.Sprintf("burst must be positive: %d", b),
+			})
+		} else {
+			c.GatewayBurst = b
 		}
 	}
 
