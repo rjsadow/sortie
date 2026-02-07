@@ -45,6 +45,13 @@ type Config struct {
 	AdminPassword        string
 	AllowRegistration    bool
 
+	// OIDC/SSO configuration
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCRedirectURL  string
+	OIDCScopes       string
+
 	// File transfer configuration
 	MaxUploadSize int64 // Maximum upload file size in bytes
 
@@ -338,6 +345,23 @@ func (c *Config) loadFromEnv() error {
 		c.AllowRegistration = strings.EqualFold(v, "true") || v == "1"
 	}
 
+	// OIDC/SSO configuration
+	if v := os.Getenv("LAUNCHPAD_OIDC_ISSUER"); v != "" {
+		c.OIDCIssuer = v
+	}
+	if v := os.Getenv("LAUNCHPAD_OIDC_CLIENT_ID"); v != "" {
+		c.OIDCClientID = v
+	}
+	if v := os.Getenv("LAUNCHPAD_OIDC_CLIENT_SECRET"); v != "" {
+		c.OIDCClientSecret = v
+	}
+	if v := os.Getenv("LAUNCHPAD_OIDC_REDIRECT_URL"); v != "" {
+		c.OIDCRedirectURL = v
+	}
+	if v := os.Getenv("LAUNCHPAD_OIDC_SCOPES"); v != "" {
+		c.OIDCScopes = v
+	}
+
 	// File transfer configuration
 	if v := os.Getenv("LAUNCHPAD_MAX_UPLOAD_SIZE"); v != "" {
 		size, err := strconv.ParseInt(v, 10, 64)
@@ -508,6 +532,11 @@ func isValidHexColor(s string) bool {
 		}
 	}
 	return true
+}
+
+// OIDCEnabled returns true if OIDC/SSO is configured with the minimum required fields.
+func (c *Config) OIDCEnabled() bool {
+	return c.OIDCIssuer != "" && c.OIDCClientID != "" && c.OIDCClientSecret != ""
 }
 
 // MustLoad loads configuration and panics if it fails.

@@ -54,6 +54,7 @@ function App() {
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [allowRegistration, setAllowRegistration] = useState(false);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
   const [showKeyboardHint, setShowKeyboardHint] = useState(false);
   const appRefs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
 
@@ -71,6 +72,7 @@ function App() {
         if (configRes.ok) {
           const config = await configRes.json();
           setAllowRegistration(config.allow_registration === true);
+          setSsoEnabled(config.sso_enabled === true);
         }
       } catch {
         // Ignore config fetch errors
@@ -345,6 +347,7 @@ function App() {
         onLogin={handleLogin}
         onShowRegister={() => setShowRegister(true)}
         allowRegistration={allowRegistration}
+        ssoEnabled={ssoEnabled}
         darkMode={darkMode}
       />
     );

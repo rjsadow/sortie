@@ -89,14 +89,16 @@ type AuditLog struct {
 
 // User represents a user account
 type User struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	Email        string    `json:"email,omitempty"`
-	DisplayName  string    `json:"display_name,omitempty"`
-	PasswordHash string    `json:"-"`
-	Roles        []string  `json:"roles"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	Username        string    `json:"username"`
+	Email           string    `json:"email,omitempty"`
+	DisplayName     string    `json:"display_name,omitempty"`
+	PasswordHash    string    `json:"-"`
+	Roles           []string  `json:"roles"`
+	AuthProvider    string    `json:"auth_provider,omitempty"`     // "local" or "oidc"
+	AuthProviderID  string    `json:"auth_provider_id,omitempty"` // External subject ID (e.g., OIDC sub)
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // SessionStatus represents the status of a container session.
@@ -346,6 +348,8 @@ func (db *DB) migrate() error {
 		"ALTER TABLE applications ADD COLUMN os_type TEXT DEFAULT 'linux'",
 		"ALTER TABLE templates ADD COLUMN os_type TEXT DEFAULT 'linux'",
 		"ALTER TABLE sessions ADD COLUMN idle_timeout INTEGER DEFAULT 0",
+		"ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local'",
+		"ALTER TABLE users ADD COLUMN auth_provider_id TEXT DEFAULT ''",
 	}
 
 	for _, migration := range migrations {
@@ -1015,10 +1019,15 @@ func (db *DB) CreateUser(user User) error {
 		return fmt.Errorf("failed to marshal roles: %w", err)
 	}
 
+	authProvider := user.AuthProvider
+	if authProvider == "" {
+		authProvider = "local"
+	}
+
 	now := time.Now()
 	_, err = db.conn.Exec(
-		"INSERT INTO users (id, username, email, display_name, password_hash, roles, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		user.ID, user.Username, user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), now, now,
+		"INSERT INTO users (id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		user.ID, user.Username, user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), authProvider, user.AuthProviderID, now, now,
 	)
 	return err
 }
@@ -1027,10 +1036,11 @@ func (db *DB) CreateUser(user User) error {
 func (db *DB) GetUserByID(id string) (*User, error) {
 	var user User
 	var rolesJSON string
+	var authProvider, authProviderID sql.NullString
 	err := db.conn.QueryRow(
-		"SELECT id, username, email, display_name, password_hash, roles, created_at, updated_at FROM users WHERE id = ?",
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users WHERE id = ?",
 		id,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &user.CreatedAt, &user.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1041,6 +1051,12 @@ func (db *DB) GetUserByID(id string) (*User, error) {
 
 	if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal roles: %w", err)
+	}
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
+	}
+	if authProviderID.Valid {
+		user.AuthProviderID = authProviderID.String
 	}
 
 	return &user, nil
@@ -1050,10 +1066,11 @@ func (db *DB) GetUserByID(id string) (*User, error) {
 func (db *DB) GetUserByUsername(username string) (*User, error) {
 	var user User
 	var rolesJSON string
+	var authProvider, authProviderID sql.NullString
 	err := db.conn.QueryRow(
-		"SELECT id, username, email, display_name, password_hash, roles, created_at, updated_at FROM users WHERE username = ?",
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users WHERE username = ?",
 		username,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &user.CreatedAt, &user.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1064,6 +1081,12 @@ func (db *DB) GetUserByUsername(username string) (*User, error) {
 
 	if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal roles: %w", err)
+	}
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
+	}
+	if authProviderID.Valid {
+		user.AuthProviderID = authProviderID.String
 	}
 
 	return &user, nil
@@ -1076,9 +1099,14 @@ func (db *DB) UpdateUser(user User) error {
 		return fmt.Errorf("failed to marshal roles: %w", err)
 	}
 
+	authProvider := user.AuthProvider
+	if authProvider == "" {
+		authProvider = "local"
+	}
+
 	result, err := db.conn.Exec(
-		"UPDATE users SET email = ?, display_name = ?, password_hash = ?, roles = ?, updated_at = ? WHERE id = ?",
-		user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), time.Now(), user.ID,
+		"UPDATE users SET email = ?, display_name = ?, password_hash = ?, roles = ?, auth_provider = ?, auth_provider_id = ?, updated_at = ? WHERE id = ?",
+		user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), authProvider, user.AuthProviderID, time.Now(), user.ID,
 	)
 	if err != nil {
 		return err
@@ -1121,7 +1149,7 @@ func (db *DB) SeedAdminUser(username, passwordHash string) error {
 // ListUsers returns all users
 func (db *DB) ListUsers() ([]User, error) {
 	rows, err := db.conn.Query(
-		"SELECT id, username, email, display_name, password_hash, roles, created_at, updated_at FROM users ORDER BY created_at DESC",
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users ORDER BY created_at DESC",
 	)
 	if err != nil {
 		return nil, err
@@ -1132,16 +1160,53 @@ func (db *DB) ListUsers() ([]User, error) {
 	for rows.Next() {
 		var user User
 		var rolesJSON string
-		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		var authProvider, authProviderID sql.NullString
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &user.CreatedAt, &user.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
 			user.Roles = []string{"user"}
 		}
+		if authProvider.Valid {
+			user.AuthProvider = authProvider.String
+		}
+		if authProviderID.Valid {
+			user.AuthProviderID = authProviderID.String
+		}
 		users = append(users, user)
 	}
 
 	return users, rows.Err()
+}
+
+// GetUserByAuthProvider retrieves a user by their external auth provider and subject ID.
+func (db *DB) GetUserByAuthProvider(provider, providerID string) (*User, error) {
+	var user User
+	var rolesJSON string
+	var authProvider, authProviderIDCol sql.NullString
+	err := db.conn.QueryRow(
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users WHERE auth_provider = ? AND auth_provider_id = ?",
+		provider, providerID,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderIDCol, &user.CreatedAt, &user.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal roles: %w", err)
+	}
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
+	}
+	if authProviderIDCol.Valid {
+		user.AuthProviderID = authProviderIDCol.String
+	}
+
+	return &user, nil
 }
 
 // DeleteUser removes a user by ID

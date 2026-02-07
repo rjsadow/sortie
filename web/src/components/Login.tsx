@@ -7,10 +7,11 @@ interface LoginProps {
   onLogin: (user: User) => void;
   onShowRegister?: () => void;
   allowRegistration?: boolean;
+  ssoEnabled?: boolean;
   darkMode: boolean;
 }
 
-export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: LoginProps) {
+export function Login({ onLogin, onShowRegister, allowRegistration, ssoEnabled, darkMode }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -117,6 +118,34 @@ export function Login({ onLogin, onShowRegister, allowRegistration, darkMode }: 
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        {ssoEnabled && (
+          <div className="mt-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className={`w-full border-t ${darkMode ? 'border-gray-600' : 'border-gray-300'}`} />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className={`px-2 ${darkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500'}`}>
+                  or
+                </span>
+              </div>
+            </div>
+            <a
+              href="/api/auth/oidc/login"
+              className={`mt-4 w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border font-medium transition-colors ${
+                darkMode
+                  ? 'border-gray-600 text-gray-200 hover:bg-gray-700'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Sign in with SSO
+            </a>
+          </div>
+        )}
 
         {allowRegistration && onShowRegister && (
           <div className="mt-6 text-center">

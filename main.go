@@ -39,6 +39,7 @@ var database *db.DB
 var sessionManager *sessions.Manager
 var appConfig *config.Config
 var jwtAuthProvider *auth.JWTAuthProvider
+var oidcAuthProvider *auth.OIDCAuthProvider
 var fileHandler *files.Handler
 
 func main() {
@@ -117,6 +118,32 @@ func main() {
 		slog.Warn("LAUNCHPAD_JWT_SECRET not set - authentication disabled")
 	}
 
+	// Initialize OIDC auth provider if configured
+	if appConfig.OIDCEnabled() && appConfig.JWTSecret != "" {
+		oidcAuthProvider = auth.NewOIDCAuthProvider()
+		oidcScopes := appConfig.OIDCScopes
+		oidcConfig := map[string]string{
+			"issuer":        appConfig.OIDCIssuer,
+			"client_id":     appConfig.OIDCClientID,
+			"client_secret": appConfig.OIDCClientSecret,
+			"redirect_url":  appConfig.OIDCRedirectURL,
+			"jwt_secret":    appConfig.JWTSecret,
+			"access_expiry": appConfig.JWTAccessExpiry.String(),
+			"refresh_expiry": appConfig.JWTRefreshExpiry.String(),
+		}
+		if oidcScopes != "" {
+			oidcConfig["scopes"] = oidcScopes
+		}
+		if err := oidcAuthProvider.Initialize(context.Background(), oidcConfig); err != nil {
+			slog.Error("failed to initialize OIDC auth provider", "error", err)
+			// Non-fatal: SSO won't be available but local login still works
+			oidcAuthProvider = nil
+		} else {
+			oidcAuthProvider.SetDatabase(database)
+			slog.Info("OIDC SSO enabled", "issuer", appConfig.OIDCIssuer)
+		}
+	}
+
 	// Initialize session manager with config
 	sessionManager = sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
 		SessionTimeout:     appConfig.SessionTimeout,
@@ -184,6 +211,10 @@ func main() {
 	mux.HandleFunc("/api/auth/refresh", handleRefreshToken)
 	mux.HandleFunc("/api/auth/me", handleAuthMe)
 	mux.HandleFunc("/api/auth/register", handleRegister)
+
+	// OIDC/SSO routes (public - redirect flow)
+	mux.HandleFunc("/api/auth/oidc/login", handleOIDCLogin)
+	mux.HandleFunc("/api/auth/oidc/callback", handleOIDCCallback)
 
 	// Config route (public - needed before login for branding)
 	mux.HandleFunc("/api/config", handleConfig)
@@ -881,6 +912,7 @@ type BrandingConfig struct {
 	SecondaryColor    string `json:"secondary_color"`
 	TenantName        string `json:"tenant_name"`
 	AllowRegistration bool   `json:"allow_registration"`
+	SSOEnabled        bool   `json:"sso_enabled"`
 }
 
 // handleConfig returns tenant-specific branding configuration
@@ -906,6 +938,7 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Always use dynamic registration check (may be overridden in DB)
 	brandingCfg.AllowRegistration = isRegistrationAllowed()
+	brandingCfg.SSOEnabled = oidcAuthProvider != nil
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(brandingCfg)
@@ -1332,7 +1365,11 @@ func handleRefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Try JWT provider first, then OIDC provider
 	result, err := jwtAuthProvider.RefreshAccessToken(r.Context(), req.RefreshToken)
+	if err != nil && oidcAuthProvider != nil {
+		result, err = oidcAuthProvider.RefreshAccessToken(r.Context(), req.RefreshToken)
+	}
 	if err != nil {
 		slog.Warn("token refresh failed", "error", err)
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
@@ -1380,7 +1417,11 @@ func handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := parts[1]
+	// Try JWT provider first, then OIDC provider (both issue same format JWT)
 	result, err := jwtAuthProvider.Authenticate(r.Context(), token)
+	if (err != nil || !result.Authenticated) && oidcAuthProvider != nil {
+		result, err = oidcAuthProvider.Authenticate(r.Context(), token)
+	}
 	if err != nil || !result.Authenticated {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
@@ -1526,6 +1567,116 @@ func handleQuotas(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
+}
+
+// handleOIDCLogin redirects the user to the OIDC provider's authorization page.
+func handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if oidcAuthProvider == nil {
+		http.Error(w, "SSO is not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	redirectURL := r.URL.Query().Get("redirect")
+	if redirectURL == "" {
+		redirectURL = "/"
+	}
+
+	loginURL := oidcAuthProvider.GetLoginURL(redirectURL)
+	if loginURL == "" {
+		http.Error(w, "Failed to generate login URL", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, loginURL, http.StatusFound)
+}
+
+// handleOIDCCallback processes the OIDC provider's callback after authentication.
+// It exchanges the code for tokens, creates/updates the local user, and issues JWT tokens.
+func handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if oidcAuthProvider == nil {
+		http.Error(w, "SSO is not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Check for error from provider
+	if errParam := r.URL.Query().Get("error"); errParam != "" {
+		errDesc := r.URL.Query().Get("error_description")
+		slog.Warn("OIDC callback error", "error", errParam, "description", errDesc)
+		http.Error(w, fmt.Sprintf("SSO error: %s", errDesc), http.StatusBadRequest)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+	if code == "" || state == "" {
+		http.Error(w, "Missing code or state parameter", http.StatusBadRequest)
+		return
+	}
+
+	result, err := oidcAuthProvider.HandleCallback(r.Context(), code, state)
+	if err != nil {
+		slog.Error("OIDC callback failed", "error", err)
+		http.Error(w, "SSO authentication failed", http.StatusUnauthorized)
+		return
+	}
+
+	if !result.Authenticated || result.User == nil {
+		http.Error(w, "SSO authentication failed", http.StatusUnauthorized)
+		return
+	}
+
+	// result.Token contains the access token, result.Message contains the refresh token
+	accessToken := result.Token
+	refreshToken := result.Message
+
+	// Log the SSO login
+	database.LogAudit(result.User.Username, "SSO_LOGIN", "User logged in via OIDC SSO")
+
+	// Set access token cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.AccessTokenCookieName,
+		Value:    accessToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(appConfig.JWTAccessExpiry.Seconds()),
+	})
+
+	// Return an HTML page that stores tokens and redirects to the app
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html>
+<head><title>SSO Login</title></head>
+<body>
+<script>
+localStorage.setItem('launchpad-access-token', %q);
+localStorage.setItem('launchpad-refresh-token', %q);
+localStorage.setItem('launchpad-user', JSON.stringify(%s));
+window.location.href = '/';
+</script>
+<noscript><p>Login successful. <a href="/">Click here</a> to continue.</p></noscript>
+</body>
+</html>`, accessToken, refreshToken, mustJSON(result.User))
+}
+
+// mustJSON marshals v to JSON, returning "{}" on error.
+func mustJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // handleAdminSettings handles GET/PUT /api/admin/settings
