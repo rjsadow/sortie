@@ -80,3 +80,11 @@ resourceQuota:
 # Limit range
 limitRange:
   enabled: true
+
+# Persistent storage for SQLite database
+persistence:
+  enabled: false
+  # storageClass: ""  # Use default storage class if empty
+  size: 1Gi
+  accessModes:
+    - ReadWriteOnce

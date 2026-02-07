@@ -1,0 +1,64 @@
+# Launchpad - Full Stack Docker Compose
+#
+# Deploy the full Launchpad stack (backend + web + SQLite DB) in one command:
+#
+#   docker compose up -d
+#
+# The backend serves the embedded React frontend and uses SQLite for storage.
+# No external database is required.
+#
+# Configuration:
+#   Copy .env.example to .env and customize, or set environment variables below.
+#
+# Persistent data:
+#   SQLite database is stored in a named volume (launchpad-data).
+#
+# Note: Container session features (VNC/RDP streaming) require Kubernetes.
+#   In Docker Compose mode, Launchpad works as an application launcher
+#   (URL-based apps) without container orchestration.
+
+services:
+  launchpad:
+    image: ghcr.io/rjsadow/launchpad:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${LAUNCHPAD_PORT:-8080}:8080"
+    environment:
+      # --- Server ---
+      LAUNCHPAD_PORT: "8080"
+      LAUNCHPAD_DB: "/data/launchpad.db"
+
+      # --- Authentication (required) ---
+      # Generate a secret: openssl rand -base64 32
+      LAUNCHPAD_JWT_SECRET: "${LAUNCHPAD_JWT_SECRET:?Set LAUNCHPAD_JWT_SECRET (min 32 chars)}"
+      LAUNCHPAD_ADMIN_USERNAME: "${LAUNCHPAD_ADMIN_USERNAME:-admin}"
+      LAUNCHPAD_ADMIN_PASSWORD: "${LAUNCHPAD_ADMIN_PASSWORD:?Set LAUNCHPAD_ADMIN_PASSWORD}"
+      LAUNCHPAD_JWT_ACCESS_EXPIRY: "${LAUNCHPAD_JWT_ACCESS_EXPIRY:-15}"
+      LAUNCHPAD_JWT_REFRESH_EXPIRY: "${LAUNCHPAD_JWT_REFRESH_EXPIRY:-24}"
+      LAUNCHPAD_ALLOW_REGISTRATION: "${LAUNCHPAD_ALLOW_REGISTRATION:-false}"
+
+      # --- Branding (optional) ---
+      LAUNCHPAD_TENANT_NAME: "${LAUNCHPAD_TENANT_NAME:-Launchpad}"
+      LAUNCHPAD_PRIMARY_COLOR: "${LAUNCHPAD_PRIMARY_COLOR:-#398D9B}"
+      LAUNCHPAD_SECONDARY_COLOR: "${LAUNCHPAD_SECONDARY_COLOR:-#4AB7C3}"
+
+      # --- Sessions (optional, only relevant with Kubernetes) ---
+      LAUNCHPAD_SESSION_TIMEOUT: "${LAUNCHPAD_SESSION_TIMEOUT:-120}"
+      LAUNCHPAD_SESSION_CLEANUP_INTERVAL: "${LAUNCHPAD_SESSION_CLEANUP_INTERVAL:-5}"
+    volumes:
+      - launchpad-data:/data
+    # Health endpoints (for external monitoring / load balancers):
+    #   Liveness:  GET http://localhost:8080/healthz
+    #   Readiness: GET http://localhost:8080/readyz
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  launchpad-data:
+    driver: local

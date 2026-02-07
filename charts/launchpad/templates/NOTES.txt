@@ -1,0 +1,53 @@
+Launchpad has been deployed to namespace "{{ .Values.namespace }}".
+
+=== Access ===
+{{- if .Values.ingress.enabled }}
+
+  Ingress: http://{{ .Values.ingress.host }}
+{{- else }}
+
+  Port-forward:
+    kubectl port-forward -n {{ .Values.namespace }} svc/{{ include "launchpad.fullname" . }} 8080:{{ .Values.service.port }}
+
+  Then open: http://localhost:8080
+{{- end }}
+
+=== Default Credentials ===
+
+  Username: {{ .Values.auth.adminUsername }}
+  Password: (value of auth.adminPassword)
+
+  Change the admin password after first login.
+
+=== Health Endpoints ===
+
+  Liveness:  /healthz
+  Readiness: /readyz
+  Metrics:   /metrics
+
+{{- if not .Values.persistence.enabled }}
+
+=== WARNING: Persistence Disabled ===
+
+  SQLite data is stored in an emptyDir volume and will be LOST on pod restart.
+  Enable persistence for production use:
+
+    helm upgrade {{ .Release.Name }} . --set persistence.enabled=true
+{{- end }}
+
+=== Values Reference ===
+
+  image.repository          Container image          ({{ .Values.image.repository }})
+  image.tag                 Image tag                ({{ .Values.image.tag }})
+  auth.jwtSecret            JWT signing secret       (required, min 32 chars)
+  auth.adminUsername         Admin username           ({{ .Values.auth.adminUsername }})
+  auth.adminPassword         Admin password           (required)
+  auth.allowRegistration     Self-registration        ({{ .Values.auth.allowRegistration }})
+  persistence.enabled        Persist SQLite data      ({{ .Values.persistence.enabled }})
+  persistence.size           PVC size                 ({{ .Values.persistence.size }})
+  ingress.enabled            Enable ingress           ({{ .Values.ingress.enabled }})
+  ingress.host               Ingress hostname         ({{ .Values.ingress.host }})
+  service.type               Service type             ({{ .Values.service.type }})
+  networkPolicy.enabled      Network policies         ({{ .Values.networkPolicy.enabled }})
+  resourceQuota.enabled      Resource quotas          ({{ .Values.resourceQuota.enabled }})
+  session.timeout            Session timeout (min)    ({{ .Values.session.timeout }})
