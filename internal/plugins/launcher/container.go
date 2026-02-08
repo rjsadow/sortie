@@ -15,7 +15,7 @@ import (
 const (
 	DefaultSessionTimeout  = 2 * time.Hour
 	DefaultCleanupInterval = 5 * time.Minute
-	DefaultPodReadyTimeout = 2 * time.Minute
+	DefaultPodReadyTimeout = 5 * time.Minute
 )
 
 // ContainerLauncher implements LauncherPlugin for Kubernetes container-based launches.

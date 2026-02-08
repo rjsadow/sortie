@@ -12,6 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install required packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tigervnc-standalone-server \
+    x11vnc \
     websockify \
     supervisor \
     procps \

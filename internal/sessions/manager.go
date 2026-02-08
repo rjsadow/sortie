@@ -19,8 +19,9 @@ const (
 	// DefaultCleanupInterval is the default interval for cleanup goroutine
 	DefaultCleanupInterval = 5 * time.Minute
 
-	// DefaultPodReadyTimeout is the default timeout for waiting for pod ready
-	DefaultPodReadyTimeout = 2 * time.Minute
+	// DefaultPodReadyTimeout is the default timeout for waiting for pod ready.
+	// Set to 5 minutes to accommodate large container image pulls.
+	DefaultPodReadyTimeout = 5 * time.Minute
 )
 
 // ManagerConfig holds configuration for the session manager.

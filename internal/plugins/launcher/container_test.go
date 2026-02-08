@@ -428,8 +428,8 @@ func TestContainerLauncher_DefaultConstants(t *testing.T) {
 	if DefaultCleanupInterval != 5*time.Minute {
 		t.Errorf("DefaultCleanupInterval = %v, want %v", DefaultCleanupInterval, 5*time.Minute)
 	}
-	if DefaultPodReadyTimeout != 2*time.Minute {
-		t.Errorf("DefaultPodReadyTimeout = %v, want %v", DefaultPodReadyTimeout, 2*time.Minute)
+	if DefaultPodReadyTimeout != 5*time.Minute {
+		t.Errorf("DefaultPodReadyTimeout = %v, want %v", DefaultPodReadyTimeout, 5*time.Minute)
 	}
 }
 

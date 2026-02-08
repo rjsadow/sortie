@@ -46,7 +46,7 @@ auth:
 session:
   timeout: "120"           # Session timeout in minutes
   cleanupInterval: "5"     # Cleanup interval in minutes
-  podReadyTimeout: "120"   # Pod ready timeout in seconds
+  podReadyTimeout: "300"   # Pod ready timeout in seconds
 
 # Resource limits for the launchpad server
 resources:

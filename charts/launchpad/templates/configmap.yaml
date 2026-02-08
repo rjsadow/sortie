@@ -9,8 +9,8 @@ metadata:
 data:
   # Database path must be in writable volume (readOnlyRootFilesystem is enabled)
   LAUNCHPAD_DB: "/data/launchpad.db"
-  SESSION_TIMEOUT: {{ .Values.session.timeout | quote }}
-  SESSION_CLEANUP_INTERVAL: {{ .Values.session.cleanupInterval | quote }}
-  POD_READY_TIMEOUT: {{ .Values.session.podReadyTimeout | quote }}
+  LAUNCHPAD_SESSION_TIMEOUT: {{ .Values.session.timeout | quote }}
+  LAUNCHPAD_SESSION_CLEANUP_INTERVAL: {{ .Values.session.cleanupInterval | quote }}
+  LAUNCHPAD_POD_READY_TIMEOUT: {{ .Values.session.podReadyTimeout | quote }}
   LAUNCHPAD_VNC_SIDECAR_IMAGE: {{ .Values.vncSidecar.image | quote }}
   LAUNCHPAD_GUACD_SIDECAR_IMAGE: {{ .Values.guacdSidecar.image | quote }}
