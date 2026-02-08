@@ -13,12 +13,14 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/rjsadow/launchpad/internal/billing"
 	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/launchpad/internal/diagnostics"
 	"github.com/rjsadow/launchpad/internal/files"
 	"github.com/rjsadow/launchpad/internal/gateway"
 	"github.com/rjsadow/launchpad/internal/k8s"
@@ -42,6 +44,8 @@ var appConfig *config.Config
 var jwtAuthProvider *auth.JWTAuthProvider
 var oidcAuthProvider *auth.OIDCAuthProvider
 var fileHandler *files.Handler
+var diagCollector *diagnostics.Collector
+var serverStartTime = time.Now()
 
 func main() {
 	// Initialize structured logging with JSON handler for production
@@ -231,6 +235,9 @@ func main() {
 	expvar.NewString("app.name").Set("sortie")
 	expvar.NewString("app.start_time").Set(time.Now().UTC().Format(time.RFC3339))
 
+	// Initialize diagnostics collector for enterprise support bundles
+	diagCollector = diagnostics.NewCollector(database, appConfig, plugins.Global(), serverStartTime)
+
 	// Create a custom mux for better control
 	mux := http.NewServeMux()
 
@@ -263,6 +270,11 @@ func main() {
 	mux.Handle("/api/admin/sessions", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminSessions))))
 	mux.Handle("/api/admin/templates", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminTemplates))))
 	mux.Handle("/api/admin/templates/", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminTemplateByID))))
+
+	// Enterprise support endpoints (admin-only)
+	mux.Handle("/api/admin/diagnostics", authMiddleware(requireAdmin(http.HandlerFunc(handleDiagnosticsBundle))))
+	mux.Handle("/api/admin/health", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminHealth))))
+	mux.Handle("/api/admin/support/info", authMiddleware(requireAdmin(http.HandlerFunc(handleSupportInfo))))
 
 	// Public template endpoints (for template marketplace)
 	mux.HandleFunc("/api/templates", handleTemplates)
@@ -2209,6 +2221,129 @@ func handleAdminTemplateByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleDiagnosticsBundle generates and returns a diagnostics bundle for enterprise support.
+// GET returns JSON bundle; GET with Accept: application/gzip returns tar.gz archive.
+func handleDiagnosticsBundle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := middleware.GetUserFromContext(r.Context())
+	database.LogAudit(user.Username, "GENERATE_DIAGNOSTICS", "Generated diagnostics bundle")
+
+	// Check if client wants a tar.gz archive
+	if r.Header.Get("Accept") == "application/gzip" {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=diagnostics-%s.tar.gz", time.Now().UTC().Format("20060102-150405")))
+		if err := diagCollector.WriteTarGz(r.Context(), w); err != nil {
+			slog.Error("failed to generate diagnostics archive", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+
+	// Default: return JSON
+	bundle, err := diagCollector.Collect(r.Context())
+	if err != nil {
+		slog.Error("failed to collect diagnostics", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bundle)
+}
+
+// handleAdminHealth returns detailed system health for the admin dashboard.
+func handleAdminHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Collect component health
+	dbHealthy := true
+	dbMessage := "OK"
+	if err := database.Ping(); err != nil {
+		dbHealthy = false
+		dbMessage = err.Error()
+	}
+
+	activeSessionCount, _ := database.CountActiveSessions()
+	apps, _ := database.ListApps()
+	users, _ := database.ListUsers()
+
+	pluginStatuses := plugins.Global().HealthCheck(r.Context())
+	allHealthy := dbHealthy
+	for _, ps := range pluginStatuses {
+		if !ps.Healthy {
+			allHealthy = false
+		}
+	}
+
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	uptime := time.Since(serverStartTime)
+
+	health := map[string]any{
+		"status": "healthy",
+		"uptime": uptime.Round(time.Second).String(),
+		"uptime_seconds": uptime.Seconds(),
+		"components": map[string]any{
+			"database": map[string]any{
+				"healthy": dbHealthy,
+				"message": dbMessage,
+			},
+			"plugins": pluginStatuses,
+		},
+		"stats": map[string]any{
+			"active_sessions": activeSessionCount,
+			"total_apps":      len(apps),
+			"total_users":     len(users),
+			"goroutines":      runtime.NumGoroutine(),
+			"memory_alloc_mb": float64(memStats.Alloc) / 1024 / 1024,
+		},
+	}
+
+	if !allHealthy {
+		health["status"] = "degraded"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(health)
+}
+
+// handleSupportInfo returns version and build information for support tickets.
+func handleSupportInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	info := map[string]any{
+		"application": "launchpad",
+		"go_version":  runtime.Version(),
+		"os":          runtime.GOOS,
+		"arch":        runtime.GOARCH,
+		"started_at":  serverStartTime.UTC().Format(time.RFC3339),
+		"uptime":      time.Since(serverStartTime).Round(time.Second).String(),
+		"config": map[string]any{
+			"auth_enabled":        appConfig.JWTSecret != "",
+			"oidc_enabled":        appConfig.OIDCEnabled(),
+			"namespace":           appConfig.Namespace,
+			"max_sessions_per_user": appConfig.MaxSessionsPerUser,
+			"max_global_sessions":   appConfig.MaxGlobalSessions,
+			"recording_enabled":    appConfig.RecordingEnabled,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
 }
 
 // handleHealthz is a liveness probe that returns 200 if the server is running.
