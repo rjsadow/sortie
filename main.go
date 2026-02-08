@@ -46,6 +46,7 @@ var oidcAuthProvider *auth.OIDCAuthProvider
 var fileHandler *files.Handler
 var diagCollector *diagnostics.Collector
 var serverStartTime = time.Now()
+var backpressureHandler *sessions.BackpressureHandler
 
 func main() {
 	// Initialize structured logging with JSON handler for production
@@ -193,9 +194,23 @@ func main() {
 		DefaultMemRequest:  appConfig.DefaultMemRequest,
 		DefaultMemLimit:    appConfig.DefaultMemLimit,
 		Recorder:           sessionRecorder,
+		QueueMaxSize:       appConfig.QueueMaxSize,
+		QueueTimeout:       appConfig.QueueTimeout,
 	})
 	sessionManager.Start()
 	defer sessionManager.Stop()
+
+	// Initialize backpressure handler for load monitoring and admission control
+	backpressureHandler = sessions.NewBackpressureHandler(
+		sessionManager,
+		sessionManager.Queue(),
+		appConfig.QueueMaxSize,
+	)
+	if appConfig.QueueMaxSize > 0 {
+		slog.Info("Session queueing enabled",
+			"max_size", appConfig.QueueMaxSize,
+			"timeout", appConfig.QueueTimeout)
+	}
 
 	// Initialize gateway handler (WebSocket proxy with auth + rate limiting)
 	var gwHandler *gateway.Handler
@@ -238,13 +253,30 @@ func main() {
 	// Initialize diagnostics collector for enterprise support bundles
 	diagCollector = diagnostics.NewCollector(database, appConfig, plugins.Global(), serverStartTime)
 
+	// Publish session metrics for HPA custom metrics adapter
+	expvar.Publish("launchpad_active_sessions", expvar.Func(func() any {
+		status := backpressureHandler.GetLoadStatus()
+		return status.ActiveSessions
+	}))
+	expvar.Publish("launchpad_queue_depth", expvar.Func(func() any {
+		status := backpressureHandler.GetLoadStatus()
+		return status.QueueDepth
+	}))
+	expvar.Publish("launchpad_load_factor", expvar.Func(func() any {
+		status := backpressureHandler.GetLoadStatus()
+		return status.LoadFactor
+	}))
+
 	// Create a custom mux for better control
 	mux := http.NewServeMux()
 
 	// Observability endpoints (public, no auth required)
 	mux.Handle("/metrics", expvar.Handler())
 	mux.HandleFunc("/healthz", handleHealthz)
-	mux.HandleFunc("/readyz", handleReadyz)
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		handleReadyzWithBackpressure(w, r, backpressureHandler)
+	})
+	mux.HandleFunc("/api/load", backpressureHandler.ServeLoadStatus)
 
 	// Auth routes (public - no authentication required)
 	mux.HandleFunc("/api/auth/login", handleLogin)
@@ -1064,13 +1096,26 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 
 		session, err := sessionManager.CreateSession(r.Context(), &req)
 		if err != nil {
-			if _, ok := err.(*sessions.QuotaExceededError); ok {
+			switch err.(type) {
+			case *sessions.QuotaExceededError:
+				loadStatus := backpressureHandler.GetLoadStatus()
+				sessions.WriteRetryAfter(w, loadStatus.LoadFactor)
 				http.Error(w, err.Error(), http.StatusTooManyRequests)
 				return
+			case *sessions.QueueFullError:
+				loadStatus := backpressureHandler.GetLoadStatus()
+				sessions.WriteRetryAfter(w, loadStatus.LoadFactor)
+				http.Error(w, err.Error(), http.StatusTooManyRequests)
+				return
+			case *sessions.QueueTimeoutError:
+				sessions.WriteRetryAfter(w, 1.0)
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			default:
+				slog.Error("error creating session", "error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
 			}
-			slog.Error("error creating session", "error", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
 		}
 
 		// Get app name and URL for response
@@ -2358,8 +2403,11 @@ func handleHealthz(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// handleReadyz is a readiness probe that checks database connectivity and plugin health.
-func handleReadyz(w http.ResponseWriter, r *http.Request) {
+// handleReadyzWithBackpressure is a readiness probe that incorporates session load.
+// When the system is at >= 95% capacity, the probe returns 503 to stop the
+// load balancer from routing new traffic to this replica (existing WebSocket
+// connections continue unaffected). This drives HPA scale-up.
+func handleReadyzWithBackpressure(w http.ResponseWriter, r *http.Request, bp *sessions.BackpressureHandler) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -2392,6 +2440,21 @@ func handleReadyz(w http.ResponseWriter, r *http.Request) {
 		pluginChecks = append(pluginChecks, entry)
 	}
 	checks["plugins"] = pluginChecks
+
+	// Check session load (backpressure)
+	if bp != nil && !bp.EnhancedReadinessCheck() {
+		ready = false
+		checks["sessions"] = map[string]string{"status": "overloaded"}
+	} else {
+		loadStatus := bp.GetLoadStatus()
+		checks["sessions"] = map[string]interface{}{
+			"status":          "ok",
+			"active_sessions": loadStatus.ActiveSessions,
+			"max_sessions":    loadStatus.MaxSessions,
+			"load_factor":     loadStatus.LoadFactor,
+			"queue_depth":     loadStatus.QueueDepth,
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if ready {

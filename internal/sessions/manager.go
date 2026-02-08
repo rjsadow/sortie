@@ -40,6 +40,11 @@ type ManagerConfig struct {
 
 	// Session recording
 	Recorder SessionRecorder // Optional recorder for lifecycle events (nil = noop)
+
+	// Session queueing (when global limit is reached)
+	QueueMaxSize      int           // Max queued requests (0 = no queueing, reject immediately)
+	QueueTimeout      time.Duration // Per-request queue wait timeout
+	QueuePollInterval time.Duration // Capacity check interval
 }
 
 // Manager handles session lifecycle.
@@ -61,6 +66,9 @@ type Manager struct {
 
 	// Session recording
 	recorder SessionRecorder
+
+	// Session queueing
+	queue *SessionQueue
 
 	stopCh chan struct{}
 }
@@ -93,7 +101,7 @@ func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
 		recorder = &NoopRecorder{}
 	}
 
-	return &Manager{
+	m := &Manager{
 		db:                 database,
 		sessionTimeout:     cfg.SessionTimeout,
 		cleanupInterval:    cfg.CleanupInterval,
@@ -107,6 +115,24 @@ func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
 		recorder:           recorder,
 		stopCh:             make(chan struct{}),
 	}
+
+	// Initialize session queue if configured
+	if cfg.QueueMaxSize > 0 && cfg.MaxGlobalSessions > 0 {
+		m.queue = NewSessionQueue(QueueConfig{
+			MaxSize:      cfg.QueueMaxSize,
+			Timeout:      cfg.QueueTimeout,
+			PollInterval: cfg.QueuePollInterval,
+		}, func() bool {
+			count, err := m.db.CountActiveSessions()
+			if err != nil {
+				return false
+			}
+			return count < m.maxGlobalSessions
+		})
+		log.Printf("Session queue enabled (max size: %d, timeout: %v)", cfg.QueueMaxSize, cfg.QueueTimeout)
+	}
+
+	return m
 }
 
 // emitEvent sends a session lifecycle event to the recorder.
@@ -138,9 +164,17 @@ func (m *Manager) Start() {
 	log.Printf("Session manager started (timeout: %v, cleanup interval: %v)", m.sessionTimeout, m.cleanupInterval)
 }
 
-// Stop stops the background cleanup goroutine
+// Stop stops the background cleanup goroutine and session queue.
 func (m *Manager) Stop() {
 	close(m.stopCh)
+	if m.queue != nil {
+		m.queue.Stop()
+	}
+}
+
+// Queue returns the session queue (may be nil if queueing is disabled).
+func (m *Manager) Queue() *SessionQueue {
+	return m.queue
 }
 
 // cleanupLoop periodically cleans up stale sessions
@@ -283,9 +317,25 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		return nil, fmt.Errorf("application %s has no container image configured", req.AppID)
 	}
 
-	// Check quotas before creating resources
+	// Check quotas before creating resources.
+	// If the global limit is hit and a queue is configured, wait for capacity.
 	if err := m.checkQuotas(req.UserID); err != nil {
-		return nil, err
+		if m.queue != nil {
+			if _, isQuotaErr := err.(*QuotaExceededError); isQuotaErr {
+				log.Printf("Global session limit reached, queueing request for user %s", req.UserID)
+				if qErr := m.queue.Enqueue(ctx); qErr != nil {
+					return nil, qErr
+				}
+				// Re-check per-user quota after dequeue (global capacity is now available)
+				if err := m.checkQuotas(req.UserID); err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 
 	// Generate session ID
@@ -466,6 +516,11 @@ func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
 	// Emit session stopped event
 	m.emitEvent(ctx, EventSessionStopped, session, "user stopped")
 
+	// Notify the queue that capacity may be available
+	if m.queue != nil {
+		m.queue.NotifyCapacity()
+	}
+
 	return nil
 }
 
@@ -607,6 +662,11 @@ func (m *Manager) terminateWithStatus(ctx context.Context, sessionID string, fin
 		m.emitEvent(ctx, EventSessionExpired, session, reason)
 	default:
 		m.emitEvent(ctx, EventSessionTerminated, session, reason)
+	}
+
+	// Notify the queue that capacity may be available
+	if m.queue != nil {
+		m.queue.NotifyCapacity()
 	}
 
 	return nil

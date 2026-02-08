@@ -1,0 +1,110 @@
+---
+# HorizontalPodAutoscaler for the Launchpad server Deployment.
+#
+# Scaling Rules:
+#   1. CPU utilization: scale up when average CPU exceeds 70% of requests.
+#      The server is primarily I/O-bound (WebSocket proxying, HTTP routing)
+#      so CPU spikes indicate genuine load, not transient computation.
+#
+#   2. Memory utilization: scale up when average memory exceeds 80% of requests.
+#      Each active WebSocket connection holds state in memory; sustained memory
+#      pressure signals too many concurrent connections per replica.
+#
+# Scale-up behavior:
+#   - Pods are added quickly (up to 4 at a time, or 100% increase, every 60s)
+#     because new session requests are latency-sensitive.
+#
+# Scale-down behavior:
+#   - Pods are removed gradually (1 at a time, every 5 minutes) to avoid
+#     disrupting in-flight WebSocket connections and to prevent thrashing
+#     during bursty workloads.
+#
+# Custom metrics (optional):
+#   If a Prometheus adapter or KEDA is available, the commented-out section
+#   below can scale on the launchpad_active_sessions metric exposed at /metrics.
+#   This provides session-aware scaling independent of CPU/memory.
+#
+# Prerequisites:
+#   - metrics-server must be installed for CPU/memory metrics.
+#   - For custom metrics: prometheus-adapter or KEDA + Prometheus.
+#
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: launchpad
+  namespace: launchpad
+  labels:
+    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/component: server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: launchpad
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+    # Primary metric: CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # Secondary metric: Memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+    # Optional: custom metric for session-aware scaling.
+    # Uncomment when a Prometheus adapter or KEDA is configured.
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: launchpad_active_sessions
+    #     target:
+    #       type: AverageValue
+    #       averageValue: "50"
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+      selectPolicy: Min
+
+---
+# PodDisruptionBudget ensures at least 1 replica is always available
+# during voluntary disruptions (rolling updates, node drains, scale-down).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: launchpad
+  namespace: launchpad
+  labels:
+    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/component: server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: launchpad
+      app.kubernetes.io/component: server

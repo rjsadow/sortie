@@ -77,6 +77,10 @@ type Config struct {
 	BillingExporter       string        // Exporter type: "log" or "webhook"
 	BillingWebhookURL     string        // Webhook URL for billing export (when exporter=webhook)
 	BillingExportInterval time.Duration // How often to export metering events
+
+	// Session queueing configuration
+	QueueMaxSize      int           // Max queued requests when at capacity (0 = no queueing)
+	QueueTimeout      time.Duration // Per-request queue wait timeout
 }
 
 // ValidationError represents a configuration validation error.
@@ -131,6 +135,8 @@ const (
 	DefaultDefaultCPULimit       = "2"
 	DefaultDefaultMemRequest     = "512Mi"
 	DefaultDefaultMemLimit       = "2Gi"
+	DefaultQueueMaxSize          = 0                       // disabled by default
+	DefaultQueueTimeout          = 30 * time.Second
 )
 
 // Load reads configuration from environment variables and returns a Config.
@@ -177,6 +183,10 @@ func Load() (*Config, error) {
 		DefaultCPULimit:    DefaultDefaultCPULimit,
 		DefaultMemRequest:  DefaultDefaultMemRequest,
 		DefaultMemLimit:    DefaultDefaultMemLimit,
+
+		// Queue defaults
+		QueueMaxSize: DefaultQueueMaxSize,
+		QueueTimeout: DefaultQueueTimeout,
 	}
 
 	// Load from environment variables
@@ -537,6 +547,41 @@ func (c *Config) loadFromEnv() error {
 		}
 	} else if c.BillingExportInterval == 0 {
 		c.BillingExportInterval = DefaultBillingExportInterval
+	}
+
+	// Session queueing configuration
+	if v := os.Getenv("LAUNCHPAD_QUEUE_MAX_SIZE"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_QUEUE_MAX_SIZE",
+				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
+			})
+		} else if n < 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_QUEUE_MAX_SIZE",
+				Message: fmt.Sprintf("value must be non-negative: %d", n),
+			})
+		} else {
+			c.QueueMaxSize = n
+		}
+	}
+
+	if v := os.Getenv("LAUNCHPAD_QUEUE_TIMEOUT"); v != "" {
+		seconds, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_QUEUE_TIMEOUT",
+				Message: fmt.Sprintf("invalid timeout: %q (must be an integer representing seconds)", v),
+			})
+		} else if seconds <= 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_QUEUE_TIMEOUT",
+				Message: fmt.Sprintf("timeout must be positive: %d", seconds),
+			})
+		} else {
+			c.QueueTimeout = time.Duration(seconds) * time.Second
+		}
 	}
 
 	if len(parseErrors) > 0 {
