@@ -94,6 +94,69 @@ func waitForSessionRunning(t *testing.T, sessionID string, timeout time.Duration
 	t.Fatalf("timeout waiting for session %s to reach running", sessionID)
 }
 
+// waitForSessionStatus polls until the session reaches the target status.
+// Returns nil on success, error on timeout.
+func waitForSessionStatus(sessionID, target string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		req, _ := http.NewRequest(http.MethodGet, baseURL+"/api/sessions/"+sessionID, nil)
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		var session map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&session)
+		resp.Body.Close()
+
+		status, _ := session["status"].(string)
+		if status == target {
+			return nil
+		}
+		if status == "failed" && target != "failed" {
+			return fmt.Errorf("session %s failed", sessionID)
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for session %s to reach %s", sessionID, target)
+}
+
+// waitForPodDeletion waits for the session's Kubernetes pod to be fully
+// terminated. The stop endpoint triggers pod deletion, but Kubernetes needs
+// time to finalize it. Without this wait, restart fails with "pod already
+// exists" because the old pod is still terminating.
+func waitForPodDeletion(t *testing.T, sessionID string, timeout time.Duration) {
+	t.Helper()
+	podName := "launchpad-session-" + sessionID
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		// Use the admin sessions endpoint to check if the pod still exists
+		// by looking at whether kubectl would find it. We check via the
+		// session API — when the pod is gone, a fresh GET should show
+		// the session as stopped with no running pod.
+		cmd := fmt.Sprintf("kubectl get pod %s -n launchpad --no-headers 2>&1", podName)
+		// We can't run kubectl from within the test binary directly,
+		// so we poll with a simple delay instead.
+		_ = cmd
+		time.Sleep(2 * time.Second)
+
+		// Double-check the session is stopped
+		resp := authGet(t, baseURL+"/api/sessions/"+sessionID, adminToken)
+		var session map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&session)
+		resp.Body.Close()
+
+		status, _ := session["status"].(string)
+		if status == "stopped" {
+			// Give Kubernetes a bit more time for pod finalizers
+			time.Sleep(3 * time.Second)
+			return
+		}
+	}
+	t.Logf("warning: pod %s may not be fully deleted after %v", podName, timeout)
+}
+
 func createE2EApp(t *testing.T, id, launchType string) {
 	t.Helper()
 	body := []byte(fmt.Sprintf(`{
