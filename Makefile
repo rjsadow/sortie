@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-windows kind-teardown migrate-up migrate-down migrate-status
+.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all
 
 all: build
 
@@ -67,9 +67,20 @@ run: build
 lint:
 	cd web && npm run lint
 
-# Run Go tests
+# Run Go unit tests
 test:
-	go test -v ./...
+	go test -v -race $$(go list ./... | grep -v /tests/)
+
+# Run API integration tests (full HTTP stack with mock runner)
+test-integration: frontend
+	go test -v -race -timeout 5m ./tests/integration/...
+
+# Run E2E tests against a live Kind cluster
+test-e2e:
+	go test -v -timeout 10m -count=1 ./tests/e2e/...
+
+# Run unit + integration tests
+test-all: test test-integration
 
 # Setup Kind cluster and deploy with Helm
 kind:
