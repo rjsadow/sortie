@@ -292,9 +292,16 @@ func main() {
 	// Config route (public - needed before login for branding)
 	mux.HandleFunc("/api/config", handleConfig)
 
-	// Protected API routes - wrapped with auth middleware
+	// Protected API routes - wrapped with auth and tenant middleware
 	authMiddleware := middleware.AuthMiddleware(jwtAuthProvider)
+	tenantMiddleware := middleware.TenantMiddleware(database)
 	requireAdmin := middleware.RequireRole(middleware.RoleAdmin)
+
+	// Helper to chain auth + tenant middleware
+	withTenant := func(h http.Handler) http.Handler {
+		return authMiddleware(tenantMiddleware(h))
+	}
+
 	// Admin routes (protected, admin-only via RBAC middleware)
 	mux.Handle("/api/admin/settings", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminSettings))))
 	mux.Handle("/api/admin/users", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminUsers))))
@@ -308,32 +315,36 @@ func main() {
 	mux.Handle("/api/admin/health", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminHealth))))
 	mux.Handle("/api/admin/support/info", authMiddleware(requireAdmin(http.HandlerFunc(handleSupportInfo))))
 
+	// Tenant admin routes (protected, admin-only)
+	mux.Handle("/api/admin/tenants", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminTenants))))
+	mux.Handle("/api/admin/tenants/", authMiddleware(requireAdmin(http.HandlerFunc(handleAdminTenantByID))))
+
 	// Public template endpoints (for template marketplace)
 	mux.HandleFunc("/api/templates", handleTemplates)
 	mux.HandleFunc("/api/templates/", handleTemplateByID)
 
-	// App and AppSpec routes: GET is any authenticated user, mutations require app-author or admin
-	mux.Handle("/api/appspecs", authMiddleware(http.HandlerFunc(handleAppSpecs)))
-	mux.Handle("/api/appspecs/", authMiddleware(http.HandlerFunc(handleAppSpecByID)))
+	// App and AppSpec routes: tenant-scoped, GET is any authenticated user, mutations require app-author or admin
+	mux.Handle("/api/appspecs", withTenant(http.HandlerFunc(handleAppSpecs)))
+	mux.Handle("/api/appspecs/", withTenant(http.HandlerFunc(handleAppSpecByID)))
 
-	mux.Handle("/api/apps", authMiddleware(http.HandlerFunc(handleApps)))
-	mux.Handle("/api/apps/", authMiddleware(http.HandlerFunc(handleAppByID)))
+	mux.Handle("/api/apps", withTenant(http.HandlerFunc(handleApps)))
+	mux.Handle("/api/apps/", withTenant(http.HandlerFunc(handleAppByID)))
 
-	// Audit logs: admin only
-	mux.Handle("/api/audit", authMiddleware(requireAdmin(http.HandlerFunc(handleAuditLogs))))
-	mux.Handle("/api/audit/export", authMiddleware(requireAdmin(http.HandlerFunc(handleAuditExport))))
-	mux.Handle("/api/audit/filters", authMiddleware(requireAdmin(http.HandlerFunc(handleAuditFilters))))
+	// Audit logs: admin only, tenant-scoped
+	mux.Handle("/api/audit", withTenant(requireAdmin(http.HandlerFunc(handleAuditLogs))))
+	mux.Handle("/api/audit/export", withTenant(requireAdmin(http.HandlerFunc(handleAuditExport))))
+	mux.Handle("/api/audit/filters", withTenant(requireAdmin(http.HandlerFunc(handleAuditFilters))))
 
 	// Analytics: stats admin-only, launch recording any authenticated user
-	mux.Handle("/api/analytics/launch", authMiddleware(http.HandlerFunc(handleAnalyticsLaunch)))
-	mux.Handle("/api/analytics/stats", authMiddleware(requireAdmin(http.HandlerFunc(handleAnalyticsStats))))
+	mux.Handle("/api/analytics/launch", withTenant(http.HandlerFunc(handleAnalyticsLaunch)))
+	mux.Handle("/api/analytics/stats", withTenant(requireAdmin(http.HandlerFunc(handleAnalyticsStats))))
 
-	// Session API routes (any authenticated user)
-	mux.Handle("/api/sessions", authMiddleware(http.HandlerFunc(handleSessions)))
-	mux.Handle("/api/sessions/", authMiddleware(http.HandlerFunc(handleSessionByID)))
+	// Session API routes (any authenticated user, tenant-scoped)
+	mux.Handle("/api/sessions", withTenant(http.HandlerFunc(handleSessions)))
+	mux.Handle("/api/sessions/", withTenant(http.HandlerFunc(handleSessionByID)))
 
-	// Quota API route (any authenticated user)
-	mux.Handle("/api/quotas", authMiddleware(http.HandlerFunc(handleQuotas)))
+	// Quota API route (any authenticated user, tenant-scoped)
+	mux.Handle("/api/quotas", withTenant(http.HandlerFunc(handleQuotas)))
 
 	// WebSocket routes for session streams (VNC + Guacamole/RDP)
 	// When auth is configured, the gateway enforces authorization and rate limiting.

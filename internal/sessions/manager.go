@@ -213,6 +213,11 @@ func (m *Manager) cleanupStaleSessions() error {
 
 // checkQuotas verifies that creating a new session for the given user would not exceed quotas.
 func (m *Manager) checkQuotas(userID string) error {
+	return m.checkQuotasWithTenant(userID, "")
+}
+
+// checkQuotasWithTenant verifies quotas including tenant-level limits.
+func (m *Manager) checkQuotasWithTenant(userID, tenantID string) error {
 	// Check per-user session limit
 	if m.maxSessionsPerUser > 0 {
 		count, err := m.db.CountActiveSessionsByUser(userID)
@@ -222,6 +227,37 @@ func (m *Manager) checkQuotas(userID string) error {
 		if count >= m.maxSessionsPerUser {
 			return &QuotaExceededError{
 				Reason: fmt.Sprintf("user %s has %d active sessions (max %d)", userID, count, m.maxSessionsPerUser),
+			}
+		}
+	}
+
+	// Check tenant session limit
+	if tenantID != "" {
+		tenant, err := m.db.GetTenant(tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to get tenant: %w", err)
+		}
+		if tenant != nil && tenant.Quotas.MaxTotalSessions > 0 {
+			count, err := m.db.CountActiveSessionsByTenant(tenantID)
+			if err != nil {
+				return fmt.Errorf("failed to check tenant session count: %w", err)
+			}
+			if count >= tenant.Quotas.MaxTotalSessions {
+				return &QuotaExceededError{
+					Reason: fmt.Sprintf("tenant %s session limit reached (%d/%d)", tenant.Name, count, tenant.Quotas.MaxTotalSessions),
+				}
+			}
+		}
+		// Check tenant-level per-user limit (overrides global if set)
+		if tenant != nil && tenant.Quotas.MaxSessionsPerUser > 0 {
+			count, err := m.db.CountActiveSessionsByUser(userID)
+			if err != nil {
+				return fmt.Errorf("failed to check user session count: %w", err)
+			}
+			if count >= tenant.Quotas.MaxSessionsPerUser {
+				return &QuotaExceededError{
+					Reason: fmt.Sprintf("tenant per-user session limit reached (%d/%d)", count, tenant.Quotas.MaxSessionsPerUser),
+				}
 			}
 		}
 	}
@@ -278,6 +314,11 @@ func (m *Manager) applyDefaultResourceLimits(podConfig *k8s.PodConfig, app *db.A
 
 // GetQuotaStatus returns current quota usage information for a user.
 func (m *Manager) GetQuotaStatus(userID string) (*QuotaStatus, error) {
+	return m.GetQuotaStatusWithTenant(userID, "")
+}
+
+// GetQuotaStatusWithTenant returns quota usage including tenant-level quotas.
+func (m *Manager) GetQuotaStatusWithTenant(userID, tenantID string) (*QuotaStatus, error) {
 	userCount, err := m.db.CountActiveSessionsByUser(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count user sessions: %w", err)
@@ -288,7 +329,7 @@ func (m *Manager) GetQuotaStatus(userID string) (*QuotaStatus, error) {
 		return nil, fmt.Errorf("failed to count global sessions: %w", err)
 	}
 
-	return &QuotaStatus{
+	status := &QuotaStatus{
 		UserSessions:       userCount,
 		MaxSessionsPerUser: m.maxSessionsPerUser,
 		GlobalSessions:     globalCount,
@@ -297,7 +338,43 @@ func (m *Manager) GetQuotaStatus(userID string) (*QuotaStatus, error) {
 		DefaultCPULimit:    m.defaultCPULimit,
 		DefaultMemRequest:  m.defaultMemRequest,
 		DefaultMemLimit:    m.defaultMemLimit,
-	}, nil
+	}
+
+	// Add tenant quota info if tenant specified
+	if tenantID != "" {
+		tenantCount, err := m.db.CountActiveSessionsByTenant(tenantID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count tenant sessions: %w", err)
+		}
+		status.TenantSessions = tenantCount
+
+		tenant, err := m.db.GetTenant(tenantID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tenant: %w", err)
+		}
+		if tenant != nil {
+			status.MaxTenantSessions = tenant.Quotas.MaxTotalSessions
+			// Tenant-level per-user limit overrides global if set
+			if tenant.Quotas.MaxSessionsPerUser > 0 {
+				status.MaxSessionsPerUser = tenant.Quotas.MaxSessionsPerUser
+			}
+			// Tenant-level resource defaults override global if set
+			if tenant.Quotas.DefaultCPURequest != "" {
+				status.DefaultCPURequest = tenant.Quotas.DefaultCPURequest
+			}
+			if tenant.Quotas.DefaultCPULimit != "" {
+				status.DefaultCPULimit = tenant.Quotas.DefaultCPULimit
+			}
+			if tenant.Quotas.DefaultMemRequest != "" {
+				status.DefaultMemRequest = tenant.Quotas.DefaultMemRequest
+			}
+			if tenant.Quotas.DefaultMemLimit != "" {
+				status.DefaultMemLimit = tenant.Quotas.DefaultMemLimit
+			}
+		}
+	}
+
+	return status, nil
 }
 
 // CreateSession creates a new session for an application

@@ -42,6 +42,7 @@ type Application struct {
 	ContainerArgs  []string        `json:"container_args,omitempty"`  // Extra arguments to pass to the container
 	ResourceLimits *ResourceLimits `json:"resource_limits,omitempty"` // Resource limits for container apps
 	EgressPolicy   *EgressPolicy   `json:"egress_policy,omitempty"`   // Network egress rules for container sessions
+	TenantID       string          `json:"tenant_id,omitempty"`       // Tenant this app belongs to
 }
 
 // AppConfig is the JSON structure for apps.json
@@ -98,6 +99,8 @@ type User struct {
 	Roles           []string  `json:"roles"`
 	AuthProvider    string    `json:"auth_provider,omitempty"`     // "local" or "oidc"
 	AuthProviderID  string    `json:"auth_provider_id,omitempty"` // External subject ID (e.g., OIDC sub)
+	TenantID        string    `json:"tenant_id,omitempty"`        // Tenant this user belongs to
+	TenantRoles     []string  `json:"tenant_roles,omitempty"`     // Roles within the tenant (e.g., "tenant-admin")
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -129,6 +132,7 @@ type Session struct {
 	PodIP       string        `json:"pod_ip,omitempty"`
 	Status      SessionStatus `json:"status"`
 	IdleTimeout int64         `json:"idle_timeout,omitempty"` // Per-session idle timeout in seconds (0 = use global default)
+	TenantID    string        `json:"tenant_id,omitempty"`    // Tenant this session belongs to
 	CreatedAt   time.Time     `json:"created_at"`
 	UpdatedAt   time.Time     `json:"updated_at"`
 }
@@ -356,6 +360,17 @@ func (db *DB) migrate() error {
 		expires_at DATETIME NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS idx_oidc_states_expires ON oidc_states(expires_at);
+
+	CREATE TABLE IF NOT EXISTS tenants (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		slug TEXT NOT NULL UNIQUE,
+		settings TEXT DEFAULT '{}',
+		quotas TEXT DEFAULT '{}',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
 	`
 	_, err := db.conn.Exec(schema)
 	if err != nil {
@@ -379,12 +394,25 @@ func (db *DB) migrate() error {
 		"ALTER TABLE users ADD COLUMN auth_provider_id TEXT DEFAULT ''",
 		"ALTER TABLE applications ADD COLUMN egress_policy TEXT DEFAULT ''",
 		"ALTER TABLE app_specs ADD COLUMN egress_policy TEXT DEFAULT ''",
+		// Multi-tenancy columns
+		"ALTER TABLE applications ADD COLUMN tenant_id TEXT DEFAULT 'default'",
+		"ALTER TABLE users ADD COLUMN tenant_id TEXT DEFAULT 'default'",
+		"ALTER TABLE users ADD COLUMN tenant_roles TEXT DEFAULT '[]'",
+		"ALTER TABLE sessions ADD COLUMN tenant_id TEXT DEFAULT 'default'",
+		"ALTER TABLE audit_log ADD COLUMN tenant_id TEXT DEFAULT 'default'",
+		"ALTER TABLE analytics ADD COLUMN tenant_id TEXT DEFAULT 'default'",
+		"ALTER TABLE app_specs ADD COLUMN tenant_id TEXT DEFAULT 'default'",
 	}
 
 	for _, migration := range migrations {
 		// Ignore errors - column may already exist
 		db.conn.Exec(migration)
 	}
+
+	// Seed default tenant for backwards compatibility
+	db.conn.Exec(
+		"INSERT OR IGNORE INTO tenants (id, name, slug, settings, quotas) VALUES ('default', 'Default', 'default', '{}', '{}')",
+	)
 
 	return nil
 }
@@ -844,9 +872,13 @@ func (db *DB) GetAnalyticsStats() (*AnalyticsStats, error) {
 
 // CreateSession creates a new session
 func (db *DB) CreateSession(session Session) error {
+	tenantID := session.TenantID
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
 	_, err := db.conn.Exec(
-		"INSERT INTO sessions (id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		session.ID, session.UserID, session.AppID, session.PodName, session.PodIP, string(session.Status), session.IdleTimeout, session.CreatedAt, session.UpdatedAt,
+		"INSERT INTO sessions (id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, tenant_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		session.ID, session.UserID, session.AppID, session.PodName, session.PodIP, string(session.Status), session.IdleTimeout, tenantID, session.CreatedAt, session.UpdatedAt,
 	)
 	return err
 }
@@ -1083,10 +1115,22 @@ func (db *DB) CreateUser(user User) error {
 		authProvider = "local"
 	}
 
+	tenantID := user.TenantID
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+
+	tenantRolesJSON := "[]"
+	if len(user.TenantRoles) > 0 {
+		if b, err := json.Marshal(user.TenantRoles); err == nil {
+			tenantRolesJSON = string(b)
+		}
+	}
+
 	now := time.Now()
 	_, err = db.conn.Exec(
-		"INSERT INTO users (id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		user.ID, user.Username, user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), authProvider, user.AuthProviderID, now, now,
+		"INSERT INTO users (id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, tenant_id, tenant_roles, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		user.ID, user.Username, user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), authProvider, user.AuthProviderID, tenantID, tenantRolesJSON, now, now,
 	)
 	return err
 }
@@ -1096,10 +1140,12 @@ func (db *DB) GetUserByID(id string) (*User, error) {
 	var user User
 	var rolesJSON string
 	var authProvider, authProviderID sql.NullString
+	var tenantID sql.NullString
+	var tenantRolesJSON sql.NullString
 	err := db.conn.QueryRow(
-		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users WHERE id = ?",
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, tenant_id, tenant_roles, created_at, updated_at FROM users WHERE id = ?",
 		id,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &tenantID, &tenantRolesJSON, &user.CreatedAt, &user.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1116,6 +1162,12 @@ func (db *DB) GetUserByID(id string) (*User, error) {
 	}
 	if authProviderID.Valid {
 		user.AuthProviderID = authProviderID.String
+	}
+	if tenantID.Valid {
+		user.TenantID = tenantID.String
+	}
+	if tenantRolesJSON.Valid && tenantRolesJSON.String != "" && tenantRolesJSON.String != "[]" {
+		json.Unmarshal([]byte(tenantRolesJSON.String), &user.TenantRoles)
 	}
 
 	return &user, nil
@@ -1126,10 +1178,12 @@ func (db *DB) GetUserByUsername(username string) (*User, error) {
 	var user User
 	var rolesJSON string
 	var authProvider, authProviderID sql.NullString
+	var tenantID sql.NullString
+	var tenantRolesJSON sql.NullString
 	err := db.conn.QueryRow(
-		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users WHERE username = ?",
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, tenant_id, tenant_roles, created_at, updated_at FROM users WHERE username = ?",
 		username,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &tenantID, &tenantRolesJSON, &user.CreatedAt, &user.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1146,6 +1200,12 @@ func (db *DB) GetUserByUsername(username string) (*User, error) {
 	}
 	if authProviderID.Valid {
 		user.AuthProviderID = authProviderID.String
+	}
+	if tenantID.Valid {
+		user.TenantID = tenantID.String
+	}
+	if tenantRolesJSON.Valid && tenantRolesJSON.String != "" && tenantRolesJSON.String != "[]" {
+		json.Unmarshal([]byte(tenantRolesJSON.String), &user.TenantRoles)
 	}
 
 	return &user, nil
@@ -1163,9 +1223,16 @@ func (db *DB) UpdateUser(user User) error {
 		authProvider = "local"
 	}
 
+	tenantRolesJSON := "[]"
+	if len(user.TenantRoles) > 0 {
+		if b, err := json.Marshal(user.TenantRoles); err == nil {
+			tenantRolesJSON = string(b)
+		}
+	}
+
 	result, err := db.conn.Exec(
-		"UPDATE users SET email = ?, display_name = ?, password_hash = ?, roles = ?, auth_provider = ?, auth_provider_id = ?, updated_at = ? WHERE id = ?",
-		user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), authProvider, user.AuthProviderID, time.Now(), user.ID,
+		"UPDATE users SET email = ?, display_name = ?, password_hash = ?, roles = ?, auth_provider = ?, auth_provider_id = ?, tenant_id = ?, tenant_roles = ?, updated_at = ? WHERE id = ?",
+		user.Email, user.DisplayName, user.PasswordHash, string(rolesJSON), authProvider, user.AuthProviderID, user.TenantID, tenantRolesJSON, time.Now(), user.ID,
 	)
 	if err != nil {
 		return err
@@ -1208,34 +1275,14 @@ func (db *DB) SeedAdminUser(username, passwordHash string) error {
 // ListUsers returns all users
 func (db *DB) ListUsers() ([]User, error) {
 	rows, err := db.conn.Query(
-		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users ORDER BY created_at DESC",
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, tenant_id, tenant_roles, created_at, updated_at FROM users ORDER BY created_at DESC",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var users []User
-	for rows.Next() {
-		var user User
-		var rolesJSON string
-		var authProvider, authProviderID sql.NullString
-		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &user.CreatedAt, &user.UpdatedAt); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
-			user.Roles = []string{"user"}
-		}
-		if authProvider.Valid {
-			user.AuthProvider = authProvider.String
-		}
-		if authProviderID.Valid {
-			user.AuthProviderID = authProviderID.String
-		}
-		users = append(users, user)
-	}
-
-	return users, rows.Err()
+	return scanUsers(rows)
 }
 
 // GetUserByAuthProvider retrieves a user by their external auth provider and subject ID.
@@ -1243,10 +1290,12 @@ func (db *DB) GetUserByAuthProvider(provider, providerID string) (*User, error) 
 	var user User
 	var rolesJSON string
 	var authProvider, authProviderIDCol sql.NullString
+	var tenantID sql.NullString
+	var tenantRolesJSON sql.NullString
 	err := db.conn.QueryRow(
-		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, created_at, updated_at FROM users WHERE auth_provider = ? AND auth_provider_id = ?",
+		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, tenant_id, tenant_roles, created_at, updated_at FROM users WHERE auth_provider = ? AND auth_provider_id = ?",
 		provider, providerID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderIDCol, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderIDCol, &tenantID, &tenantRolesJSON, &user.CreatedAt, &user.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1263,6 +1312,12 @@ func (db *DB) GetUserByAuthProvider(provider, providerID string) (*User, error) 
 	}
 	if authProviderIDCol.Valid {
 		user.AuthProviderID = authProviderIDCol.String
+	}
+	if tenantID.Valid {
+		user.TenantID = tenantID.String
+	}
+	if tenantRolesJSON.Valid && tenantRolesJSON.String != "" && tenantRolesJSON.String != "[]" {
+		json.Unmarshal([]byte(tenantRolesJSON.String), &user.TenantRoles)
 	}
 
 	return &user, nil

@@ -22,6 +22,8 @@ type QuotaStatus struct {
 	MaxSessionsPerUser int    `json:"max_sessions_per_user"` // 0 = unlimited
 	GlobalSessions     int    `json:"global_sessions"`
 	MaxGlobalSessions  int    `json:"max_global_sessions"` // 0 = unlimited
+	TenantSessions     int    `json:"tenant_sessions,omitempty"`
+	MaxTenantSessions  int    `json:"max_tenant_sessions,omitempty"` // 0 = unlimited
 	DefaultCPURequest  string `json:"default_cpu_request,omitempty"`
 	DefaultCPULimit    string `json:"default_cpu_limit,omitempty"`
 	DefaultMemRequest  string `json:"default_mem_request,omitempty"`

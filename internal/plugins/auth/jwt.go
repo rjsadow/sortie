@@ -24,10 +24,12 @@ const (
 // Claims represents JWT claims for Launchpad tokens
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID    string    `json:"user_id"`
-	Username  string    `json:"username"`
-	Roles     []string  `json:"roles"`
-	TokenType TokenType `json:"token_type"`
+	UserID      string    `json:"user_id"`
+	Username    string    `json:"username"`
+	Roles       []string  `json:"roles"`
+	TokenType   TokenType `json:"token_type"`
+	TenantID    string    `json:"tenant_id,omitempty"`
+	TenantRoles []string  `json:"tenant_roles,omitempty"`
 }
 
 // LoginResult contains the result of a successful login
@@ -174,6 +176,11 @@ func (p *JWTAuthProvider) Authenticate(ctx context.Context, tokenString string) 
 		}, nil
 	}
 
+	authMetadata := map[string]string{}
+	if claims.TenantID != "" {
+		authMetadata["tenant_id"] = claims.TenantID
+	}
+
 	expiresAt := claims.ExpiresAt.Time
 	return &plugins.AuthResult{
 		Authenticated: true,
@@ -181,6 +188,8 @@ func (p *JWTAuthProvider) Authenticate(ctx context.Context, tokenString string) 
 			ID:       claims.UserID,
 			Username: claims.Username,
 			Roles:    claims.Roles,
+			Groups:   claims.TenantRoles, // Tenant roles stored in Groups
+			Metadata: authMetadata,
 		},
 		Token:     tokenString,
 		ExpiresAt: &expiresAt,
@@ -216,6 +225,11 @@ func (p *JWTAuthProvider) LoginWithCredentials(ctx context.Context, username, pa
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
+	loginMetadata := map[string]string{}
+	if user.TenantID != "" {
+		loginMetadata["tenant_id"] = user.TenantID
+	}
+
 	return &LoginResult{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -226,6 +240,7 @@ func (p *JWTAuthProvider) LoginWithCredentials(ctx context.Context, username, pa
 			Email:    user.Email,
 			Name:     user.DisplayName,
 			Roles:    user.Roles,
+			Metadata: loginMetadata,
 		},
 	}, nil
 }
@@ -267,6 +282,11 @@ func (p *JWTAuthProvider) RefreshAccessToken(ctx context.Context, refreshTokenSt
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
+	refreshMetadata := map[string]string{}
+	if user.TenantID != "" {
+		refreshMetadata["tenant_id"] = user.TenantID
+	}
+
 	return &LoginResult{
 		AccessToken:  accessToken,
 		RefreshToken: refreshTokenString, // Return same refresh token
@@ -277,6 +297,7 @@ func (p *JWTAuthProvider) RefreshAccessToken(ctx context.Context, refreshTokenSt
 			Email:    user.Email,
 			Name:     user.DisplayName,
 			Roles:    user.Roles,
+			Metadata: refreshMetadata,
 		},
 	}, nil
 }
@@ -297,10 +318,12 @@ func (p *JWTAuthProvider) generateToken(user *db.User, tokenType TokenType) (str
 			Issuer:    "launchpad",
 			Subject:   user.ID,
 		},
-		UserID:    user.ID,
-		Username:  user.Username,
-		Roles:     user.Roles,
-		TokenType: tokenType,
+		UserID:      user.ID,
+		Username:    user.Username,
+		Roles:       user.Roles,
+		TokenType:   tokenType,
+		TenantID:    user.TenantID,
+		TenantRoles: user.TenantRoles,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -321,12 +344,18 @@ func (p *JWTAuthProvider) GetUser(ctx context.Context, userID string) (*plugins.
 		return nil, nil
 	}
 
+	getUserMetadata := map[string]string{}
+	if user.TenantID != "" {
+		getUserMetadata["tenant_id"] = user.TenantID
+	}
+
 	return &plugins.User{
 		ID:       user.ID,
 		Username: user.Username,
 		Email:    user.Email,
 		Name:     user.DisplayName,
 		Roles:    user.Roles,
+		Metadata: getUserMetadata,
 	}, nil
 }
 
