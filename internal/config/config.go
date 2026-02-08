@@ -71,6 +71,12 @@ type Config struct {
 	RecordingEnabled    bool   // Enable session lifecycle event recording
 	RecordingEndpoint   string // Optional endpoint for recording events
 	RecordingBufferSize int    // Buffer size for async event processing
+
+	// Billing/metering configuration
+	BillingEnabled        bool          // Enable metering event collection
+	BillingExporter       string        // Exporter type: "log" or "webhook"
+	BillingWebhookURL     string        // Webhook URL for billing export (when exporter=webhook)
+	BillingExportInterval time.Duration // How often to export metering events
 }
 
 // ValidationError represents a configuration validation error.
@@ -119,6 +125,8 @@ const (
 	DefaultGatewayBurst          = 20                       // burst of 20
 	DefaultMaxSessionsPerUser    = 5
 	DefaultMaxGlobalSessions     = 100
+	DefaultBillingExporter       = "log"
+	DefaultBillingExportInterval = 5 * time.Minute
 	DefaultDefaultCPURequest     = "500m"
 	DefaultDefaultCPULimit       = "2"
 	DefaultDefaultMemRequest     = "512Mi"
@@ -495,6 +503,40 @@ func (c *Config) loadFromEnv() error {
 		} else {
 			c.RecordingBufferSize = n
 		}
+	}
+
+	// Billing/metering configuration
+	if v := os.Getenv("LAUNCHPAD_BILLING_ENABLED"); v != "" {
+		c.BillingEnabled = strings.EqualFold(v, "true") || v == "1"
+	}
+
+	if v := os.Getenv("LAUNCHPAD_BILLING_EXPORTER"); v != "" {
+		c.BillingExporter = v
+	} else if c.BillingExporter == "" {
+		c.BillingExporter = DefaultBillingExporter
+	}
+
+	if v := os.Getenv("LAUNCHPAD_BILLING_WEBHOOK_URL"); v != "" {
+		c.BillingWebhookURL = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_BILLING_EXPORT_INTERVAL"); v != "" {
+		minutes, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_BILLING_EXPORT_INTERVAL",
+				Message: fmt.Sprintf("invalid interval: %q (must be an integer representing minutes)", v),
+			})
+		} else if minutes <= 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_BILLING_EXPORT_INTERVAL",
+				Message: fmt.Sprintf("interval must be positive: %d", minutes),
+			})
+		} else {
+			c.BillingExportInterval = time.Duration(minutes) * time.Minute
+		}
+	} else if c.BillingExportInterval == 0 {
+		c.BillingExportInterval = DefaultBillingExportInterval
 	}
 
 	if len(parseErrors) > 0 {

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rjsadow/launchpad/internal/billing"
 	"github.com/rjsadow/launchpad/internal/config"
 	"github.com/rjsadow/launchpad/internal/db"
 	"github.com/rjsadow/launchpad/internal/files"
@@ -148,10 +149,32 @@ func main() {
 	var sessionRecorder sessions.SessionRecorder
 	if appConfig.RecordingEnabled {
 		slog.Info("Session recording enabled")
-		// Future: initialize a real recorder based on RecordingEndpoint/BufferSize.
-		// For now, use the noop recorder even when enabled (hooks are wired,
-		// a real implementation can be swapped in without changing the manager).
 		sessionRecorder = &sessions.NoopRecorder{}
+	}
+
+	// Initialize billing metering collector (replaces noop recorder when enabled)
+	var billingCollector *billing.Collector
+	if appConfig.BillingEnabled {
+		billingCollector = billing.NewCollector()
+		sessionRecorder = billingCollector
+
+		// Select billing exporter
+		var exporter billing.Exporter
+		switch appConfig.BillingExporter {
+		case "webhook":
+			exporter = &billing.WebhookExporter{Endpoint: appConfig.BillingWebhookURL}
+		default:
+			exporter = &billing.LogExporter{}
+		}
+
+		// Start export loop in background
+		billingCtx, billingCancel := context.WithCancel(context.Background())
+		defer billingCancel()
+		go billing.ExportLoop(billingCtx, billingCollector, exporter, appConfig.BillingExportInterval)
+
+		slog.Info("Billing metering enabled",
+			"exporter", exporter.Name(),
+			"interval", appConfig.BillingExportInterval)
 	}
 
 	// Initialize session manager with config
