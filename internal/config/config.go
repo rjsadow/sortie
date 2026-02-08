@@ -66,6 +66,11 @@ type Config struct {
 	DefaultCPULimit    string // Default CPU limit for sessions (e.g., "2")
 	DefaultMemRequest  string // Default memory request for sessions (e.g., "512Mi")
 	DefaultMemLimit    string // Default memory limit for sessions (e.g., "2Gi")
+
+	// Session recording configuration
+	RecordingEnabled    bool   // Enable session lifecycle event recording
+	RecordingEndpoint   string // Optional endpoint for recording events
+	RecordingBufferSize int    // Buffer size for async event processing
 }
 
 // ValidationError represents a configuration validation error.
@@ -464,6 +469,32 @@ func (c *Config) loadFromEnv() error {
 
 	if v := os.Getenv("LAUNCHPAD_DEFAULT_MEM_LIMIT"); v != "" {
 		c.DefaultMemLimit = v
+	}
+
+	// Session recording configuration
+	if v := os.Getenv("LAUNCHPAD_RECORDING_ENABLED"); v != "" {
+		c.RecordingEnabled = strings.EqualFold(v, "true") || v == "1"
+	}
+
+	if v := os.Getenv("LAUNCHPAD_RECORDING_ENDPOINT"); v != "" {
+		c.RecordingEndpoint = v
+	}
+
+	if v := os.Getenv("LAUNCHPAD_RECORDING_BUFFER_SIZE"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_RECORDING_BUFFER_SIZE",
+				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
+			})
+		} else if n < 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "LAUNCHPAD_RECORDING_BUFFER_SIZE",
+				Message: fmt.Sprintf("value must be non-negative: %d", n),
+			})
+		} else {
+			c.RecordingBufferSize = n
+		}
 	}
 
 	if len(parseErrors) > 0 {

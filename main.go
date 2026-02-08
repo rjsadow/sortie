@@ -144,6 +144,16 @@ func main() {
 		}
 	}
 
+	// Initialize session recorder (noop by default, enabled via config)
+	var sessionRecorder sessions.SessionRecorder
+	if appConfig.RecordingEnabled {
+		slog.Info("Session recording enabled")
+		// Future: initialize a real recorder based on RecordingEndpoint/BufferSize.
+		// For now, use the noop recorder even when enabled (hooks are wired,
+		// a real implementation can be swapped in without changing the manager).
+		sessionRecorder = &sessions.NoopRecorder{}
+	}
+
 	// Initialize session manager with config
 	sessionManager = sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
 		SessionTimeout:     appConfig.SessionTimeout,
@@ -155,6 +165,7 @@ func main() {
 		DefaultCPULimit:    appConfig.DefaultCPULimit,
 		DefaultMemRequest:  appConfig.DefaultMemRequest,
 		DefaultMemLimit:    appConfig.DefaultMemLimit,
+		Recorder:           sessionRecorder,
 	})
 	sessionManager.Start()
 	defer sessionManager.Stop()

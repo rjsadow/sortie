@@ -37,6 +37,9 @@ type ManagerConfig struct {
 	DefaultCPULimit    string // Default CPU limit for new sessions
 	DefaultMemRequest  string // Default memory request for new sessions
 	DefaultMemLimit    string // Default memory limit for new sessions
+
+	// Session recording
+	Recorder SessionRecorder // Optional recorder for lifecycle events (nil = noop)
 }
 
 // Manager handles session lifecycle.
@@ -55,6 +58,9 @@ type Manager struct {
 	defaultCPULimit    string
 	defaultMemRequest  string
 	defaultMemLimit    string
+
+	// Session recording
+	recorder SessionRecorder
 
 	stopCh chan struct{}
 }
@@ -82,6 +88,11 @@ func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
 		cfg.PodReadyTimeout = DefaultPodReadyTimeout
 	}
 
+	recorder := cfg.Recorder
+	if recorder == nil {
+		recorder = &NoopRecorder{}
+	}
+
 	return &Manager{
 		db:                 database,
 		sessionTimeout:     cfg.SessionTimeout,
@@ -93,8 +104,32 @@ func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
 		defaultCPULimit:    cfg.DefaultCPULimit,
 		defaultMemRequest:  cfg.DefaultMemRequest,
 		defaultMemLimit:    cfg.DefaultMemLimit,
+		recorder:           recorder,
 		stopCh:             make(chan struct{}),
 	}
+}
+
+// emitEvent sends a session lifecycle event to the recorder.
+func (m *Manager) emitEvent(ctx context.Context, event SessionEvent, session *db.Session, reason string) {
+	m.recorder.OnEvent(ctx, SessionEventData{
+		SessionID: session.ID,
+		UserID:    session.UserID,
+		AppID:     session.AppID,
+		Event:     event,
+		Timestamp: time.Now(),
+		Reason:    reason,
+	})
+}
+
+// emitEventByID emits a lifecycle event by looking up the session from the database.
+// Used in goroutines where the session object may not be readily available.
+func (m *Manager) emitEventByID(sessionID string, event SessionEvent, reason string) {
+	session, err := m.db.GetSession(sessionID)
+	if err != nil || session == nil {
+		log.Printf("Warning: could not emit %s event for session %s: session not found", event, sessionID)
+		return
+	}
+	m.emitEvent(context.Background(), event, session, reason)
 }
 
 // Start begins the background cleanup goroutine
@@ -310,6 +345,9 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		return nil, fmt.Errorf("failed to create session in database: %w", err)
 	}
 
+	// Emit session created event
+	m.emitEvent(ctx, EventSessionCreated, session, "session created")
+
 	// Start goroutine to wait for pod ready and update session
 	go m.waitForPodReady(sessionID, createdPod.Name)
 
@@ -325,6 +363,7 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	if err := k8s.WaitForPodReady(ctx, podName, m.podReadyTimeout); err != nil {
 		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("pod failed to become ready: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
+		m.emitEventByID(sessionID, EventSessionFailed, fmt.Sprintf("pod failed to become ready: %v", err))
 		if delErr := k8s.DeletePod(context.Background(), podName); delErr != nil {
 			log.Printf("Failed to delete pod %s after timeout: %v", podName, delErr)
 		}
@@ -336,6 +375,7 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	if err != nil {
 		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("failed to get pod IP: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
+		m.emitEventByID(sessionID, EventSessionFailed, fmt.Sprintf("failed to get pod IP: %v", err))
 		if delErr := k8s.DeletePod(context.Background(), podName); delErr != nil {
 			log.Printf("Failed to delete pod %s after IP lookup failure: %v", podName, delErr)
 		}
@@ -347,6 +387,9 @@ func (m *Manager) waitForPodReady(sessionID, podName string) {
 	if err := m.db.UpdateSessionPodIPAndStatus(sessionID, podIP, db.SessionStatusRunning); err != nil {
 		log.Printf("Failed to update session for %s: %v", sessionID, err)
 	}
+
+	// Emit session ready event
+	m.emitEventByID(sessionID, EventSessionReady, "pod ready")
 }
 
 // GetSession returns a session by ID, always reading from the database
@@ -402,6 +445,9 @@ func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
 	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusStopped); err != nil {
 		return fmt.Errorf("failed to update session status: %w", err)
 	}
+
+	// Emit session stopped event
+	m.emitEvent(ctx, EventSessionStopped, session, "user stopped")
 
 	return nil
 }
@@ -474,6 +520,9 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 		return nil, fmt.Errorf("failed to re-read session after restart: %w", err)
 	}
 
+	// Emit session restarted event
+	m.emitEvent(ctx, EventSessionRestarted, session, "user restarted")
+
 	// Wait for pod ready in background
 	go m.waitForPodReady(sessionID, createdPod.Name)
 
@@ -519,6 +568,14 @@ func (m *Manager) terminateWithStatus(ctx context.Context, sessionID string, fin
 	// Update status to final state
 	if err := m.db.UpdateSessionStatus(sessionID, finalStatus); err != nil {
 		return fmt.Errorf("failed to update session status: %w", err)
+	}
+
+	// Emit event based on final status
+	switch finalStatus {
+	case db.SessionStatusExpired:
+		m.emitEvent(ctx, EventSessionExpired, session, reason)
+	default:
+		m.emitEvent(ctx, EventSessionTerminated, session, reason)
 	}
 
 	return nil
