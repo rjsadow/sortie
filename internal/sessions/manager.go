@@ -9,8 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/k8s"
-	corev1 "k8s.io/api/core/v1"
+	"github.com/rjsadow/launchpad/internal/runner"
 )
 
 const (
@@ -45,6 +44,9 @@ type ManagerConfig struct {
 	QueueMaxSize      int           // Max queued requests (0 = no queueing, reject immediately)
 	QueueTimeout      time.Duration // Per-request queue wait timeout
 	QueuePollInterval time.Duration // Capacity check interval
+
+	// Runner is the workload orchestration backend (nil = noop/tests only)
+	Runner runner.Runner
 }
 
 // Manager handles session lifecycle.
@@ -52,6 +54,7 @@ type ManagerConfig struct {
 // Multiple replicas can share the same database and operate independently.
 type Manager struct {
 	db              *db.DB
+	runner          runner.Runner
 	sessionTimeout  time.Duration
 	cleanupInterval time.Duration
 	podReadyTimeout time.Duration
@@ -103,6 +106,7 @@ func NewManagerWithConfig(database *db.DB, cfg ManagerConfig) *Manager {
 
 	m := &Manager{
 		db:                 database,
+		runner:             cfg.Runner,
 		sessionTimeout:     cfg.SessionTimeout,
 		cleanupInterval:    cfg.CleanupInterval,
 		podReadyTimeout:    cfg.PodReadyTimeout,
@@ -278,37 +282,51 @@ func (m *Manager) checkQuotasWithTenant(userID, tenantID string) error {
 	return nil
 }
 
-// applyDefaultResourceLimits sets default CPU/memory on a pod config when no app-specific limits are configured.
-func (m *Manager) applyDefaultResourceLimits(podConfig *k8s.PodConfig, app *db.Application) {
+// applyDefaultResourceLimits sets default CPU/memory on a workload config when no app-specific limits are configured.
+func (m *Manager) applyDefaultResourceLimits(wc *runner.WorkloadConfig, app *db.Application) {
 	// App-specific limits take priority
 	if app.ResourceLimits != nil {
 		if app.ResourceLimits.CPURequest != "" {
-			podConfig.CPURequest = app.ResourceLimits.CPURequest
+			wc.CPURequest = app.ResourceLimits.CPURequest
 		}
 		if app.ResourceLimits.CPULimit != "" {
-			podConfig.CPULimit = app.ResourceLimits.CPULimit
+			wc.CPULimit = app.ResourceLimits.CPULimit
 		}
 		if app.ResourceLimits.MemoryRequest != "" {
-			podConfig.MemoryRequest = app.ResourceLimits.MemoryRequest
+			wc.MemoryRequest = app.ResourceLimits.MemoryRequest
 		}
 		if app.ResourceLimits.MemoryLimit != "" {
-			podConfig.MemoryLimit = app.ResourceLimits.MemoryLimit
+			wc.MemoryLimit = app.ResourceLimits.MemoryLimit
 		}
 		return
 	}
 
 	// Apply global defaults from config
 	if m.defaultCPURequest != "" {
-		podConfig.CPURequest = m.defaultCPURequest
+		wc.CPURequest = m.defaultCPURequest
 	}
 	if m.defaultCPULimit != "" {
-		podConfig.CPULimit = m.defaultCPULimit
+		wc.CPULimit = m.defaultCPULimit
 	}
 	if m.defaultMemRequest != "" {
-		podConfig.MemoryRequest = m.defaultMemRequest
+		wc.MemoryRequest = m.defaultMemRequest
 	}
 	if m.defaultMemLimit != "" {
-		podConfig.MemoryLimit = m.defaultMemLimit
+		wc.MemoryLimit = m.defaultMemLimit
+	}
+}
+
+// buildWorkloadConfig creates a WorkloadConfig from an app and session ID.
+func (m *Manager) buildWorkloadConfig(sessionID string, app *db.Application) *runner.WorkloadConfig {
+	return &runner.WorkloadConfig{
+		SessionID:      sessionID,
+		AppID:          app.ID,
+		AppName:        app.Name,
+		ContainerImage: app.ContainerImage,
+		ContainerPort:  app.ContainerPort,
+		Args:           app.ContainerArgs,
+		LaunchType:     string(app.LaunchType),
+		OsType:         app.OsType,
 	}
 }
 
@@ -418,50 +436,31 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 	// Generate session ID
 	sessionID := uuid.New().String()
 
-	// Create pod configuration
-	podConfig := k8s.DefaultPodConfig(sessionID, app.ID, app.Name, app.ContainerImage)
-	podConfig.ContainerPort = app.ContainerPort
-	podConfig.Args = app.ContainerArgs
+	// Build workload configuration
+	wc := m.buildWorkloadConfig(sessionID, app)
 
 	// Set screen resolution from client viewport if provided
 	if req.ScreenWidth > 0 && req.ScreenHeight > 0 {
-		podConfig.ScreenResolution = fmt.Sprintf("%dx%dx24", req.ScreenWidth, req.ScreenHeight)
-		podConfig.ScreenWidth = req.ScreenWidth
-		podConfig.ScreenHeight = req.ScreenHeight
+		wc.ScreenResolution = fmt.Sprintf("%dx%dx24", req.ScreenWidth, req.ScreenHeight)
+		wc.ScreenWidth = req.ScreenWidth
+		wc.ScreenHeight = req.ScreenHeight
 	}
 
 	// Apply resource limits (app-specific override global defaults)
-	m.applyDefaultResourceLimits(podConfig, app)
+	m.applyDefaultResourceLimits(wc, app)
 
-	// Build and create the pod based on launch type and OS type
-	var pod *corev1.Pod
-	switch app.LaunchType {
-	case db.LaunchTypeContainer:
-		if app.OsType == "windows" {
-			pod = k8s.BuildWindowsPodSpec(podConfig)
-		} else {
-			pod = k8s.BuildPodSpec(podConfig)
-		}
-	case db.LaunchTypeWebProxy:
-		pod = k8s.BuildWebProxyPodSpec(podConfig)
-	default:
-		return nil, fmt.Errorf("unsupported launch type: %s", app.LaunchType)
-	}
-
-	createdPod, err := k8s.CreatePod(ctx, pod)
+	// Create the workload via the runner
+	result, err := m.runner.CreateWorkload(ctx, wc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create pod: %w", err)
+		return nil, fmt.Errorf("failed to create workload: %w", err)
 	}
 
-	// Create per-session NetworkPolicy if the app has egress rules
+	// Create per-session network policy if the runner supports it and the app has egress rules
 	if app.EgressPolicy != nil && app.EgressPolicy.Mode != "" {
-		np := k8s.BuildSessionNetworkPolicy(sessionID, app.ID, app.EgressPolicy)
-		if np != nil {
-			if _, err := k8s.CreateNetworkPolicy(ctx, np); err != nil {
-				log.Printf("Warning: failed to create egress NetworkPolicy for session %s: %v", sessionID, err)
-				// Non-fatal: pod still runs, just without custom egress rules
-			} else {
-				log.Printf("Created egress NetworkPolicy for session %s (mode: %s, rules: %d)", sessionID, app.EgressPolicy.Mode, len(app.EgressPolicy.Rules))
+		if npr, ok := m.runner.(runner.NetworkPolicyRunner); ok {
+			if err := npr.CreateNetworkPolicy(ctx, sessionID, app.ID, app.EgressPolicy); err != nil {
+				log.Printf("Warning: failed to create egress policy for session %s: %v", sessionID, err)
+				// Non-fatal: workload still runs, just without custom egress rules
 			}
 		}
 	}
@@ -472,7 +471,7 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		ID:          sessionID,
 		UserID:      req.UserID,
 		AppID:       req.AppID,
-		PodName:     createdPod.Name,
+		PodName:     result.Name,
 		Status:      db.SessionStatusCreating,
 		IdleTimeout: req.IdleTimeout,
 		CreatedAt:   now,
@@ -480,57 +479,59 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 	}
 
 	if err := m.db.CreateSession(*session); err != nil {
-		// Try to clean up the pod and NetworkPolicy
-		k8s.DeletePod(ctx, createdPod.Name)
-		k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
+		// Try to clean up the workload and network policy
+		m.runner.DeleteWorkload(ctx, result.Name)
+		if npr, ok := m.runner.(runner.NetworkPolicyRunner); ok {
+			npr.DeleteNetworkPolicy(ctx, sessionID)
+		}
 		return nil, fmt.Errorf("failed to create session in database: %w", err)
 	}
 
 	// Emit session created event
 	m.emitEvent(ctx, EventSessionCreated, session, "session created")
 
-	// Start goroutine to wait for pod ready and update session
-	go m.waitForPodReady(sessionID, createdPod.Name)
+	// Start goroutine to wait for workload ready and update session
+	go m.waitForWorkloadReady(sessionID, result.Name)
 
 	return session, nil
 }
 
-// waitForPodReady waits for the pod to be ready and updates the session
-func (m *Manager) waitForPodReady(sessionID, podName string) {
+// waitForWorkloadReady waits for the workload to be ready and updates the session
+func (m *Manager) waitForWorkloadReady(sessionID, workloadName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.podReadyTimeout)
 	defer cancel()
 
-	// Wait for pod to be ready
-	if err := k8s.WaitForPodReady(ctx, podName, m.podReadyTimeout); err != nil {
-		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("pod failed to become ready: %v", err))
+	// Wait for workload to be ready
+	if err := m.runner.WaitForReady(ctx, workloadName, m.podReadyTimeout); err != nil {
+		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("workload failed to become ready: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
-		m.emitEventByID(sessionID, EventSessionFailed, fmt.Sprintf("pod failed to become ready: %v", err))
-		if delErr := k8s.DeletePod(context.Background(), podName); delErr != nil {
-			log.Printf("Failed to delete pod %s after timeout: %v", podName, delErr)
+		m.emitEventByID(sessionID, EventSessionFailed, fmt.Sprintf("workload failed to become ready: %v", err))
+		if delErr := m.runner.DeleteWorkload(context.Background(), workloadName); delErr != nil {
+			log.Printf("Failed to delete workload %s after timeout: %v", workloadName, delErr)
 		}
 		return
 	}
 
-	// Get pod IP
-	podIP, err := k8s.GetPodIP(ctx, podName)
+	// Get workload IP
+	ip, err := m.runner.GetIP(ctx, workloadName)
 	if err != nil {
-		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("failed to get pod IP: %v", err))
+		LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusFailed, fmt.Sprintf("failed to get workload IP: %v", err))
 		m.db.UpdateSessionStatus(sessionID, db.SessionStatusFailed)
-		m.emitEventByID(sessionID, EventSessionFailed, fmt.Sprintf("failed to get pod IP: %v", err))
-		if delErr := k8s.DeletePod(context.Background(), podName); delErr != nil {
-			log.Printf("Failed to delete pod %s after IP lookup failure: %v", podName, delErr)
+		m.emitEventByID(sessionID, EventSessionFailed, fmt.Sprintf("failed to get workload IP: %v", err))
+		if delErr := m.runner.DeleteWorkload(context.Background(), workloadName); delErr != nil {
+			log.Printf("Failed to delete workload %s after IP lookup failure: %v", workloadName, delErr)
 		}
 		return
 	}
 
-	// Update session with pod IP and running status in a single operation
-	LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusRunning, "pod ready")
-	if err := m.db.UpdateSessionPodIPAndStatus(sessionID, podIP, db.SessionStatusRunning); err != nil {
+	// Update session with IP and running status in a single operation
+	LogTransition(sessionID, db.SessionStatusCreating, db.SessionStatusRunning, "workload ready")
+	if err := m.db.UpdateSessionPodIPAndStatus(sessionID, ip, db.SessionStatusRunning); err != nil {
 		log.Printf("Failed to update session for %s: %v", sessionID, err)
 	}
 
 	// Emit session ready event
-	m.emitEventByID(sessionID, EventSessionReady, "pod ready")
+	m.emitEventByID(sessionID, EventSessionReady, "workload ready")
 }
 
 // GetSession returns a session by ID, always reading from the database
@@ -562,7 +563,7 @@ func (m *Manager) ListSessionsByUser(ctx context.Context, userID string) ([]db.S
 	return sessions, nil
 }
 
-// StopSession stops a running session, deleting the pod but keeping the session
+// StopSession stops a running session, deleting the workload but keeping the session
 // record so it can be restarted later.
 func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
 	session, err := m.GetSession(ctx, sessionID)
@@ -577,13 +578,15 @@ func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
 		return err
 	}
 
-	// Delete the pod
-	if err := k8s.DeletePod(ctx, session.PodName); err != nil {
-		log.Printf("Warning: failed to delete pod %s: %v", session.PodName, err)
+	// Delete the workload
+	if err := m.runner.DeleteWorkload(ctx, session.PodName); err != nil {
+		log.Printf("Warning: failed to delete workload %s: %v", session.PodName, err)
 	}
 
-	// Clean up per-session NetworkPolicy (if any)
-	k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
+	// Clean up network policy (if runner supports it)
+	if npr, ok := m.runner.(runner.NetworkPolicyRunner); ok {
+		npr.DeleteNetworkPolicy(ctx, sessionID)
+	}
 
 	// Update status to stopped
 	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusStopped); err != nil {
@@ -601,7 +604,7 @@ func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-// RestartSession recreates the pod for a stopped session.
+// RestartSession recreates the workload for a stopped session.
 func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Session, error) {
 	session, err := m.GetSession(ctx, sessionID)
 	if err != nil {
@@ -620,7 +623,7 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 		return nil, err
 	}
 
-	// Get the application to rebuild the pod
+	// Get the application to rebuild the workload
 	app, err := m.db.GetApp(session.AppID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get application: %w", err)
@@ -629,48 +632,33 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 		return nil, fmt.Errorf("application not found: %s", session.AppID)
 	}
 
-	// Create pod configuration using the existing session ID
-	podConfig := k8s.DefaultPodConfig(sessionID, app.ID, app.Name, app.ContainerImage)
-	podConfig.ContainerPort = app.ContainerPort
-	podConfig.Args = app.ContainerArgs
+	// Build workload configuration using the existing session ID
+	wc := m.buildWorkloadConfig(sessionID, app)
 
 	// Apply resource limits (app-specific override global defaults)
-	m.applyDefaultResourceLimits(podConfig, app)
+	m.applyDefaultResourceLimits(wc, app)
 
-	// Build and create the pod
-	var pod *corev1.Pod
-	switch app.LaunchType {
-	case db.LaunchTypeContainer:
-		if app.OsType == "windows" {
-			pod = k8s.BuildWindowsPodSpec(podConfig)
-		} else {
-			pod = k8s.BuildPodSpec(podConfig)
-		}
-	case db.LaunchTypeWebProxy:
-		pod = k8s.BuildWebProxyPodSpec(podConfig)
-	default:
-		return nil, fmt.Errorf("unsupported launch type: %s", app.LaunchType)
-	}
-
-	createdPod, err := k8s.CreatePod(ctx, pod)
+	// Create the workload via the runner
+	result, err := m.runner.CreateWorkload(ctx, wc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create pod: %w", err)
+		return nil, fmt.Errorf("failed to create workload: %w", err)
 	}
 
-	// Create per-session NetworkPolicy if the app has egress rules
+	// Create per-session network policy if the runner supports it and the app has egress rules
 	if app.EgressPolicy != nil && app.EgressPolicy.Mode != "" {
-		np := k8s.BuildSessionNetworkPolicy(sessionID, app.ID, app.EgressPolicy)
-		if np != nil {
-			if _, err := k8s.CreateNetworkPolicy(ctx, np); err != nil {
-				log.Printf("Warning: failed to create egress NetworkPolicy for restarted session %s: %v", sessionID, err)
+		if npr, ok := m.runner.(runner.NetworkPolicyRunner); ok {
+			if err := npr.CreateNetworkPolicy(ctx, sessionID, app.ID, app.EgressPolicy); err != nil {
+				log.Printf("Warning: failed to create egress policy for restarted session %s: %v", sessionID, err)
 			}
 		}
 	}
 
-	// Update session in database with new pod name and creating status
-	if err := m.db.UpdateSessionRestart(sessionID, createdPod.Name); err != nil {
-		k8s.DeletePod(ctx, createdPod.Name)
-		k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
+	// Update session in database with new workload name and creating status
+	if err := m.db.UpdateSessionRestart(sessionID, result.Name); err != nil {
+		m.runner.DeleteWorkload(ctx, result.Name)
+		if npr, ok := m.runner.(runner.NetworkPolicyRunner); ok {
+			npr.DeleteNetworkPolicy(ctx, sessionID)
+		}
 		return nil, fmt.Errorf("failed to update session in database: %w", err)
 	}
 
@@ -683,8 +671,8 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 	// Emit session restarted event
 	m.emitEvent(ctx, EventSessionRestarted, session, "user restarted")
 
-	// Wait for pod ready in background
-	go m.waitForPodReady(sessionID, createdPod.Name)
+	// Wait for workload ready in background
+	go m.waitForWorkloadReady(sessionID, result.Name)
 
 	return session, nil
 }
@@ -720,13 +708,15 @@ func (m *Manager) terminateWithStatus(ctx context.Context, sessionID string, fin
 		return err
 	}
 
-	// Delete the pod
-	if err := k8s.DeletePod(ctx, session.PodName); err != nil {
-		log.Printf("Warning: failed to delete pod %s: %v", session.PodName, err)
+	// Delete the workload
+	if err := m.runner.DeleteWorkload(ctx, session.PodName); err != nil {
+		log.Printf("Warning: failed to delete workload %s: %v", session.PodName, err)
 	}
 
-	// Clean up per-session NetworkPolicy (if any)
-	k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
+	// Clean up network policy (if runner supports it)
+	if npr, ok := m.runner.(runner.NetworkPolicyRunner); ok {
+		npr.DeleteNetworkPolicy(ctx, sessionID)
+	}
 
 	// Update status to final state
 	if err := m.db.UpdateSessionStatus(sessionID, finalStatus); err != nil {

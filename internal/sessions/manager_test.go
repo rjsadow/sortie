@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/k8s"
+	"github.com/rjsadow/launchpad/internal/runner"
 )
 
 // newTestDB creates an in-memory SQLite database for testing.
@@ -922,27 +922,27 @@ func TestApplyDefaultResourceLimits_AppOverridesDefaults(t *testing.T) {
 		},
 	}
 
-	podConfig := &k8s.PodConfig{
+	wc := &runner.WorkloadConfig{
 		CPURequest:    "500m",
 		CPULimit:      "2",
 		MemoryRequest: "512Mi",
 		MemoryLimit:   "2Gi",
 	}
 
-	m.applyDefaultResourceLimits(podConfig, app)
+	m.applyDefaultResourceLimits(wc, app)
 
 	// App-specific limits should be applied
-	if podConfig.CPURequest != "200m" {
-		t.Errorf("CPURequest = %q, want 200m", podConfig.CPURequest)
+	if wc.CPURequest != "200m" {
+		t.Errorf("CPURequest = %q, want 200m", wc.CPURequest)
 	}
-	if podConfig.CPULimit != "4" {
-		t.Errorf("CPULimit = %q, want 4", podConfig.CPULimit)
+	if wc.CPULimit != "4" {
+		t.Errorf("CPULimit = %q, want 4", wc.CPULimit)
 	}
-	if podConfig.MemoryRequest != "512Mi" {
-		t.Errorf("MemoryRequest = %q, want 512Mi", podConfig.MemoryRequest)
+	if wc.MemoryRequest != "512Mi" {
+		t.Errorf("MemoryRequest = %q, want 512Mi", wc.MemoryRequest)
 	}
-	if podConfig.MemoryLimit != "4Gi" {
-		t.Errorf("MemoryLimit = %q, want 4Gi", podConfig.MemoryLimit)
+	if wc.MemoryLimit != "4Gi" {
+		t.Errorf("MemoryLimit = %q, want 4Gi", wc.MemoryLimit)
 	}
 }
 
@@ -958,26 +958,26 @@ func TestApplyDefaultResourceLimits_GlobalDefaultsWhenNoAppLimits(t *testing.T) 
 	// App with no custom limits
 	app := &db.Application{}
 
-	podConfig := &k8s.PodConfig{
+	wc := &runner.WorkloadConfig{
 		CPURequest:    "500m",
 		CPULimit:      "2",
 		MemoryRequest: "512Mi",
 		MemoryLimit:   "2Gi",
 	}
 
-	m.applyDefaultResourceLimits(podConfig, app)
+	m.applyDefaultResourceLimits(wc, app)
 
 	// Global defaults should be applied
-	if podConfig.CPURequest != "100m" {
-		t.Errorf("CPURequest = %q, want 100m", podConfig.CPURequest)
+	if wc.CPURequest != "100m" {
+		t.Errorf("CPURequest = %q, want 100m", wc.CPURequest)
 	}
-	if podConfig.CPULimit != "1" {
-		t.Errorf("CPULimit = %q, want 1", podConfig.CPULimit)
+	if wc.CPULimit != "1" {
+		t.Errorf("CPULimit = %q, want 1", wc.CPULimit)
 	}
-	if podConfig.MemoryRequest != "256Mi" {
-		t.Errorf("MemoryRequest = %q, want 256Mi", podConfig.MemoryRequest)
+	if wc.MemoryRequest != "256Mi" {
+		t.Errorf("MemoryRequest = %q, want 256Mi", wc.MemoryRequest)
 	}
-	if podConfig.MemoryLimit != "1Gi" {
-		t.Errorf("MemoryLimit = %q, want 1Gi", podConfig.MemoryLimit)
+	if wc.MemoryLimit != "1Gi" {
+		t.Errorf("MemoryLimit = %q, want 1Gi", wc.MemoryLimit)
 	}
 }

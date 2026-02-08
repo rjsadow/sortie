@@ -12,8 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +27,7 @@ import (
 	"github.com/rjsadow/launchpad/internal/middleware"
 	"github.com/rjsadow/launchpad/internal/plugins"
 	"github.com/rjsadow/launchpad/internal/plugins/auth"
+	"github.com/rjsadow/launchpad/internal/runner"
 	"github.com/rjsadow/launchpad/internal/sessions"
 
 	"golang.org/x/time/rate"
@@ -182,6 +183,10 @@ func main() {
 			"interval", appConfig.BillingExportInterval)
 	}
 
+	// Initialize workload runner (Kubernetes by default)
+	workloadRunner := runner.NewKubernetesRunner()
+	slog.Info("Workload runner initialized", "type", workloadRunner.Type())
+
 	// Initialize session manager with config
 	sessionManager = sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
 		SessionTimeout:     appConfig.SessionTimeout,
@@ -196,6 +201,7 @@ func main() {
 		Recorder:           sessionRecorder,
 		QueueMaxSize:       appConfig.QueueMaxSize,
 		QueueTimeout:       appConfig.QueueTimeout,
+		Runner:             workloadRunner,
 	})
 	sessionManager.Start()
 	defer sessionManager.Stop()
