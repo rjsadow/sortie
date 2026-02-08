@@ -1,6 +1,7 @@
 package guacamole
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -48,12 +49,21 @@ func (p *GuacdProxy) Serve(clientConn *websocket.Conn) error {
 	}
 	defer guacdConn.Close()
 
-	// Perform the Guacamole handshake
-	if err := p.handshake(guacdConn); err != nil {
+	// Perform the Guacamole handshake. Any display data received after
+	// the "ready" instruction is returned so it can be forwarded to the client.
+	excess, err := p.handshake(guacdConn)
+	if err != nil {
 		return fmt.Errorf("guacamole handshake failed: %w", err)
 	}
 
 	log.Printf("Guacamole handshake complete, starting relay to %s", p.guacdAddr)
+
+	// Forward any initial display data that arrived with the ready response
+	if len(excess) > 0 {
+		if err := clientConn.WriteMessage(websocket.TextMessage, excess); err != nil {
+			return fmt.Errorf("failed to forward initial display data: %w", err)
+		}
+	}
 
 	// Bidirectional relay
 	var wg sync.WaitGroup
@@ -96,18 +106,21 @@ func (p *GuacdProxy) Serve(clientConn *websocket.Conn) error {
 // 3. Send client capability instructions (size, audio, video, image, timezone)
 // 4. Send "connect" instruction with RDP parameters
 // 5. Read guacd's "ready" response
-func (p *GuacdProxy) handshake(conn net.Conn) error {
+//
+// Returns any excess data read beyond the "ready" instruction, which contains
+// initial display updates that must be forwarded to the client.
+func (p *GuacdProxy) handshake(conn net.Conn) ([]byte, error) {
 	// Step 1: Send select instruction
 	selectInstr := encodeInstruction("select", "rdp")
 	if _, err := conn.Write([]byte(selectInstr)); err != nil {
-		return fmt.Errorf("failed to send select: %w", err)
+		return nil, fmt.Errorf("failed to send select: %w", err)
 	}
 
 	// Step 2: Read args response
 	buf := make([]byte, 8192)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return fmt.Errorf("failed to read args: %w", err)
+		return nil, fmt.Errorf("failed to read args: %w", err)
 	}
 	argsResponse := string(buf[:n])
 	log.Printf("guacd args response: %s", argsResponse)
@@ -122,7 +135,7 @@ func (p *GuacdProxy) handshake(conn net.Conn) error {
 		encodeInstruction("image", "image/png", "image/jpeg", "image/webp") +
 		encodeInstruction("timezone", "UTC")
 	if _, err := conn.Write([]byte(clientInstrs)); err != nil {
-		return fmt.Errorf("failed to send client instructions: %w", err)
+		return nil, fmt.Errorf("failed to send client instructions: %w", err)
 	}
 
 	// Step 4: Send connect instruction with RDP parameters
@@ -130,18 +143,30 @@ func (p *GuacdProxy) handshake(conn net.Conn) error {
 	connectArgs := p.buildConnectArgs(args)
 	connectInstr := encodeInstruction("connect", connectArgs...)
 	if _, err := conn.Write([]byte(connectInstr)); err != nil {
-		return fmt.Errorf("failed to send connect: %w", err)
+		return nil, fmt.Errorf("failed to send connect: %w", err)
 	}
 
-	// Step 5: Read ready response
-	n, err = conn.Read(buf)
+	// Step 5: Read ready response.
+	// guacd may pipeline initial display data after the "ready" instruction
+	// in the same TCP burst. We must capture and return any excess data so
+	// it can be forwarded to the WebSocket client before the relay starts.
+	readyBuf := make([]byte, 65536)
+	n, err = conn.Read(readyBuf)
 	if err != nil {
-		return fmt.Errorf("failed to read ready: %w", err)
+		return nil, fmt.Errorf("failed to read ready: %w", err)
 	}
-	readyResponse := string(buf[:n])
-	log.Printf("guacd ready response: %s", readyResponse)
+	response := string(readyBuf[:n])
+	log.Printf("guacd ready response: %.200s", response)
 
-	return nil
+	// Find the end of the ready instruction and return any trailing data
+	readyEnd := strings.Index(response, ";")
+	if readyEnd >= 0 && readyEnd+1 < n {
+		excess := make([]byte, n-readyEnd-1)
+		copy(excess, readyBuf[readyEnd+1:n])
+		return excess, nil
+	}
+
+	return nil, nil
 }
 
 // buildConnectArgs maps guacd's requested parameter names to values.
@@ -193,18 +218,58 @@ func (p *GuacdProxy) relayWSToTCP(ws *websocket.Conn, tcp net.Conn) error {
 }
 
 // relayTCPToWS reads from the TCP connection and writes text messages to the WebSocket.
+// It buffers data to ensure each WebSocket message contains only complete Guacamole
+// instructions (delimited by ';'). The guacamole-common-js parser does not preserve
+// partial element state across WebSocket messages, so sending a split instruction
+// would corrupt the parse state and crash the client.
 func (p *GuacdProxy) relayTCPToWS(tcp net.Conn, ws *websocket.Conn) error {
-	buf := make([]byte, 8192)
+	buf := make([]byte, 65536)
+	var carry []byte // leftover partial instruction from previous read
+
 	for {
 		n, err := tcp.Read(buf)
 		if err != nil {
+			// Flush any remaining data before returning
+			if len(carry) > 0 {
+				_ = ws.WriteMessage(websocket.TextMessage, carry)
+			}
 			if err == io.EOF {
 				return nil
 			}
 			return err
 		}
-		if err := ws.WriteMessage(websocket.TextMessage, buf[:n]); err != nil {
+
+		// Prepend any leftover data from the previous read
+		var data []byte
+		if len(carry) > 0 {
+			data = make([]byte, len(carry)+n)
+			copy(data, carry)
+			copy(data[len(carry):], buf[:n])
+			carry = nil
+		} else {
+			data = buf[:n]
+		}
+
+		// Find the last complete instruction boundary (';')
+		lastSemi := bytes.LastIndexByte(data, ';')
+		if lastSemi < 0 {
+			// No complete instruction yet — buffer everything
+			carry = make([]byte, len(data))
+			copy(carry, data)
+			continue
+		}
+
+		// Send all complete instructions up to and including the last ';'
+		toSend := data[:lastSemi+1]
+		if err := ws.WriteMessage(websocket.TextMessage, toSend); err != nil {
 			return err
+		}
+
+		// Carry over any partial instruction after the last ';'
+		if lastSemi+1 < len(data) {
+			remaining := data[lastSemi+1:]
+			carry = make([]byte, len(remaining))
+			copy(carry, remaining)
 		}
 	}
 }

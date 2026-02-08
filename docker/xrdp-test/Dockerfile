@@ -6,6 +6,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xrdp \
+    xorgxrdp \
+    xauth \
     xfce4 \
     xfce4-terminal \
     dbus-x11 \
@@ -18,8 +20,9 @@ RUN sed -i 's/^port=3389/port=3389/' /etc/xrdp/xrdp.ini && \
     sed -i 's/^crypt_level=.*/crypt_level=none/' /etc/xrdp/xrdp.ini && \
     sed -i 's/^max_bpp=.*/max_bpp=24/' /etc/xrdp/xrdp.ini && \
     # Auto-login: skip the xrdp login screen when credentials are provided via RDP
-    sed -i '/^\[Globals\]/,/^\[/ s/^#autorun=.*/autorun=Xorg/' /etc/xrdp/xrdp.ini && \
-    # If autorun line doesn't exist, add it after [Globals]
+    # Handle both commented (#autorun=) and uncommented (autorun=) lines
+    sed -i 's/^#\?autorun=.*/autorun=Xorg/' /etc/xrdp/xrdp.ini && \
+    # If autorun line doesn't exist at all, add it after [Globals]
     grep -q '^autorun=' /etc/xrdp/xrdp.ini || sed -i '/^\[Globals\]/a autorun=Xorg' /etc/xrdp/xrdp.ini
 
 # Create a test user
