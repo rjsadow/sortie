@@ -41,6 +41,7 @@ type Application struct {
 	ContainerPort  int             `json:"container_port,omitempty"`  // Port web app listens on (default: 8080)
 	ContainerArgs  []string        `json:"container_args,omitempty"`  // Extra arguments to pass to the container
 	ResourceLimits *ResourceLimits `json:"resource_limits,omitempty"` // Resource limits for container apps
+	EgressPolicy   *EgressPolicy   `json:"egress_policy,omitempty"`   // Network egress rules for container sessions
 }
 
 // AppConfig is the JSON structure for apps.json
@@ -153,6 +154,22 @@ type NetworkRule struct {
 	AllowFrom string `json:"allow_from,omitempty"` // CIDR or empty for all
 }
 
+// EgressRule defines a single network egress rule
+type EgressRule struct {
+	CIDR     string `json:"cidr"`                // Destination CIDR (e.g., "10.0.0.0/8", "0.0.0.0/0")
+	Port     int    `json:"port,omitempty"`      // Destination port (0 = all ports)
+	Protocol string `json:"protocol,omitempty"`  // "TCP", "UDP", or empty for both
+}
+
+// EgressPolicy defines the network egress policy for an application.
+// Mode "allowlist" permits only DNS and listed destinations (default, most secure).
+// Mode "denylist" permits all traffic except listed destinations.
+// Mode "" (empty) inherits the cluster-level default NetworkPolicy.
+type EgressPolicy struct {
+	Mode  string       `json:"mode,omitempty"`  // "allowlist" or "denylist"; empty = inherit cluster default
+	Rules []EgressRule `json:"rules,omitempty"` // Egress rules
+}
+
 // AppSpec defines an application specification for launching containers
 type AppSpec struct {
 	ID             string          `json:"id"`
@@ -164,6 +181,7 @@ type AppSpec struct {
 	EnvVars        []EnvVar        `json:"env_vars,omitempty"`
 	Volumes        []VolumeMount   `json:"volumes,omitempty"`
 	NetworkRules   []NetworkRule   `json:"network_rules,omitempty"`
+	EgressPolicy   *EgressPolicy   `json:"egress_policy,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 }
@@ -230,7 +248,8 @@ func (db *DB) migrate() error {
 		cpu_request TEXT DEFAULT '',
 		cpu_limit TEXT DEFAULT '',
 		memory_request TEXT DEFAULT '',
-		memory_limit TEXT DEFAULT ''
+		memory_limit TEXT DEFAULT '',
+		egress_policy TEXT DEFAULT ''
 	);
 
 	CREATE TABLE IF NOT EXISTS audit_log (
@@ -326,6 +345,7 @@ func (db *DB) migrate() error {
 		env_vars TEXT DEFAULT '[]',
 		volumes TEXT DEFAULT '[]',
 		network_rules TEXT DEFAULT '[]',
+		egress_policy TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -357,6 +377,8 @@ func (db *DB) migrate() error {
 		"ALTER TABLE sessions ADD COLUMN idle_timeout INTEGER DEFAULT 0",
 		"ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local'",
 		"ALTER TABLE users ADD COLUMN auth_provider_id TEXT DEFAULT ''",
+		"ALTER TABLE applications ADD COLUMN egress_policy TEXT DEFAULT ''",
+		"ALTER TABLE app_specs ADD COLUMN egress_policy TEXT DEFAULT ''",
 	}
 
 	for _, migration := range migrations {
@@ -403,7 +425,7 @@ func (db *DB) SeedFromJSON(jsonPath string) error {
 
 // ListApps returns all applications
 func (db *DB) ListApps() ([]Application, error) {
-	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications ORDER BY category, name")
+	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications ORDER BY category, name")
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +438,8 @@ func (db *DB) ListApps() ([]Application, error) {
 		var containerPort int
 		var containerArgsJSON string
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit); err != nil {
+		var egressPolicyJSON string
+		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON); err != nil {
 			return nil, err
 		}
 		app.LaunchType = LaunchType(launchType)
@@ -442,6 +465,13 @@ func (db *DB) ListApps() ([]Application, error) {
 				MemoryLimit:   memoryLimit,
 			}
 		}
+		// Parse egress policy from JSON
+		if egressPolicyJSON != "" {
+			var ep EgressPolicy
+			if json.Unmarshal([]byte(egressPolicyJSON), &ep) == nil && ep.Mode != "" {
+				app.EgressPolicy = &ep
+			}
+		}
 		apps = append(apps, app)
 	}
 
@@ -455,10 +485,11 @@ func (db *DB) GetApp(id string) (*Application, error) {
 	var containerPort int
 	var containerArgsJSON string
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
+	var egressPolicyJSON string
 	err := db.conn.QueryRow(
-		"SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit FROM applications WHERE id = ?",
+		"SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications WHERE id = ?",
 		id,
-	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit)
+	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -489,6 +520,13 @@ func (db *DB) GetApp(id string) (*Application, error) {
 			MemoryLimit:   memoryLimit,
 		}
 	}
+	// Parse egress policy from JSON
+	if egressPolicyJSON != "" {
+		var ep EgressPolicy
+		if json.Unmarshal([]byte(egressPolicyJSON), &ep) == nil && ep.Mode != "" {
+			app.EgressPolicy = &ep
+		}
+	}
 	return &app, nil
 }
 
@@ -517,9 +555,16 @@ func (db *DB) CreateApp(app Application) error {
 		memoryRequest = app.ResourceLimits.MemoryRequest
 		memoryLimit = app.ResourceLimits.MemoryLimit
 	}
+	// Serialize egress policy to JSON
+	egressPolicyJSON := ""
+	if app.EgressPolicy != nil && app.EgressPolicy.Mode != "" {
+		if b, err := json.Marshal(app.EgressPolicy); err == nil {
+			egressPolicyJSON = string(b)
+		}
+	}
 	_, err := db.conn.Exec(
-		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit,
+		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, egressPolicyJSON,
 	)
 	return err
 }
@@ -549,9 +594,16 @@ func (db *DB) UpdateApp(app Application) error {
 		memoryRequest = app.ResourceLimits.MemoryRequest
 		memoryLimit = app.ResourceLimits.MemoryLimit
 	}
+	// Serialize egress policy to JSON
+	egressPolicyJSON := ""
+	if app.EgressPolicy != nil && app.EgressPolicy.Mode != "" {
+		if b, err := json.Marshal(app.EgressPolicy); err == nil {
+			egressPolicyJSON = string(b)
+		}
+	}
 	result, err := db.conn.Exec(
-		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, os_type = ?, container_image = ?, container_port = ?, container_args = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ? WHERE id = ?",
-		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, app.ID,
+		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, os_type = ?, container_image = ?, container_port = ?, container_args = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ?, egress_policy = ? WHERE id = ?",
+		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, egressPolicyJSON, app.ID,
 	)
 	if err != nil {
 		return err
@@ -1577,15 +1629,22 @@ func (db *DB) CreateAppSpec(spec AppSpec) error {
 		memoryLimit = spec.Resources.MemoryLimit
 	}
 
+	egressPolicyJSON := ""
+	if spec.EgressPolicy != nil && spec.EgressPolicy.Mode != "" {
+		if b, err := json.Marshal(spec.EgressPolicy); err == nil {
+			egressPolicyJSON = string(b)
+		}
+	}
+
 	now := time.Now()
 	_, err := db.conn.Exec(
 		`INSERT INTO app_specs (id, name, description, image, launch_command,
 		 cpu_request, cpu_limit, memory_request, memory_limit,
-		 env_vars, volumes, network_rules, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 env_vars, volumes, network_rules, egress_policy, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		spec.ID, spec.Name, spec.Description, spec.Image, spec.LaunchCommand,
 		cpuRequest, cpuLimit, memoryRequest, memoryLimit,
-		envVarsJSON, volumesJSON, networkRulesJSON, now, now,
+		envVarsJSON, volumesJSON, networkRulesJSON, egressPolicyJSON, now, now,
 	)
 	return err
 }
@@ -1595,15 +1654,16 @@ func (db *DB) GetAppSpec(id string) (*AppSpec, error) {
 	var spec AppSpec
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 	var envVarsJSON, volumesJSON, networkRulesJSON string
+	var egressPolicyJSON string
 
 	err := db.conn.QueryRow(
 		`SELECT id, name, description, image, launch_command,
 		 cpu_request, cpu_limit, memory_request, memory_limit,
-		 env_vars, volumes, network_rules, created_at, updated_at
+		 env_vars, volumes, network_rules, egress_policy, created_at, updated_at
 		 FROM app_specs WHERE id = ?`, id,
 	).Scan(&spec.ID, &spec.Name, &spec.Description, &spec.Image, &spec.LaunchCommand,
 		&cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit,
-		&envVarsJSON, &volumesJSON, &networkRulesJSON,
+		&envVarsJSON, &volumesJSON, &networkRulesJSON, &egressPolicyJSON,
 		&spec.CreatedAt, &spec.UpdatedAt)
 
 	if err == sql.ErrNoRows {
@@ -1630,6 +1690,12 @@ func (db *DB) GetAppSpec(id string) (*AppSpec, error) {
 	if networkRulesJSON != "" && networkRulesJSON != "[]" {
 		json.Unmarshal([]byte(networkRulesJSON), &spec.NetworkRules)
 	}
+	if egressPolicyJSON != "" {
+		var ep EgressPolicy
+		if json.Unmarshal([]byte(egressPolicyJSON), &ep) == nil && ep.Mode != "" {
+			spec.EgressPolicy = &ep
+		}
+	}
 
 	return &spec, nil
 }
@@ -1639,7 +1705,7 @@ func (db *DB) ListAppSpecs() ([]AppSpec, error) {
 	rows, err := db.conn.Query(
 		`SELECT id, name, description, image, launch_command,
 		 cpu_request, cpu_limit, memory_request, memory_limit,
-		 env_vars, volumes, network_rules, created_at, updated_at
+		 env_vars, volumes, network_rules, egress_policy, created_at, updated_at
 		 FROM app_specs ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -1651,10 +1717,11 @@ func (db *DB) ListAppSpecs() ([]AppSpec, error) {
 		var spec AppSpec
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 		var envVarsJSON, volumesJSON, networkRulesJSON string
+		var egressPolicyJSON string
 
 		if err := rows.Scan(&spec.ID, &spec.Name, &spec.Description, &spec.Image, &spec.LaunchCommand,
 			&cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit,
-			&envVarsJSON, &volumesJSON, &networkRulesJSON,
+			&envVarsJSON, &volumesJSON, &networkRulesJSON, &egressPolicyJSON,
 			&spec.CreatedAt, &spec.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -1675,6 +1742,12 @@ func (db *DB) ListAppSpecs() ([]AppSpec, error) {
 		}
 		if networkRulesJSON != "" && networkRulesJSON != "[]" {
 			json.Unmarshal([]byte(networkRulesJSON), &spec.NetworkRules)
+		}
+		if egressPolicyJSON != "" {
+			var ep EgressPolicy
+			if json.Unmarshal([]byte(egressPolicyJSON), &ep) == nil && ep.Mode != "" {
+				spec.EgressPolicy = &ep
+			}
 		}
 
 		specs = append(specs, spec)
@@ -1712,14 +1785,21 @@ func (db *DB) UpdateAppSpec(spec AppSpec) error {
 		memoryLimit = spec.Resources.MemoryLimit
 	}
 
+	egressPolicyJSON := ""
+	if spec.EgressPolicy != nil && spec.EgressPolicy.Mode != "" {
+		if b, err := json.Marshal(spec.EgressPolicy); err == nil {
+			egressPolicyJSON = string(b)
+		}
+	}
+
 	result, err := db.conn.Exec(
 		`UPDATE app_specs SET name = ?, description = ?, image = ?, launch_command = ?,
 		 cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ?,
-		 env_vars = ?, volumes = ?, network_rules = ?, updated_at = ?
+		 env_vars = ?, volumes = ?, network_rules = ?, egress_policy = ?, updated_at = ?
 		 WHERE id = ?`,
 		spec.Name, spec.Description, spec.Image, spec.LaunchCommand,
 		cpuRequest, cpuLimit, memoryRequest, memoryLimit,
-		envVarsJSON, volumesJSON, networkRulesJSON, time.Now(), spec.ID,
+		envVarsJSON, volumesJSON, networkRulesJSON, egressPolicyJSON, time.Now(), spec.ID,
 	)
 	if err != nil {
 		return err

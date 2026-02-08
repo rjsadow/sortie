@@ -31,6 +31,10 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["get", "list", "watch"]
+  # NetworkPolicy management for per-session egress rules
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["create", "delete", "get", "list"]
 
 ---
 # RoleBinding to attach the role to the service account

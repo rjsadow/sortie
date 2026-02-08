@@ -326,6 +326,19 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 		return nil, fmt.Errorf("failed to create pod: %w", err)
 	}
 
+	// Create per-session NetworkPolicy if the app has egress rules
+	if app.EgressPolicy != nil && app.EgressPolicy.Mode != "" {
+		np := k8s.BuildSessionNetworkPolicy(sessionID, app.ID, app.EgressPolicy)
+		if np != nil {
+			if _, err := k8s.CreateNetworkPolicy(ctx, np); err != nil {
+				log.Printf("Warning: failed to create egress NetworkPolicy for session %s: %v", sessionID, err)
+				// Non-fatal: pod still runs, just without custom egress rules
+			} else {
+				log.Printf("Created egress NetworkPolicy for session %s (mode: %s, rules: %d)", sessionID, app.EgressPolicy.Mode, len(app.EgressPolicy.Rules))
+			}
+		}
+	}
+
 	// Create session in database
 	now := time.Now()
 	session := &db.Session{
@@ -340,8 +353,9 @@ func (m *Manager) CreateSession(ctx context.Context, req *CreateSessionRequest) 
 	}
 
 	if err := m.db.CreateSession(*session); err != nil {
-		// Try to clean up the pod
+		// Try to clean up the pod and NetworkPolicy
 		k8s.DeletePod(ctx, createdPod.Name)
+		k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
 		return nil, fmt.Errorf("failed to create session in database: %w", err)
 	}
 
@@ -441,6 +455,9 @@ func (m *Manager) StopSession(ctx context.Context, sessionID string) error {
 		log.Printf("Warning: failed to delete pod %s: %v", session.PodName, err)
 	}
 
+	// Clean up per-session NetworkPolicy (if any)
+	k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
+
 	// Update status to stopped
 	if err := m.db.UpdateSessionStatus(sessionID, db.SessionStatusStopped); err != nil {
 		return fmt.Errorf("failed to update session status: %w", err)
@@ -508,9 +525,20 @@ func (m *Manager) RestartSession(ctx context.Context, sessionID string) (*db.Ses
 		return nil, fmt.Errorf("failed to create pod: %w", err)
 	}
 
+	// Create per-session NetworkPolicy if the app has egress rules
+	if app.EgressPolicy != nil && app.EgressPolicy.Mode != "" {
+		np := k8s.BuildSessionNetworkPolicy(sessionID, app.ID, app.EgressPolicy)
+		if np != nil {
+			if _, err := k8s.CreateNetworkPolicy(ctx, np); err != nil {
+				log.Printf("Warning: failed to create egress NetworkPolicy for restarted session %s: %v", sessionID, err)
+			}
+		}
+	}
+
 	// Update session in database with new pod name and creating status
 	if err := m.db.UpdateSessionRestart(sessionID, createdPod.Name); err != nil {
 		k8s.DeletePod(ctx, createdPod.Name)
+		k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
 		return nil, fmt.Errorf("failed to update session in database: %w", err)
 	}
 
@@ -564,6 +592,9 @@ func (m *Manager) terminateWithStatus(ctx context.Context, sessionID string, fin
 	if err := k8s.DeletePod(ctx, session.PodName); err != nil {
 		log.Printf("Warning: failed to delete pod %s: %v", session.PodName, err)
 	}
+
+	// Clean up per-session NetworkPolicy (if any)
+	k8s.DeleteSessionNetworkPolicy(ctx, sessionID)
 
 	// Update status to final state
 	if err := m.db.UpdateSessionStatus(sessionID, finalStatus); err != nil {
