@@ -1,4 +1,4 @@
-# Launchpad Roadmap
+# Sortie Roadmap
 
 A centralized application launcher for large organizations.
 
@@ -75,6 +75,6 @@ custom applications. Simple, effective, reliable, secure.
 
 ## Out of Scope (for now)
 
-- Application hosting (Launchpad only links to apps)
+- Application hosting (Sortie only links to apps)
 - User management (delegated to identity provider)
 - Application monitoring beyond simple health checks

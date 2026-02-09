@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 // testOIDCSecret is a dummy secret used only in tests (not a real credential).
@@ -139,7 +139,7 @@ func TestOIDCAuthProvider_AuthenticateValidToken(t *testing.T) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "launchpad",
+			Issuer:    "sortie",
 			Subject:   "user-123",
 		},
 		UserID:    "user-123",
@@ -178,7 +178,7 @@ func TestOIDCAuthProvider_AuthenticateExpiredToken(t *testing.T) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
-			Issuer:    "launchpad",
+			Issuer:    "sortie",
 		},
 		UserID:    "user-123",
 		Username:  "testuser",
@@ -210,7 +210,7 @@ func TestOIDCAuthProvider_AuthenticateRefreshTokenRejected(t *testing.T) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "launchpad",
+			Issuer:    "sortie",
 		},
 		UserID:    "user-123",
 		Username:  "testuser",

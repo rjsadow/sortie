@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 func TestExtractSessionID(t *testing.T) {
@@ -774,7 +774,7 @@ func TestServeHTTP_SetsForwardedHeaders(t *testing.T) {
 
 	proxy := NewHTTPProxy(mgr)
 	req := httptest.NewRequest(http.MethodGet, "/api/sessions/sess-fwd/proxy/", nil)
-	req.Host = "launchpad.example.com"
+	req.Host = "sortie.example.com"
 	rr := httptest.NewRecorder()
 
 	proxy.ServeHTTP(rr, req)
@@ -782,8 +782,8 @@ func TestServeHTTP_SetsForwardedHeaders(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
-	if receivedForwardedHost != "launchpad.example.com" {
-		t.Errorf("expected X-Forwarded-Host = %q, got %q", "launchpad.example.com", receivedForwardedHost)
+	if receivedForwardedHost != "sortie.example.com" {
+		t.Errorf("expected X-Forwarded-Host = %q, got %q", "sortie.example.com", receivedForwardedHost)
 	}
 	if receivedForwardedProto != "http" {
 		t.Errorf("expected X-Forwarded-Proto = %q, got %q", "http", receivedForwardedProto)

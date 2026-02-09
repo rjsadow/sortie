@@ -2,10 +2,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "launchpad.fullname" . }}
+  name: {{ include "sortie.fullname" . }}
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "launchpad.labels" . | nindent 4 }}
+    {{- include "sortie.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
 spec:
   replicas: {{ .Values.replicaCount }}
@@ -16,15 +16,15 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "launchpad.serverLabels" . | nindent 6 }}
+      {{- include "sortie.serverLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "launchpad.serverLabels" . | nindent 8 }}
+        {{- include "sortie.serverLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "launchpad.fullname" . }}
+      serviceAccountName: {{ include "sortie.fullname" . }}
       # Disable automatic service environment variables to avoid collision
-      # with LAUNCHPAD_PORT (K8s injects SERVICE_PORT for services named "launchpad")
+      # with SORTIE_PORT (K8s injects SERVICE_PORT for services named "sortie")
       enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
@@ -32,7 +32,7 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
       containers:
-        - name: launchpad
+        - name: sortie
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
@@ -41,13 +41,13 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "launchpad.fullname" . }}-config
+                name: {{ include "sortie.fullname" . }}-config
             {{- if .Values.auth.enabled }}
             - secretRef:
-                name: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "launchpad.fullname" .)) }}
+                name: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "sortie.fullname" .)) }}
             {{- end }}
           env:
-            - name: LAUNCHPAD_NAMESPACE
+            - name: SORTIE_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
@@ -84,7 +84,7 @@ spec:
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "launchpad.fullname" . }}-data
+            claimName: {{ include "sortie.fullname" . }}-data
           {{- else }}
           emptyDir: {}
           {{- end }}

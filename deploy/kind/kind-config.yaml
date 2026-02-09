@@ -1,8 +1,8 @@
-# Kind cluster configuration for Launchpad local development
-# Usage: kind create cluster --name launchpad --config deploy/kind/kind-config.yaml
+# Kind cluster configuration for Sortie local development
+# Usage: kind create cluster --name sortie --config deploy/kind/kind-config.yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: launchpad
+name: sortie
 nodes:
   - role: control-plane
     kubeadmConfigPatches:

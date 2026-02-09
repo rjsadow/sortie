@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 	_ "modernc.org/sqlite"
 )
 
@@ -57,10 +57,10 @@ func (s *SQLiteStorage) Initialize(ctx context.Context, config map[string]string
 	// Get database path from config or default
 	s.dbPath = config["db_path"]
 	if s.dbPath == "" {
-		s.dbPath = os.Getenv("LAUNCHPAD_DB")
+		s.dbPath = os.Getenv("SORTIE_DB")
 	}
 	if s.dbPath == "" {
-		s.dbPath = "launchpad.db"
+		s.dbPath = "sortie.db"
 	}
 
 	// Open database connection

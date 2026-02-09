@@ -1,6 +1,6 @@
 # High Availability Deployment Guide
 
-This guide covers deploying Launchpad in a highly available
+This guide covers deploying Sortie in a highly available
 configuration using Kubernetes.
 
 ## Prerequisites
@@ -22,21 +22,21 @@ RUN go mod download
 
 COPY . .
 RUN npm install --prefix web && npm run build --prefix web
-RUN CGO_ENABLED=0 go build -o launchpad .
+RUN CGO_ENABLED=0 go build -o sortie .
 
 FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
 WORKDIR /app
-COPY --from=builder /app/launchpad .
+COPY --from=builder /app/sortie .
 EXPOSE 8080
-CMD ["./launchpad", "-db", "/data/launchpad.db"]
+CMD ["./sortie", "-db", "/data/sortie.db"]
 ```
 
 Build and push:
 
 ```bash
-docker build -t your-registry/launchpad:latest .
-docker push your-registry/launchpad:latest
+docker build -t your-registry/sortie:latest .
+docker push your-registry/sortie:latest
 ```
 
 ## Kubernetes Manifests
@@ -48,7 +48,7 @@ docker push your-registry/launchpad:latest
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: launchpad
+  name: sortie
 ```
 
 ### ConfigMap for Branding
@@ -58,8 +58,8 @@ metadata:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: launchpad-config
-  namespace: launchpad
+  name: sortie-config
+  namespace: sortie
 data:
   branding.json: |
     {
@@ -77,8 +77,8 @@ data:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: launchpad-data
-  namespace: launchpad
+  name: sortie-data
+  namespace: sortie
 spec:
   accessModes:
     - ReadWriteOnce
@@ -95,25 +95,25 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
 spec:
   replicas: 1  # Single replica for SQLite; see HA notes below
   selector:
     matchLabels:
-      app: launchpad
+      app: sortie
   template:
     metadata:
       labels:
-        app: launchpad
+        app: sortie
     spec:
       containers:
-        - name: launchpad
-          image: your-registry/launchpad:latest
+        - name: sortie
+          image: your-registry/sortie:latest
           ports:
             - containerPort: 8080
           env:
-            - name: LAUNCHPAD_CONFIG
+            - name: SORTIE_CONFIG
               value: /config/branding.json
           volumeMounts:
             - name: data
@@ -142,10 +142,10 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: launchpad-data
+            claimName: sortie-data
         - name: config
           configMap:
-            name: launchpad-config
+            name: sortie-config
 ```
 
 ### Service
@@ -155,11 +155,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
 spec:
   selector:
-    app: launchpad
+    app: sortie
   ports:
     - port: 80
       targetPort: 8080
@@ -173,25 +173,25 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
   annotations:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   tls:
     - hosts:
-        - launchpad.example.com
-      secretName: launchpad-tls
+        - sortie.example.com
+      secretName: sortie-tls
   rules:
-    - host: launchpad.example.com
+    - host: sortie.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: launchpad
+                name: sortie
                 port:
                   number: 80
 ```
@@ -228,12 +228,12 @@ For external load balancers:
 apiVersion: v1
 kind: Service
 metadata:
-  name: launchpad-lb
-  namespace: launchpad
+  name: sortie-lb
+  namespace: sortie
 spec:
   type: LoadBalancer
   selector:
-    app: launchpad
+    app: sortie
   ports:
     - port: 443
       targetPort: 8080
@@ -256,13 +256,13 @@ For maintenance operations:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: launchpad-pdb
-  namespace: launchpad
+  name: sortie-pdb
+  namespace: sortie
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: launchpad
+      app: sortie
 ```
 
 ### Horizontal Pod Autoscaler
@@ -274,13 +274,13 @@ For automatic scaling (requires PostgreSQL for multi-replica):
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: launchpad-hpa
-  namespace: launchpad
+  name: sortie-hpa
+  namespace: sortie
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: launchpad
+    name: sortie
   minReplicas: 2
   maxReplicas: 10
   metrics:
@@ -303,12 +303,12 @@ Add metrics endpoint to the application for monitoring:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
 spec:
   selector:
     matchLabels:
-      app: launchpad
+      app: sortie
   endpoints:
     - port: http
       path: /metrics
@@ -328,11 +328,11 @@ Configure centralized logging:
 
 ```bash
 # Backup SQLite database
-kubectl exec -n launchpad deployment/launchpad -- \
-  sqlite3 /data/launchpad.db ".backup '/data/backup.db'"
+kubectl exec -n sortie deployment/sortie -- \
+  sqlite3 /data/sortie.db ".backup '/data/backup.db'"
 
 # Copy backup locally
-kubectl cp launchpad/launchpad-pod:/data/backup.db ./backup.db
+kubectl cp sortie/sortie-pod:/data/backup.db ./backup.db
 ```
 
 ### Disaster Recovery

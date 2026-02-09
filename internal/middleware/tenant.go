@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 const (

@@ -12,18 +12,18 @@ import (
 	"os"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/billing"
-	"github.com/rjsadow/launchpad/internal/config"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/diagnostics"
-	"github.com/rjsadow/launchpad/internal/files"
-	"github.com/rjsadow/launchpad/internal/gateway"
-	"github.com/rjsadow/launchpad/internal/k8s"
-	"github.com/rjsadow/launchpad/internal/plugins"
-	"github.com/rjsadow/launchpad/internal/plugins/auth"
-	"github.com/rjsadow/launchpad/internal/runner"
-	"github.com/rjsadow/launchpad/internal/server"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/billing"
+	"github.com/rjsadow/sortie/internal/config"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/diagnostics"
+	"github.com/rjsadow/sortie/internal/files"
+	"github.com/rjsadow/sortie/internal/gateway"
+	"github.com/rjsadow/sortie/internal/k8s"
+	"github.com/rjsadow/sortie/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins/auth"
+	"github.com/rjsadow/sortie/internal/runner"
+	"github.com/rjsadow/sortie/internal/server"
+	"github.com/rjsadow/sortie/internal/sessions"
 
 	"golang.org/x/time/rate"
 )
@@ -107,7 +107,7 @@ func main() {
 			}
 		}
 	} else {
-		slog.Warn("LAUNCHPAD_JWT_SECRET not set - authentication disabled")
+		slog.Warn("SORTIE_JWT_SECRET not set - authentication disabled")
 	}
 
 	// Initialize OIDC auth provider if configured
@@ -222,7 +222,7 @@ func main() {
 		})
 		slog.Info("Gateway service initialized with auth and rate limiting")
 	} else {
-		slog.Warn("Gateway disabled: LAUNCHPAD_JWT_SECRET not set, WebSocket endpoints unprotected")
+		slog.Warn("Gateway disabled: SORTIE_JWT_SECRET not set, WebSocket endpoints unprotected")
 	}
 
 	// Initialize file transfer handler
@@ -244,15 +244,15 @@ func main() {
 	diagCollector := diagnostics.NewCollector(database, appConfig, plugins.Global(), serverStartTime)
 
 	// Publish session metrics for HPA custom metrics adapter
-	expvar.Publish("launchpad_active_sessions", expvar.Func(func() any {
+	expvar.Publish("sortie_active_sessions", expvar.Func(func() any {
 		status := backpressureHandler.GetLoadStatus()
 		return status.ActiveSessions
 	}))
-	expvar.Publish("launchpad_queue_depth", expvar.Func(func() any {
+	expvar.Publish("sortie_queue_depth", expvar.Func(func() any {
 		status := backpressureHandler.GetLoadStatus()
 		return status.QueueDepth
 	}))
-	expvar.Publish("launchpad_load_factor", expvar.Func(func() any {
+	expvar.Publish("sortie_load_factor", expvar.Func(func() any {
 		status := backpressureHandler.GetLoadStatus()
 		return status.LoadFactor
 	}))

@@ -1,6 +1,6 @@
 # Local Development Guide
 
-This guide covers setting up and running Launchpad for local development.
+This guide covers setting up and running Sortie for local development.
 
 ## Prerequisites
 
@@ -15,8 +15,8 @@ This guide covers setting up and running Launchpad for local development.
 
 ```bash
 # Clone the repository
-git clone https://github.com/rjsadow/launchpad.git
-cd launchpad
+git clone https://github.com/rjsadow/sortie.git
+cd sortie
 
 # Start the development environment
 make dev
@@ -30,7 +30,7 @@ This starts both the backend and frontend servers with a single command.
 |----------|------|---------------------------|--------------------------------|
 | Frontend | 5173 | `http://localhost:5173`   | Vite dev server with HMR       |
 | Backend  | 8080 | `http://localhost:8080`   | Go API server                  |
-| Database | -    | `./launchpad.db`          | SQLite file (created on start) |
+| Database | -    | `./sortie.db`          | SQLite file (created on start) |
 
 **Use `http://localhost:5173`** for development. The Vite dev server proxies
 API requests (`/api/*`, `/ws/*`, `/apps.json`) to the backend automatically.
@@ -65,7 +65,7 @@ make build
 ```
 
 Builds the frontend, then compiles the Go binary with embedded assets.
-Output: `./launchpad`
+Output: `./sortie`
 
 ### Run Production Build
 
@@ -89,7 +89,7 @@ make clean     # Remove build artifacts and database
 ## Project Structure
 
 ```text
-launchpad/
+sortie/
 ├── main.go              # Go server entry point
 ├── internal/            # Go packages
 │   ├── db/              # Database operations
@@ -107,13 +107,13 @@ launchpad/
 
 ## Database
 
-Launchpad uses SQLite for persistence. The database file (`launchpad.db`)
+Sortie uses SQLite for persistence. The database file (`sortie.db`)
 is created automatically on first run in the current directory.
 
 ### Seeding Data
 
 ```bash
-./launchpad -seed apps.json
+./sortie -seed apps.json
 ```
 
 Or during development, the sample apps are loaded automatically.
@@ -121,7 +121,7 @@ Or during development, the sample apps are loaded automatically.
 ### Reset Database
 
 ```bash
-rm launchpad.db
+rm sortie.db
 make dev
 ```
 
@@ -175,7 +175,7 @@ don't appear:
 Reset the database:
 
 ```bash
-rm launchpad.db
+rm sortie.db
 ```
 
 The database is recreated on next server start.

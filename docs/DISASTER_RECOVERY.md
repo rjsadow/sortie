@@ -1,7 +1,7 @@
 # Disaster Recovery
 
 This document defines disaster recovery procedures, objectives, and runbooks
-for Launchpad deployments.
+for Sortie deployments.
 
 ## Recovery Objectives
 
@@ -53,8 +53,8 @@ Deploy the backup CronJob to run daily at 2 AM:
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: launchpad-backup
-  namespace: launchpad
+  name: sortie-backup
+  namespace: sortie
 spec:
   schedule: "0 2 * * *"
   successfulJobsHistoryLimit: 3
@@ -73,8 +73,8 @@ spec:
                   set -e
                   apk add --no-cache sqlite
                   TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-                  BACKUP_FILE="/backup/launchpad-${TIMESTAMP}.db"
-                  sqlite3 /data/launchpad.db ".backup '${BACKUP_FILE}'"
+                  BACKUP_FILE="/backup/sortie-${TIMESTAMP}.db"
+                  sqlite3 /data/sortie.db ".backup '${BACKUP_FILE}'"
                   # Keep only last 7 daily backups
                   ls -t /backup/*.db | tail -n +8 | xargs -r rm
                   echo "Backup completed: ${BACKUP_FILE}"
@@ -87,10 +87,10 @@ spec:
           volumes:
             - name: data
               persistentVolumeClaim:
-                claimName: launchpad-data
+                claimName: sortie-data
             - name: backup
               persistentVolumeClaim:
-                claimName: launchpad-backup
+                claimName: sortie-backup
           restartPolicy: OnFailure
 ```
 
@@ -100,19 +100,19 @@ Create an on-demand backup before maintenance or upgrades:
 
 ```bash
 # 1. Get the pod name
-POD=$(kubectl get pod -n launchpad -l app=launchpad \
+POD=$(kubectl get pod -n sortie -l app=sortie \
   -o jsonpath='{.items[0].metadata.name}')
 
 # 2. Create backup inside the pod
-kubectl exec -n launchpad $POD -- \
-  sqlite3 /data/launchpad.db ".backup '/data/manual-backup.db'"
+kubectl exec -n sortie $POD -- \
+  sqlite3 /data/sortie.db ".backup '/data/manual-backup.db'"
 
 # 3. Copy backup to local machine
-kubectl cp launchpad/$POD:/data/manual-backup.db \
-  ./launchpad-backup-$(date +%Y%m%d-%H%M%S).db
+kubectl cp sortie/$POD:/data/manual-backup.db \
+  ./sortie-backup-$(date +%Y%m%d-%H%M%S).db
 
 # 4. Verify backup integrity
-sqlite3 ./launchpad-backup-*.db "PRAGMA integrity_check;"
+sqlite3 ./sortie-backup-*.db "PRAGMA integrity_check;"
 ```
 
 ### Off-Cluster Backup
@@ -121,18 +121,18 @@ For disaster recovery, sync backups to external storage:
 
 ```bash
 # Example: AWS S3
-BACKUP_FILE="launchpad-$(date +%Y%m%d).db"
-POD=$(kubectl get pod -n launchpad -l app=launchpad \
+BACKUP_FILE="sortie-$(date +%Y%m%d).db"
+POD=$(kubectl get pod -n sortie -l app=sortie \
   -o jsonpath='{.items[0].metadata.name}')
 
-kubectl exec -n launchpad $POD -- \
-  sqlite3 /data/launchpad.db ".backup '/tmp/backup.db'"
+kubectl exec -n sortie $POD -- \
+  sqlite3 /data/sortie.db ".backup '/tmp/backup.db'"
 
-kubectl cp launchpad/$POD:/tmp/backup.db ./$BACKUP_FILE
-aws s3 cp ./$BACKUP_FILE s3://your-backup-bucket/launchpad/
+kubectl cp sortie/$POD:/tmp/backup.db ./$BACKUP_FILE
+aws s3 cp ./$BACKUP_FILE s3://your-backup-bucket/sortie/
 
 # Example: GCS
-gsutil cp ./$BACKUP_FILE gs://your-backup-bucket/launchpad/
+gsutil cp ./$BACKUP_FILE gs://your-backup-bucket/sortie/
 
 # Cleanup local file
 rm ./$BACKUP_FILE
@@ -152,14 +152,14 @@ Use this procedure when the database is corrupted but the backup PVC is intact.
 **Procedure:**
 
 ```bash
-# 1. List available backups (requires running Launchpad pod)
-kubectl exec -n launchpad deployment/launchpad -- ls -la /backup/
+# 1. List available backups (requires running Sortie pod)
+kubectl exec -n sortie deployment/sortie -- ls -la /backup/
 
-# 2. Scale down Launchpad to prevent writes
-kubectl scale deployment launchpad -n launchpad --replicas=0
+# 2. Scale down Sortie to prevent writes
+kubectl scale deployment sortie -n sortie --replicas=0
 
 # 3. Wait for pod termination
-kubectl wait --for=delete pod -l app=launchpad -n launchpad --timeout=60s
+kubectl wait --for=delete pod -l app=sortie -n sortie --timeout=60s
 
 # 4. Run restore job
 kubectl apply -f - <<EOF
@@ -167,7 +167,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: restore-job
-  namespace: launchpad
+  namespace: sortie
 spec:
   containers:
     - name: restore
@@ -181,8 +181,8 @@ spec:
           # Use most recent backup (adjust filename as needed)
           BACKUP=\$(ls -t /backup/*.db | head -1)
           echo "Restoring from: \$BACKUP"
-          cp "\$BACKUP" /data/launchpad.db
-          sqlite3 /data/launchpad.db "PRAGMA integrity_check;"
+          cp "\$BACKUP" /data/sortie.db
+          sqlite3 /data/sortie.db "PRAGMA integrity_check;"
           echo "Restore completed successfully"
       volumeMounts:
         - name: data
@@ -193,26 +193,26 @@ spec:
   volumes:
     - name: data
       persistentVolumeClaim:
-        claimName: launchpad-data
+        claimName: sortie-data
     - name: backup
       persistentVolumeClaim:
-        claimName: launchpad-backup
+        claimName: sortie-backup
   restartPolicy: Never
 EOF
 
 # 5. Wait for restore to complete
-kubectl wait --for=condition=Succeeded pod/restore-job -n launchpad --timeout=300s
-kubectl logs restore-job -n launchpad
+kubectl wait --for=condition=Succeeded pod/restore-job -n sortie --timeout=300s
+kubectl logs restore-job -n sortie
 
 # 6. Cleanup restore pod
-kubectl delete pod restore-job -n launchpad
+kubectl delete pod restore-job -n sortie
 
-# 7. Scale up Launchpad
-kubectl scale deployment launchpad -n launchpad --replicas=1
+# 7. Scale up Sortie
+kubectl scale deployment sortie -n sortie --replicas=1
 
 # 8. Verify service is healthy
-kubectl wait --for=condition=Ready pod -l app=launchpad -n launchpad --timeout=120s
-kubectl exec -n launchpad deployment/launchpad -- \
+kubectl wait --for=condition=Ready pod -l app=sortie -n sortie --timeout=120s
+kubectl exec -n sortie deployment/sortie -- \
   wget -qO- http://localhost:8080/api/apps | head -c 100
 ```
 
@@ -230,36 +230,36 @@ Use this procedure when both the database and backup PVC are lost.
 
 ```bash
 # 1. Download backup from off-cluster storage
-aws s3 cp s3://your-backup-bucket/launchpad/launchpad-20260130.db ./restore.db
-# Or: gsutil cp gs://your-backup-bucket/launchpad/launchpad-20260130.db ./restore.db
+aws s3 cp s3://your-backup-bucket/sortie/sortie-20260130.db ./restore.db
+# Or: gsutil cp gs://your-backup-bucket/sortie/sortie-20260130.db ./restore.db
 
 # 2. Verify backup integrity locally
 sqlite3 ./restore.db "PRAGMA integrity_check;"
 sqlite3 ./restore.db "SELECT COUNT(*) FROM applications;"
 
-# 3. Scale down Launchpad
-kubectl scale deployment launchpad -n launchpad --replicas=0
-kubectl wait --for=delete pod -l app=launchpad -n launchpad --timeout=60s
+# 3. Scale down Sortie
+kubectl scale deployment sortie -n sortie --replicas=0
+kubectl wait --for=delete pod -l app=sortie -n sortie --timeout=60s
 
 # 4. Create temporary pod for file transfer
-kubectl run restore-pod --image=alpine:3.19 -n launchpad \
-  --overrides='{"spec":{"containers":[{"name":"restore","image":"alpine:3.19","command":["sleep","3600"],"volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"launchpad-data"}}]}}'
+kubectl run restore-pod --image=alpine:3.19 -n sortie \
+  --overrides='{"spec":{"containers":[{"name":"restore","image":"alpine:3.19","command":["sleep","3600"],"volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"sortie-data"}}]}}'
 
-kubectl wait --for=condition=Ready pod/restore-pod -n launchpad --timeout=60s
+kubectl wait --for=condition=Ready pod/restore-pod -n sortie --timeout=60s
 
 # 5. Copy backup to pod
-kubectl cp ./restore.db launchpad/restore-pod:/data/launchpad.db
+kubectl cp ./restore.db sortie/restore-pod:/data/sortie.db
 
 # 6. Verify copy
-kubectl exec -n launchpad restore-pod -- ls -la /data/
+kubectl exec -n sortie restore-pod -- ls -la /data/
 
 # 7. Cleanup and restart
-kubectl delete pod restore-pod -n launchpad
-kubectl scale deployment launchpad -n launchpad --replicas=1
+kubectl delete pod restore-pod -n sortie
+kubectl scale deployment sortie -n sortie --replicas=1
 
 # 8. Verify service
-kubectl wait --for=condition=Ready pod -l app=launchpad -n launchpad --timeout=120s
-curl -s https://launchpad.example.com/api/apps | head -c 100
+kubectl wait --for=condition=Ready pod -l app=sortie -n sortie --timeout=120s
+curl -s https://sortie.example.com/api/apps | head -c 100
 ```
 
 ### Full Namespace Recovery
@@ -285,19 +285,19 @@ kubectl apply -f deploy/kubernetes/resource-quota.yaml
 
 # 2. Wait for PVC to be bound
 kubectl wait --for=jsonpath='{.status.phase}'=Bound \
-  pvc/launchpad-data -n launchpad --timeout=120s
+  pvc/sortie-data -n sortie --timeout=120s
 
 # 3. Restore database (follow off-cluster restore procedure)
 # ... (steps 4-6 from "Restore from Off-Cluster Backup")
 
-# 4. Deploy Launchpad
+# 4. Deploy Sortie
 kubectl apply -f deploy/kubernetes/deployment.yaml
 kubectl apply -f deploy/kubernetes/service.yaml
 kubectl apply -f deploy/kubernetes/ingress.yaml
 
 # 5. Verify deployment
-kubectl wait --for=condition=Ready pod -l app=launchpad -n launchpad --timeout=120s
-kubectl get all -n launchpad
+kubectl wait --for=condition=Ready pod -l app=sortie -n sortie --timeout=120s
+kubectl get all -n sortie
 ```
 
 ## Disaster Scenarios
@@ -309,7 +309,7 @@ kubectl get all -n launchpad
 **Recovery:**
 
 1. Kubernetes automatically restarts the pod
-2. If persistent, check logs: `kubectl logs -n launchpad deployment/launchpad --previous`
+2. If persistent, check logs: `kubectl logs -n sortie deployment/sortie --previous`
 3. Check resource limits and node capacity
 4. If database corruption suspected, follow restore procedure
 
@@ -336,8 +336,8 @@ kubectl get all -n launchpad
 1. Confirm corruption:
 
    ```bash
-   kubectl exec -n launchpad deployment/launchpad -- \
-     sqlite3 /data/launchpad.db "PRAGMA integrity_check;"
+   kubectl exec -n sortie deployment/sortie -- \
+     sqlite3 /data/sortie.db "PRAGMA integrity_check;"
    ```
 
 2. Follow "Restore from In-Cluster Backup" procedure
@@ -347,7 +347,7 @@ kubectl get all -n launchpad
 
 ### Scenario 4: Accidental Namespace Deletion
 
-**Symptoms:** All Launchpad resources gone
+**Symptoms:** All Sortie resources gone
 
 **Recovery:**
 
@@ -379,15 +379,15 @@ Run this test monthly in a non-production namespace:
 
 ```bash
 # 1. Create test namespace
-kubectl create namespace launchpad-restore-test
+kubectl create namespace sortie-restore-test
 
 # 2. Copy PVCs and manifests (adjust for your setup)
-kubectl apply -f deploy/kubernetes/pvc.yaml -n launchpad-restore-test
+kubectl apply -f deploy/kubernetes/pvc.yaml -n sortie-restore-test
 
 # 3. Get latest backup
-BACKUP=$(kubectl exec -n launchpad deployment/launchpad -- \
+BACKUP=$(kubectl exec -n sortie deployment/sortie -- \
   ls -t /backup/*.db 2>/dev/null | head -1)
-kubectl exec -n launchpad deployment/launchpad -- \
+kubectl exec -n sortie deployment/sortie -- \
   cat "$BACKUP" > /tmp/test-restore.db
 
 # 4. Verify backup
@@ -395,13 +395,13 @@ sqlite3 /tmp/test-restore.db "PRAGMA integrity_check;"
 sqlite3 /tmp/test-restore.db "SELECT COUNT(*) FROM applications;"
 
 # 5. Deploy to test namespace with restored data
-# ... (follow restore procedure targeting launchpad-restore-test)
+# ... (follow restore procedure targeting sortie-restore-test)
 
 # 6. Validate functionality
-curl -s http://launchpad-restore-test.internal/api/apps
+curl -s http://sortie-restore-test.internal/api/apps
 
 # 7. Cleanup
-kubectl delete namespace launchpad-restore-test
+kubectl delete namespace sortie-restore-test
 rm /tmp/test-restore.db
 ```
 
@@ -421,7 +421,7 @@ Record test results for audit purposes:
 
 | Date       | Backup Used        | Restore Time | Issues Found    | Tester |
 | ---------- | ------------------ | ------------ | --------------- | ------ |
-| 2026-01-31 | launchpad-20260130 | 12 min       | None            | -      |
+| 2026-01-31 | sortie-20260130 | 12 min       | None            | -      |
 | ...        | ...                | ...          | ...             | ...    |
 
 ## Runbook Quick Reference
@@ -438,22 +438,22 @@ Record test results for audit purposes:
 
 ```bash
 # Check backup status
-kubectl get cronjob launchpad-backup -n launchpad
-kubectl get jobs -n launchpad | grep backup
+kubectl get cronjob sortie-backup -n sortie
+kubectl get jobs -n sortie | grep backup
 
 # List available backups
-kubectl exec -n launchpad deployment/launchpad -- ls -la /backup/
+kubectl exec -n sortie deployment/sortie -- ls -la /backup/
 
 # Check database health
-kubectl exec -n launchpad deployment/launchpad -- \
-  sqlite3 /data/launchpad.db "PRAGMA integrity_check;"
+kubectl exec -n sortie deployment/sortie -- \
+  sqlite3 /data/sortie.db "PRAGMA integrity_check;"
 
 # Check application health
-kubectl exec -n launchpad deployment/launchpad -- \
+kubectl exec -n sortie deployment/sortie -- \
   wget -qO- http://localhost:8080/api/apps | jq '. | length'
 
 # View recent logs
-kubectl logs -n launchpad deployment/launchpad --tail=100
+kubectl logs -n sortie deployment/sortie --tail=100
 ```
 
 ## Related Documentation

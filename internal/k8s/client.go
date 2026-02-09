@@ -69,7 +69,7 @@ func GetGuacdSidecarImage() string {
 }
 
 // GetNamespace returns the Kubernetes namespace to use for sessions.
-// Priority: configured value > LAUNCHPAD_NAMESPACE env var > in-cluster namespace > "default"
+// Priority: configured value > SORTIE_NAMESPACE env var > in-cluster namespace > "default"
 func GetNamespace() string {
 	if namespace != "" {
 		return namespace
@@ -82,7 +82,7 @@ func GetNamespace() string {
 	}
 
 	// Check environment variable (legacy support)
-	if ns := os.Getenv("LAUNCHPAD_NAMESPACE"); ns != "" {
+	if ns := os.Getenv("SORTIE_NAMESPACE"); ns != "" {
 		namespace = ns
 		return namespace
 	}

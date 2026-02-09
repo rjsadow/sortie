@@ -93,12 +93,12 @@ func TestLoad_FromEnv(t *testing.T) {
 	clearEnvVars(t)
 
 	// Set custom values
-	t.Setenv("LAUNCHPAD_PORT", "9000")
-	t.Setenv("LAUNCHPAD_DB", "/data/app.db")
-	t.Setenv("LAUNCHPAD_NAMESPACE", "launchpad-prod")
-	t.Setenv("LAUNCHPAD_SESSION_TIMEOUT", "60")
-	t.Setenv("LAUNCHPAD_POD_READY_TIMEOUT", "180")
-	t.Setenv("LAUNCHPAD_PRIMARY_COLOR", "#FF0000")
+	t.Setenv("SORTIE_PORT", "9000")
+	t.Setenv("SORTIE_DB", "/data/app.db")
+	t.Setenv("SORTIE_NAMESPACE", "sortie-prod")
+	t.Setenv("SORTIE_SESSION_TIMEOUT", "60")
+	t.Setenv("SORTIE_POD_READY_TIMEOUT", "180")
+	t.Setenv("SORTIE_PRIMARY_COLOR", "#FF0000")
 
 	cfg, err := Load()
 	if err != nil {
@@ -111,8 +111,8 @@ func TestLoad_FromEnv(t *testing.T) {
 	if cfg.DB != "/data/app.db" {
 		t.Errorf("DB = %v, want /data/app.db", cfg.DB)
 	}
-	if cfg.Namespace != "launchpad-prod" {
-		t.Errorf("Namespace = %v, want launchpad-prod", cfg.Namespace)
+	if cfg.Namespace != "sortie-prod" {
+		t.Errorf("Namespace = %v, want sortie-prod", cfg.Namespace)
 	}
 	if cfg.SessionTimeout != 60*time.Minute {
 		t.Errorf("SessionTimeout = %v, want 60m", cfg.SessionTimeout)
@@ -128,27 +128,27 @@ func TestLoad_FromEnv(t *testing.T) {
 func TestLoad_AllEnvVars(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_PORT", "3000")
-	t.Setenv("LAUNCHPAD_DB", "/tmp/test.db")
-	t.Setenv("LAUNCHPAD_SEED", "seed.json")
-	t.Setenv("LAUNCHPAD_CONFIG", "custom-branding.json")
-	t.Setenv("LAUNCHPAD_LOGO_URL", "https://example.com/logo.png")
-	t.Setenv("LAUNCHPAD_PRIMARY_COLOR", "#AABBCC")
-	t.Setenv("LAUNCHPAD_SECONDARY_COLOR", "#112233")
-	t.Setenv("LAUNCHPAD_TENANT_NAME", "TestCorp")
-	t.Setenv("LAUNCHPAD_NAMESPACE", "test-ns")
+	t.Setenv("SORTIE_PORT", "3000")
+	t.Setenv("SORTIE_DB", "/tmp/test.db")
+	t.Setenv("SORTIE_SEED", "seed.json")
+	t.Setenv("SORTIE_CONFIG", "custom-branding.json")
+	t.Setenv("SORTIE_LOGO_URL", "https://example.com/logo.png")
+	t.Setenv("SORTIE_PRIMARY_COLOR", "#AABBCC")
+	t.Setenv("SORTIE_SECONDARY_COLOR", "#112233")
+	t.Setenv("SORTIE_TENANT_NAME", "TestCorp")
+	t.Setenv("SORTIE_NAMESPACE", "test-ns")
 	t.Setenv("KUBECONFIG", "/home/user/.kube/config")
-	t.Setenv("LAUNCHPAD_VNC_SIDECAR_IMAGE", "custom/vnc:v2")
-	t.Setenv("LAUNCHPAD_GUACD_SIDECAR_IMAGE", "custom/guacd:v2")
-	t.Setenv("LAUNCHPAD_SESSION_TIMEOUT", "30")
-	t.Setenv("LAUNCHPAD_SESSION_CLEANUP_INTERVAL", "10")
-	t.Setenv("LAUNCHPAD_POD_READY_TIMEOUT", "60")
-	t.Setenv("LAUNCHPAD_JWT_SECRET", "my-secret-key")
-	t.Setenv("LAUNCHPAD_JWT_ACCESS_EXPIRY", "30")
-	t.Setenv("LAUNCHPAD_JWT_REFRESH_EXPIRY", "48")
-	t.Setenv("LAUNCHPAD_ADMIN_USERNAME", "superadmin")
-	t.Setenv("LAUNCHPAD_ADMIN_PASSWORD", "s3cret")
-	t.Setenv("LAUNCHPAD_ALLOW_REGISTRATION", "true")
+	t.Setenv("SORTIE_VNC_SIDECAR_IMAGE", "custom/vnc:v2")
+	t.Setenv("SORTIE_GUACD_SIDECAR_IMAGE", "custom/guacd:v2")
+	t.Setenv("SORTIE_SESSION_TIMEOUT", "30")
+	t.Setenv("SORTIE_SESSION_CLEANUP_INTERVAL", "10")
+	t.Setenv("SORTIE_POD_READY_TIMEOUT", "60")
+	t.Setenv("SORTIE_JWT_SECRET", "my-secret-key")
+	t.Setenv("SORTIE_JWT_ACCESS_EXPIRY", "30")
+	t.Setenv("SORTIE_JWT_REFRESH_EXPIRY", "48")
+	t.Setenv("SORTIE_ADMIN_USERNAME", "superadmin")
+	t.Setenv("SORTIE_ADMIN_PASSWORD", "s3cret")
+	t.Setenv("SORTIE_ALLOW_REGISTRATION", "true")
 
 	cfg, err := Load()
 	if err != nil {
@@ -223,7 +223,7 @@ func TestLoad_AllEnvVars(t *testing.T) {
 func TestLoad_InvalidPort(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_PORT", "not-a-number")
+	t.Setenv("SORTIE_PORT", "not-a-number")
 
 	_, err := Load()
 	if err == nil {
@@ -234,7 +234,7 @@ func TestLoad_InvalidPort(t *testing.T) {
 func TestLoad_InvalidTimeout(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_SESSION_TIMEOUT", "-5")
+	t.Setenv("SORTIE_SESSION_TIMEOUT", "-5")
 
 	_, err := Load()
 	if err == nil {
@@ -245,7 +245,7 @@ func TestLoad_InvalidTimeout(t *testing.T) {
 func TestLoad_InvalidColor(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_PRIMARY_COLOR", "red")
+	t.Setenv("SORTIE_PRIMARY_COLOR", "red")
 
 	_, err := Load()
 	if err == nil {
@@ -256,7 +256,7 @@ func TestLoad_InvalidColor(t *testing.T) {
 func TestLoad_InvalidSecondaryColor(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_SECONDARY_COLOR", "not-a-color")
+	t.Setenv("SORTIE_SECONDARY_COLOR", "not-a-color")
 
 	_, err := Load()
 	if err == nil {
@@ -277,7 +277,7 @@ func TestLoad_InvalidSessionCleanupInterval(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnvVars(t)
-			t.Setenv("LAUNCHPAD_SESSION_CLEANUP_INTERVAL", tt.value)
+			t.Setenv("SORTIE_SESSION_CLEANUP_INTERVAL", tt.value)
 
 			_, err := Load()
 			if err == nil {
@@ -300,7 +300,7 @@ func TestLoad_InvalidPodReadyTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnvVars(t)
-			t.Setenv("LAUNCHPAD_POD_READY_TIMEOUT", tt.value)
+			t.Setenv("SORTIE_POD_READY_TIMEOUT", tt.value)
 
 			_, err := Load()
 			if err == nil {
@@ -312,7 +312,7 @@ func TestLoad_InvalidPodReadyTimeout(t *testing.T) {
 
 func TestLoad_InvalidSessionTimeout_NonNumeric(t *testing.T) {
 	clearEnvVars(t)
-	t.Setenv("LAUNCHPAD_SESSION_TIMEOUT", "abc")
+	t.Setenv("SORTIE_SESSION_TIMEOUT", "abc")
 
 	_, err := Load()
 	if err == nil {
@@ -322,7 +322,7 @@ func TestLoad_InvalidSessionTimeout_NonNumeric(t *testing.T) {
 
 func TestLoad_InvalidSessionTimeout_Zero(t *testing.T) {
 	clearEnvVars(t)
-	t.Setenv("LAUNCHPAD_SESSION_TIMEOUT", "0")
+	t.Setenv("SORTIE_SESSION_TIMEOUT", "0")
 
 	_, err := Load()
 	if err == nil {
@@ -343,7 +343,7 @@ func TestLoad_InvalidJWTAccessExpiry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnvVars(t)
-			t.Setenv("LAUNCHPAD_JWT_ACCESS_EXPIRY", tt.value)
+			t.Setenv("SORTIE_JWT_ACCESS_EXPIRY", tt.value)
 
 			_, err := Load()
 			if err == nil {
@@ -366,7 +366,7 @@ func TestLoad_InvalidJWTRefreshExpiry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnvVars(t)
-			t.Setenv("LAUNCHPAD_JWT_REFRESH_EXPIRY", tt.value)
+			t.Setenv("SORTIE_JWT_REFRESH_EXPIRY", tt.value)
 
 			_, err := Load()
 			if err == nil {
@@ -395,7 +395,7 @@ func TestLoad_AllowRegistrationParsing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearEnvVars(t)
-			t.Setenv("LAUNCHPAD_ALLOW_REGISTRATION", tt.value)
+			t.Setenv("SORTIE_ALLOW_REGISTRATION", tt.value)
 
 			cfg, err := Load()
 			if err != nil {
@@ -411,9 +411,9 @@ func TestLoad_AllowRegistrationParsing(t *testing.T) {
 func TestLoad_MultipleParseErrors(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_PORT", "invalid")
-	t.Setenv("LAUNCHPAD_SESSION_TIMEOUT", "bad")
-	t.Setenv("LAUNCHPAD_JWT_ACCESS_EXPIRY", "nope")
+	t.Setenv("SORTIE_PORT", "invalid")
+	t.Setenv("SORTIE_SESSION_TIMEOUT", "bad")
+	t.Setenv("SORTIE_JWT_ACCESS_EXPIRY", "nope")
 
 	_, err := Load()
 	if err == nil {
@@ -421,14 +421,14 @@ func TestLoad_MultipleParseErrors(t *testing.T) {
 	}
 
 	errStr := err.Error()
-	if !strings.Contains(errStr, "LAUNCHPAD_PORT") {
-		t.Errorf("error should mention LAUNCHPAD_PORT: %s", errStr)
+	if !strings.Contains(errStr, "SORTIE_PORT") {
+		t.Errorf("error should mention SORTIE_PORT: %s", errStr)
 	}
-	if !strings.Contains(errStr, "LAUNCHPAD_SESSION_TIMEOUT") {
-		t.Errorf("error should mention LAUNCHPAD_SESSION_TIMEOUT: %s", errStr)
+	if !strings.Contains(errStr, "SORTIE_SESSION_TIMEOUT") {
+		t.Errorf("error should mention SORTIE_SESSION_TIMEOUT: %s", errStr)
 	}
-	if !strings.Contains(errStr, "LAUNCHPAD_JWT_ACCESS_EXPIRY") {
-		t.Errorf("error should mention LAUNCHPAD_JWT_ACCESS_EXPIRY: %s", errStr)
+	if !strings.Contains(errStr, "SORTIE_JWT_ACCESS_EXPIRY") {
+		t.Errorf("error should mention SORTIE_JWT_ACCESS_EXPIRY: %s", errStr)
 	}
 }
 
@@ -479,13 +479,13 @@ func TestValidate_EmptyDB(t *testing.T) {
 
 	found := false
 	for _, e := range errs {
-		if e.Field == "LAUNCHPAD_DB" {
+		if e.Field == "SORTIE_DB" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("Validate() expected LAUNCHPAD_DB in validation errors")
+		t.Error("Validate() expected SORTIE_DB in validation errors")
 	}
 }
 
@@ -505,13 +505,13 @@ func TestValidate_EmptyVNCSidecarImage(t *testing.T) {
 
 	found := false
 	for _, e := range errs {
-		if e.Field == "LAUNCHPAD_VNC_SIDECAR_IMAGE" {
+		if e.Field == "SORTIE_VNC_SIDECAR_IMAGE" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("Validate() expected LAUNCHPAD_VNC_SIDECAR_IMAGE in validation errors")
+		t.Error("Validate() expected SORTIE_VNC_SIDECAR_IMAGE in validation errors")
 	}
 }
 
@@ -597,7 +597,7 @@ func TestLoadWithFlags(t *testing.T) {
 	clearEnvVars(t)
 
 	// Set env var
-	t.Setenv("LAUNCHPAD_PORT", "8000")
+	t.Setenv("SORTIE_PORT", "8000")
 
 	// Flag overrides env
 	cfg, err := LoadWithFlags(9000, "/custom/path.db", "seed.json")
@@ -619,8 +619,8 @@ func TestLoadWithFlags(t *testing.T) {
 func TestLoadWithFlags_DefaultsDoNotOverride(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_PORT", "9000")
-	t.Setenv("LAUNCHPAD_DB", "/data/custom.db")
+	t.Setenv("SORTIE_PORT", "9000")
+	t.Setenv("SORTIE_DB", "/data/custom.db")
 
 	// Passing default values (0 for port, DefaultDBPath for db) should not override env
 	cfg, err := LoadWithFlags(0, "", "")
@@ -639,7 +639,7 @@ func TestLoadWithFlags_DefaultsDoNotOverride(t *testing.T) {
 func TestLoadWithFlags_DefaultPortDoesNotOverride(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_PORT", "9000")
+	t.Setenv("SORTIE_PORT", "9000")
 
 	// Passing DefaultPort should not override env
 	cfg, err := LoadWithFlags(DefaultPort, DefaultDBPath, "")
@@ -742,12 +742,12 @@ func TestLoad_QuotaDefaults(t *testing.T) {
 func TestLoad_QuotaFromEnv(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_MAX_SESSIONS_PER_USER", "10")
-	t.Setenv("LAUNCHPAD_MAX_GLOBAL_SESSIONS", "200")
-	t.Setenv("LAUNCHPAD_DEFAULT_CPU_REQUEST", "250m")
-	t.Setenv("LAUNCHPAD_DEFAULT_CPU_LIMIT", "4")
-	t.Setenv("LAUNCHPAD_DEFAULT_MEM_REQUEST", "1Gi")
-	t.Setenv("LAUNCHPAD_DEFAULT_MEM_LIMIT", "4Gi")
+	t.Setenv("SORTIE_MAX_SESSIONS_PER_USER", "10")
+	t.Setenv("SORTIE_MAX_GLOBAL_SESSIONS", "200")
+	t.Setenv("SORTIE_DEFAULT_CPU_REQUEST", "250m")
+	t.Setenv("SORTIE_DEFAULT_CPU_LIMIT", "4")
+	t.Setenv("SORTIE_DEFAULT_MEM_REQUEST", "1Gi")
+	t.Setenv("SORTIE_DEFAULT_MEM_LIMIT", "4Gi")
 
 	cfg, err := Load()
 	if err != nil {
@@ -777,8 +777,8 @@ func TestLoad_QuotaFromEnv(t *testing.T) {
 func TestLoad_QuotaUnlimited(t *testing.T) {
 	clearEnvVars(t)
 
-	t.Setenv("LAUNCHPAD_MAX_SESSIONS_PER_USER", "0")
-	t.Setenv("LAUNCHPAD_MAX_GLOBAL_SESSIONS", "0")
+	t.Setenv("SORTIE_MAX_SESSIONS_PER_USER", "0")
+	t.Setenv("SORTIE_MAX_GLOBAL_SESSIONS", "0")
 
 	cfg, err := Load()
 	if err != nil {
@@ -799,10 +799,10 @@ func TestLoad_QuotaInvalidValues(t *testing.T) {
 		key   string
 		value string
 	}{
-		{"negative per-user", "LAUNCHPAD_MAX_SESSIONS_PER_USER", "-1"},
-		{"non-numeric per-user", "LAUNCHPAD_MAX_SESSIONS_PER_USER", "abc"},
-		{"negative global", "LAUNCHPAD_MAX_GLOBAL_SESSIONS", "-5"},
-		{"non-numeric global", "LAUNCHPAD_MAX_GLOBAL_SESSIONS", "xyz"},
+		{"negative per-user", "SORTIE_MAX_SESSIONS_PER_USER", "-1"},
+		{"non-numeric per-user", "SORTIE_MAX_SESSIONS_PER_USER", "abc"},
+		{"negative global", "SORTIE_MAX_GLOBAL_SESSIONS", "-5"},
+		{"non-numeric global", "SORTIE_MAX_GLOBAL_SESSIONS", "xyz"},
 	}
 
 	for _, tt := range tests {
@@ -821,33 +821,33 @@ func TestLoad_QuotaInvalidValues(t *testing.T) {
 func clearEnvVars(t *testing.T) {
 	t.Helper()
 	envVars := []string{
-		"LAUNCHPAD_PORT",
-		"LAUNCHPAD_DB",
-		"LAUNCHPAD_SEED",
-		"LAUNCHPAD_CONFIG",
-		"LAUNCHPAD_LOGO_URL",
-		"LAUNCHPAD_PRIMARY_COLOR",
-		"LAUNCHPAD_SECONDARY_COLOR",
-		"LAUNCHPAD_TENANT_NAME",
-		"LAUNCHPAD_NAMESPACE",
+		"SORTIE_PORT",
+		"SORTIE_DB",
+		"SORTIE_SEED",
+		"SORTIE_CONFIG",
+		"SORTIE_LOGO_URL",
+		"SORTIE_PRIMARY_COLOR",
+		"SORTIE_SECONDARY_COLOR",
+		"SORTIE_TENANT_NAME",
+		"SORTIE_NAMESPACE",
 		"KUBECONFIG",
-		"LAUNCHPAD_VNC_SIDECAR_IMAGE",
-		"LAUNCHPAD_GUACD_SIDECAR_IMAGE",
-		"LAUNCHPAD_SESSION_TIMEOUT",
-		"LAUNCHPAD_SESSION_CLEANUP_INTERVAL",
-		"LAUNCHPAD_POD_READY_TIMEOUT",
-		"LAUNCHPAD_JWT_SECRET",
-		"LAUNCHPAD_JWT_ACCESS_EXPIRY",
-		"LAUNCHPAD_JWT_REFRESH_EXPIRY",
-		"LAUNCHPAD_ADMIN_USERNAME",
-		"LAUNCHPAD_ADMIN_PASSWORD",
-		"LAUNCHPAD_ALLOW_REGISTRATION",
-		"LAUNCHPAD_MAX_SESSIONS_PER_USER",
-		"LAUNCHPAD_MAX_GLOBAL_SESSIONS",
-		"LAUNCHPAD_DEFAULT_CPU_REQUEST",
-		"LAUNCHPAD_DEFAULT_CPU_LIMIT",
-		"LAUNCHPAD_DEFAULT_MEM_REQUEST",
-		"LAUNCHPAD_DEFAULT_MEM_LIMIT",
+		"SORTIE_VNC_SIDECAR_IMAGE",
+		"SORTIE_GUACD_SIDECAR_IMAGE",
+		"SORTIE_SESSION_TIMEOUT",
+		"SORTIE_SESSION_CLEANUP_INTERVAL",
+		"SORTIE_POD_READY_TIMEOUT",
+		"SORTIE_JWT_SECRET",
+		"SORTIE_JWT_ACCESS_EXPIRY",
+		"SORTIE_JWT_REFRESH_EXPIRY",
+		"SORTIE_ADMIN_USERNAME",
+		"SORTIE_ADMIN_PASSWORD",
+		"SORTIE_ALLOW_REGISTRATION",
+		"SORTIE_MAX_SESSIONS_PER_USER",
+		"SORTIE_MAX_GLOBAL_SESSIONS",
+		"SORTIE_DEFAULT_CPU_REQUEST",
+		"SORTIE_DEFAULT_CPU_LIMIT",
+		"SORTIE_DEFAULT_MEM_REQUEST",
+		"SORTIE_DEFAULT_MEM_LIMIT",
 	}
 	for _, env := range envVars {
 		os.Unsetenv(env)

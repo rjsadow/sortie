@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // MemoryStorage implements StorageProvider using in-memory storage.

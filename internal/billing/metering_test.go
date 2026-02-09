@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 func TestCollectorImplementsSessionRecorder(t *testing.T) {

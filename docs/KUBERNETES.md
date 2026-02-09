@@ -1,22 +1,22 @@
 # Kubernetes Pod Orchestration
 
-Launchpad supports launching containerized thick-client applications in
+Sortie supports launching containerized thick-client applications in
 Kubernetes pods with VNC streaming to users via WebSocket.
 
 ## Architecture
 
 ```text
-Browser → Launchpad API → Kubernetes → Pod (App + VNC Sidecar) → WebSocket
+Browser → Sortie API → Kubernetes → Pod (App + VNC Sidecar) → WebSocket
 ```
 
 When a user launches a container application:
 
-1. Launchpad creates a session and spawns a Kubernetes pod
+1. Sortie creates a session and spawns a Kubernetes pod
 2. The pod contains two containers:
    - **App container**: Runs the actual application
    - **VNC sidecar**: Provides Xvfb, x11vnc, and websockify
 3. The VNC sidecar streams the application's display via WebSocket
-4. Launchpad proxies the WebSocket connection to the user's browser
+4. Sortie proxies the WebSocket connection to the user's browser
 5. noVNC in the browser renders the VNC stream
 
 ## Prerequisites
@@ -45,7 +45,7 @@ kubectl apply -f deploy/kubernetes/resource-quota.yaml
 kubectl apply -f deploy/kubernetes/network-policy.yaml
 ```
 
-### 4. Deploy Launchpad
+### 4. Deploy Sortie
 
 ```bash
 kubectl apply -f deploy/kubernetes/deployment.yaml
@@ -54,8 +54,8 @@ kubectl apply -f deploy/kubernetes/deployment.yaml
 ### 5. Build and push the VNC sidecar image
 
 ```bash
-docker build -t ghcr.io/rjsadow/launchpad-vnc-sidecar:latest docker/vnc-sidecar/
-docker push ghcr.io/rjsadow/launchpad-vnc-sidecar:latest
+docker build -t ghcr.io/rjsadow/sortie-vnc-sidecar:latest docker/vnc-sidecar/
+docker push ghcr.io/rjsadow/sortie-vnc-sidecar:latest
 ```
 
 ## Configuration
@@ -64,14 +64,14 @@ docker push ghcr.io/rjsadow/launchpad-vnc-sidecar:latest
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| `LAUNCHPAD_NAMESPACE` | `default` | Kubernetes namespace for session pods |
+| `SORTIE_NAMESPACE` | `default` | Kubernetes namespace for session pods |
 | `SESSION_TIMEOUT` | `120` | Session timeout in minutes |
 | `SESSION_CLEANUP_INTERVAL` | `5` | Cleanup interval in minutes |
 | `POD_READY_TIMEOUT` | `120` | Pod ready timeout in seconds |
-| `LAUNCHPAD_VNC_SIDECAR_IMAGE` | (see below) | VNC sidecar container image |
+| `SORTIE_VNC_SIDECAR_IMAGE` | (see below) | VNC sidecar container image |
 | `KUBECONFIG` | `~/.kube/config` | Path to kubeconfig (out-of-cluster) |
 
-Default VNC sidecar image: `ghcr.io/rjsadow/launchpad-vnc-sidecar:latest`
+Default VNC sidecar image: `ghcr.io/rjsadow/sortie-vnc-sidecar:latest`
 
 ### Adding Container Applications
 
@@ -191,7 +191,7 @@ Response:
   "user_id": "user-id",
   "app_id": "firefox",
   "app_name": "Firefox Browser",
-  "pod_name": "launchpad-session-uuid",
+  "pod_name": "sortie-session-uuid",
   "status": "creating",
   "websocket_url": "/ws/sessions/session-uuid",
   "created_at": "2024-01-15T10:30:00Z",
@@ -224,7 +224,7 @@ Connect to the VNC stream:
 
 ```javascript
 const ws = new WebSocket(
-  'wss://launchpad.example.com/ws/sessions/{id}'
+  'wss://sortie.example.com/ws/sessions/{id}'
 );
 ```
 
@@ -232,10 +232,10 @@ The WebSocket connection proxies the noVNC/websockify protocol.
 
 ## Security Considerations
 
-1. **RBAC**: The Launchpad service account has minimal permissions
+1. **RBAC**: The Sortie service account has minimal permissions
    (pod CRUD only)
 2. **Network Policies**: Session pods are isolated and can only communicate
-   with the Launchpad server
+   with the Sortie server
 3. **Resource Quotas**: Limit the number of pods and resources in
    the namespace
 4. **Pod Security**: Pods run as non-root with dropped capabilities
@@ -248,14 +248,14 @@ The WebSocket connection proxies the noVNC/websockify protocol.
 Check pod events:
 
 ```bash
-kubectl describe pod -n launchpad launchpad-session-xxx
+kubectl describe pod -n sortie sortie-session-xxx
 ```
 
 ### VNC connection fails
 
-1. Verify the pod is running: `kubectl get pods -n launchpad`
+1. Verify the pod is running: `kubectl get pods -n sortie`
 2. Check VNC sidecar logs:
-   `kubectl logs -n launchpad launchpad-session-xxx -c vnc-sidecar`
+   `kubectl logs -n sortie sortie-session-xxx -c vnc-sidecar`
 3. Check network policies allow traffic
 
 ### Session stuck in "creating"
@@ -272,17 +272,17 @@ A Helm chart is provided for easier deployment and customization.
 
 ```bash
 # Install with default values
-helm install launchpad charts/launchpad --namespace launchpad --create-namespace
+helm install sortie charts/sortie --namespace sortie --create-namespace
 
 # Install with custom values
-helm install launchpad charts/launchpad \
-  --namespace launchpad \
+helm install sortie charts/sortie \
+  --namespace sortie \
   --create-namespace \
   --set ingress.enabled=true \
-  --set ingress.host=launchpad.mycompany.com
+  --set ingress.host=sortie.mycompany.com
 
 # Upgrade an existing installation
-helm upgrade launchpad charts/launchpad --namespace launchpad
+helm upgrade sortie charts/sortie --namespace sortie
 ```
 
 ### Helm Values
@@ -291,11 +291,11 @@ Key configuration options in `values.yaml`:
 
 | Value | Default | Description |
 | ----- | ------- | ----------- |
-| `image.repository` | `ghcr.io/rjsadow/launchpad` | Launchpad image |
+| `image.repository` | `ghcr.io/rjsadow/sortie` | Sortie image |
 | `image.tag` | `latest` | Image tag |
 | `replicaCount` | `1` | Number of replicas |
 | `ingress.enabled` | `false` | Enable ingress |
-| `ingress.host` | `launchpad.example.com` | Ingress hostname |
+| `ingress.host` | `sortie.example.com` | Ingress hostname |
 | `networkPolicy.enabled` | `true` | Enable network policies |
 | `resourceQuota.enabled` | `true` | Enable resource quotas |
 
@@ -306,11 +306,11 @@ Key configuration options in `values.yaml`:
 Use the provided setup script for one-command local development:
 
 ```bash
-# Create Kind cluster and deploy Launchpad
+# Create Kind cluster and deploy Sortie
 ./scripts/kind-setup.sh
 
-# Access Launchpad
-kubectl port-forward -n launchpad svc/launchpad 8080:80
+# Access Sortie
+kubectl port-forward -n sortie svc/sortie 8080:80
 # Open http://localhost:8080
 
 # Teardown when done
@@ -323,17 +323,17 @@ For manual setup with kind or minikube:
 
 ```bash
 # Create a kind cluster with port mappings
-kind create cluster --name launchpad --config deploy/kind/kind-config.yaml
+kind create cluster --name sortie --config deploy/kind/kind-config.yaml
 
 # Build and load images into kind
-docker build -t ghcr.io/rjsadow/launchpad:latest .
-kind load docker-image ghcr.io/rjsadow/launchpad:latest --name launchpad
-kind load docker-image ghcr.io/rjsadow/launchpad-vnc-sidecar:latest \
-  --name launchpad
+docker build -t ghcr.io/rjsadow/sortie:latest .
+kind load docker-image ghcr.io/rjsadow/sortie:latest --name sortie
+kind load docker-image ghcr.io/rjsadow/sortie-vnc-sidecar:latest \
+  --name sortie
 
 # Deploy with Helm
-helm install launchpad charts/launchpad \
-  --namespace launchpad \
+helm install sortie charts/sortie \
+  --namespace sortie \
   --create-namespace \
   --set image.pullPolicy=Never
 
@@ -341,5 +341,5 @@ helm install launchpad charts/launchpad \
 kubectl apply -f deploy/kubernetes/
 
 # Port forward to access locally
-kubectl port-forward -n launchpad svc/launchpad 8080:80
+kubectl port-forward -n sortie svc/sortie 8080:80
 ```

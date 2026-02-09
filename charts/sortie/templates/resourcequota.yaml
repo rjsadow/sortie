@@ -3,10 +3,10 @@
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: {{ include "launchpad.fullname" . }}-quota
+  name: {{ include "sortie.fullname" . }}-quota
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "launchpad.labels" . | nindent 4 }}
+    {{- include "sortie.labels" . | nindent 4 }}
 spec:
   hard:
     pods: {{ .Values.resourceQuota.pods | quote }}

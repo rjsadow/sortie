@@ -69,8 +69,8 @@ func TestBuildPodSpec_StandardImage(t *testing.T) {
 	pod := BuildPodSpec(config)
 
 	// Check pod metadata
-	if pod.Name != "launchpad-session-sess-123" {
-		t.Errorf("pod.Name = %q, want %q", pod.Name, "launchpad-session-sess-123")
+	if pod.Name != "sortie-session-sess-123" {
+		t.Errorf("pod.Name = %q, want %q", pod.Name, "sortie-session-sess-123")
 	}
 	if pod.Namespace != "test-ns" {
 		t.Errorf("pod.Namespace = %q, want %q", pod.Namespace, "test-ns")
@@ -88,11 +88,11 @@ func TestBuildPodSpec_StandardImage(t *testing.T) {
 	}
 
 	// Check annotations
-	if pod.Annotations["launchpad.io/app-name"] != "Test App" {
-		t.Errorf("app-name annotation = %q, want %q", pod.Annotations["launchpad.io/app-name"], "Test App")
+	if pod.Annotations["sortie.io/app-name"] != "Test App" {
+		t.Errorf("app-name annotation = %q, want %q", pod.Annotations["sortie.io/app-name"], "Test App")
 	}
-	if pod.Annotations["launchpad.io/websocket-port"] != "6080" {
-		t.Errorf("websocket-port annotation = %q, want %q", pod.Annotations["launchpad.io/websocket-port"], "6080")
+	if pod.Annotations["sortie.io/websocket-port"] != "6080" {
+		t.Errorf("websocket-port annotation = %q, want %q", pod.Annotations["sortie.io/websocket-port"], "6080")
 	}
 
 	// Check restart policy
@@ -215,8 +215,8 @@ func TestBuildPodSpec_JlesageImage(t *testing.T) {
 	}
 
 	// Websocket port annotation should be 5800 for jlesage
-	if pod.Annotations["launchpad.io/websocket-port"] != "5800" {
-		t.Errorf("websocket-port annotation = %q, want %q", pod.Annotations["launchpad.io/websocket-port"], "5800")
+	if pod.Annotations["sortie.io/websocket-port"] != "5800" {
+		t.Errorf("websocket-port annotation = %q, want %q", pod.Annotations["sortie.io/websocket-port"], "5800")
 	}
 
 	// Readiness probe on port 5800
@@ -348,19 +348,19 @@ func TestBuildWebProxyPodSpec(t *testing.T) {
 	pod := BuildWebProxyPodSpec(config)
 
 	// Check pod metadata
-	if pod.Name != "launchpad-session-sess-789" {
-		t.Errorf("pod.Name = %q, want %q", pod.Name, "launchpad-session-sess-789")
+	if pod.Name != "sortie-session-sess-789" {
+		t.Errorf("pod.Name = %q, want %q", pod.Name, "sortie-session-sess-789")
 	}
 	if pod.Namespace != "test-ns" {
 		t.Errorf("pod.Namespace = %q, want %q", pod.Namespace, "test-ns")
 	}
 
 	// Check annotations
-	if pod.Annotations["launchpad.io/container-port"] != "3000" {
-		t.Errorf("container-port annotation = %q, want %q", pod.Annotations["launchpad.io/container-port"], "3000")
+	if pod.Annotations["sortie.io/container-port"] != "3000" {
+		t.Errorf("container-port annotation = %q, want %q", pod.Annotations["sortie.io/container-port"], "3000")
 	}
-	if pod.Annotations["launchpad.io/websocket-port"] != "6080" {
-		t.Errorf("websocket-port annotation = %q, want %q", pod.Annotations["launchpad.io/websocket-port"], "6080")
+	if pod.Annotations["sortie.io/websocket-port"] != "6080" {
+		t.Errorf("websocket-port annotation = %q, want %q", pod.Annotations["sortie.io/websocket-port"], "6080")
 	}
 
 	// Should have 2 containers (browser-sidecar + app)
@@ -422,8 +422,8 @@ func TestBuildWebProxyPodSpec_DefaultPort(t *testing.T) {
 	// ContainerPort left at 0
 	pod := BuildWebProxyPodSpec(config)
 
-	if pod.Annotations["launchpad.io/container-port"] != "8080" {
-		t.Errorf("container-port annotation = %q, want %q (default)", pod.Annotations["launchpad.io/container-port"], "8080")
+	if pod.Annotations["sortie.io/container-port"] != "8080" {
+		t.Errorf("container-port annotation = %q, want %q (default)", pod.Annotations["sortie.io/container-port"], "8080")
 	}
 
 	// Check BROWSER_URL uses default port 8080
@@ -463,16 +463,16 @@ func TestBuildWindowsPodSpec(t *testing.T) {
 	pod := BuildWindowsPodSpec(config)
 
 	// Check pod metadata
-	if pod.Name != "launchpad-session-sess-win" {
-		t.Errorf("pod.Name = %q, want %q", pod.Name, "launchpad-session-sess-win")
+	if pod.Name != "sortie-session-sess-win" {
+		t.Errorf("pod.Name = %q, want %q", pod.Name, "sortie-session-sess-win")
 	}
 
 	// Check annotations
-	if pod.Annotations["launchpad.io/protocol"] != "rdp" {
-		t.Errorf("protocol annotation = %q, want %q", pod.Annotations["launchpad.io/protocol"], "rdp")
+	if pod.Annotations["sortie.io/protocol"] != "rdp" {
+		t.Errorf("protocol annotation = %q, want %q", pod.Annotations["sortie.io/protocol"], "rdp")
 	}
-	if pod.Annotations["launchpad.io/guacd-port"] != "4822" {
-		t.Errorf("guacd-port annotation = %q, want %q", pod.Annotations["launchpad.io/guacd-port"], "4822")
+	if pod.Annotations["sortie.io/guacd-port"] != "4822" {
+		t.Errorf("guacd-port annotation = %q, want %q", pod.Annotations["sortie.io/guacd-port"], "4822")
 	}
 
 	// Should have 2 containers (guacd-sidecar + app)
@@ -580,8 +580,8 @@ func TestCreatePod_WithFakeClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePod() error = %v", err)
 	}
-	if created.Name != "launchpad-session-sess-create" {
-		t.Errorf("created pod name = %q, want %q", created.Name, "launchpad-session-sess-create")
+	if created.Name != "sortie-session-sess-create" {
+		t.Errorf("created pod name = %q, want %q", created.Name, "sortie-session-sess-create")
 	}
 }
 
@@ -598,12 +598,12 @@ func TestGetPod_WithFakeClient(t *testing.T) {
 	}
 
 	// Get it back
-	got, err := GetPod(context.Background(), "launchpad-session-sess-get")
+	got, err := GetPod(context.Background(), "sortie-session-sess-get")
 	if err != nil {
 		t.Fatalf("GetPod() error = %v", err)
 	}
-	if got.Name != "launchpad-session-sess-get" {
-		t.Errorf("GetPod().Name = %q, want %q", got.Name, "launchpad-session-sess-get")
+	if got.Name != "sortie-session-sess-get" {
+		t.Errorf("GetPod().Name = %q, want %q", got.Name, "sortie-session-sess-get")
 	}
 }
 
@@ -619,13 +619,13 @@ func TestDeletePod_WithFakeClient(t *testing.T) {
 		t.Fatalf("CreatePod() error = %v", err)
 	}
 
-	err = DeletePod(context.Background(), "launchpad-session-sess-del")
+	err = DeletePod(context.Background(), "sortie-session-sess-del")
 	if err != nil {
 		t.Fatalf("DeletePod() error = %v", err)
 	}
 
 	// Verify deleted
-	_, err = GetPod(context.Background(), "launchpad-session-sess-del")
+	_, err = GetPod(context.Background(), "sortie-session-sess-del")
 	if err == nil {
 		t.Error("GetPod() after delete should return error")
 	}
@@ -665,7 +665,7 @@ func TestListSessionPods_WithFakeClient(t *testing.T) {
 		t.Fatalf("CreatePod() error = %v", err)
 	}
 
-	// Create a non-session pod (no launchpad labels)
+	// Create a non-session pod (no sortie labels)
 	otherPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "other-pod",

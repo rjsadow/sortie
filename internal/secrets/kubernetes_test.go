@@ -96,7 +96,7 @@ func TestKubernetesProvider_GetWithMetadata(t *testing.T) {
 			"db-password": []byte("the-password"),
 		},
 		map[string]string{
-			"app":     "launchpad",
+			"app":     "sortie",
 			"env":     "production",
 		},
 	)
@@ -119,8 +119,8 @@ func TestKubernetesProvider_GetWithMetadata(t *testing.T) {
 	if secret.Metadata["secret_name"] != "app-secrets" {
 		t.Errorf("Metadata[secret_name] = %v, want app-secrets", secret.Metadata["secret_name"])
 	}
-	if secret.Metadata["label.app"] != "launchpad" {
-		t.Errorf("Metadata[label.app] = %v, want launchpad", secret.Metadata["label.app"])
+	if secret.Metadata["label.app"] != "sortie" {
+		t.Errorf("Metadata[label.app] = %v, want sortie", secret.Metadata["label.app"])
 	}
 	if secret.Metadata["label.env"] != "production" {
 		t.Errorf("Metadata[label.env] = %v, want production", secret.Metadata["label.env"])

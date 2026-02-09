@@ -1,12 +1,12 @@
 # Reverse Proxy Configuration Guide
 
-This guide covers deploying Launchpad behind a reverse proxy for production
+This guide covers deploying Sortie behind a reverse proxy for production
 environments. It includes TLS termination, WebSocket support, path routing,
 and security headers.
 
 ## Overview
 
-In production, Launchpad should run behind a reverse proxy that handles:
+In production, Sortie should run behind a reverse proxy that handles:
 
 - **TLS termination**: HTTPS encryption at the edge
 - **WebSocket proxying**: For VNC streaming to containerized apps
@@ -16,7 +16,7 @@ In production, Launchpad should run behind a reverse proxy that handles:
 
 ```text
 ┌─────────┐     HTTPS      ┌─────────────┐     HTTP      ┌───────────┐
-│ Browser │ ──────────────▶│   NGINX     │ ────────────▶│ Launchpad │
+│ Browser │ ──────────────▶│   NGINX     │ ────────────▶│ Sortie │
 └─────────┘                │ (TLS term)  │              │  :8080    │
                            └─────────────┘              └───────────┘
                                  │
@@ -32,10 +32,10 @@ In production, Launchpad should run behind a reverse proxy that handles:
 ### Complete Production Example - NGINX
 
 ```nginx
-# /etc/nginx/sites-available/launchpad.conf
+# /etc/nginx/sites-available/sortie.conf
 
-# Upstream for Launchpad backend
-upstream launchpad_backend {
+# Upstream for Sortie backend
+upstream sortie_backend {
     server 127.0.0.1:8080;
     keepalive 32;
 }
@@ -44,7 +44,7 @@ upstream launchpad_backend {
 server {
     listen 80;
     listen [::]:80;
-    server_name launchpad.example.com;
+    server_name sortie.example.com;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -59,14 +59,14 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name launchpad.example.com;
+    server_name sortie.example.com;
 
     # ==========================================================
     # TLS Configuration
     # ==========================================================
 
-    ssl_certificate /etc/letsencrypt/live/launchpad.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/launchpad.example.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/sortie.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sortie.example.com/privkey.pem;
 
     # TLS settings (Mozilla Intermediate)
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -76,7 +76,7 @@ server {
     # OCSP Stapling
     ssl_stapling on;
     ssl_stapling_verify on;
-    ssl_trusted_certificate /etc/letsencrypt/live/launchpad.example.com/chain.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/sortie.example.com/chain.pem;
     resolver 8.8.8.8 8.8.4.4 valid=300s;
     resolver_timeout 5s;
 
@@ -103,8 +103,8 @@ server {
     # Logging
     # ==========================================================
 
-    access_log /var/log/nginx/launchpad_access.log;
-    error_log /var/log/nginx/launchpad_error.log;
+    access_log /var/log/nginx/sortie_access.log;
+    error_log /var/log/nginx/sortie_error.log;
 
     # ==========================================================
     # Path Routing
@@ -112,7 +112,7 @@ server {
 
     # API endpoints
     location /api/ {
-        proxy_pass http://launchpad_backend;
+        proxy_pass http://sortie_backend;
         proxy_http_version 1.1;
 
         # Headers for backend
@@ -136,7 +136,7 @@ server {
 
     # WebSocket endpoint for VNC sessions
     location /ws/ {
-        proxy_pass http://launchpad_backend;
+        proxy_pass http://sortie_backend;
         proxy_http_version 1.1;
 
         # WebSocket upgrade headers
@@ -160,7 +160,7 @@ server {
 
     # Static assets and frontend
     location / {
-        proxy_pass http://launchpad_backend;
+        proxy_pass http://sortie_backend;
         proxy_http_version 1.1;
 
         proxy_set_header Host $host;
@@ -170,7 +170,7 @@ server {
 
         # Cache static assets
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-            proxy_pass http://launchpad_backend;
+            proxy_pass http://sortie_backend;
             proxy_cache_valid 200 7d;
             add_header Cache-Control "public, max-age=604800, immutable";
         }
@@ -178,7 +178,7 @@ server {
 
     # Health check endpoint (bypass auth if using external health monitors)
     location = /api/apps {
-        proxy_pass http://launchpad_backend;
+        proxy_pass http://sortie_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -195,10 +195,10 @@ server {
 sudo apt install certbot python3-certbot-nginx
 
 # Obtain certificate (NGINX plugin)
-sudo certbot --nginx -d launchpad.example.com
+sudo certbot --nginx -d sortie.example.com
 
 # Or standalone (if NGINX not running yet)
-sudo certbot certonly --standalone -d launchpad.example.com
+sudo certbot certonly --standalone -d sortie.example.com
 
 # Test renewal
 sudo certbot renew --dry-run
@@ -260,7 +260,7 @@ proxy_buffering off;
 
 ```bash
 # Using websocat
-websocat wss://launchpad.example.com/ws/sessions/test
+websocat wss://sortie.example.com/ws/sessions/test
 
 # Using curl (check upgrade)
 curl -i -N \
@@ -268,7 +268,7 @@ curl -i -N \
   -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" \
   -H "Sec-WebSocket-Key: $(openssl rand -base64 16)" \
-  https://launchpad.example.com/ws/sessions/test
+  https://sortie.example.com/ws/sessions/test
 ```
 
 ## Path Routing
@@ -277,17 +277,17 @@ curl -i -N \
 
 | Path Pattern         | Backend   | Notes                  |
 |----------------------|-----------|------------------------|
-| `/api/*`             | Launchpad | REST API endpoints     |
-| `/ws/*`              | Launchpad | WebSocket (VNC streams)|
-| `/`                  | Launchpad | Frontend static files  |
-| `/*.js, *.css, etc.` | Launchpad | Cached static assets   |
+| `/api/*`             | Sortie | REST API endpoints     |
+| `/ws/*`              | Sortie | WebSocket (VNC streams)|
+| `/`                  | Sortie | Frontend static files  |
+| `/*.js, *.css, etc.` | Sortie | Cached static assets   |
 
 ### Multi-Backend Example
 
 If running microservices or additional backends:
 
 ```nginx
-upstream launchpad_backend {
+upstream sortie_backend {
     server 127.0.0.1:8080;
 }
 
@@ -299,7 +299,7 @@ server {
     # ... TLS config ...
 
     location /api/ {
-        proxy_pass http://launchpad_backend;
+        proxy_pass http://sortie_backend;
         # ... proxy settings ...
     }
 
@@ -309,7 +309,7 @@ server {
     }
 
     location / {
-        proxy_pass http://launchpad_backend;
+        proxy_pass http://sortie_backend;
         # ... proxy settings ...
     }
 }
@@ -319,7 +319,7 @@ server {
 
 ### Forwarded Headers
 
-Launchpad needs to know the original client information:
+Sortie needs to know the original client information:
 
 ```nginx
 proxy_set_header Host $host;
@@ -357,7 +357,7 @@ log_format trace '$remote_addr - $request_id - "$request" $status';
 ### Multiple Backend Instances
 
 ```nginx
-upstream launchpad_backend {
+upstream sortie_backend {
     least_conn;  # Load balancing method
 
     server 10.0.0.1:8080 weight=5;
@@ -371,7 +371,7 @@ upstream launchpad_backend {
 ### Health Checks (NGINX Plus or OpenResty)
 
 ```nginx
-upstream launchpad_backend {
+upstream sortie_backend {
     server 10.0.0.1:8080;
     server 10.0.0.2:8080;
 
@@ -382,7 +382,7 @@ upstream launchpad_backend {
 For open-source NGINX, use passive health checks:
 
 ```nginx
-upstream launchpad_backend {
+upstream sortie_backend {
     server 10.0.0.1:8080 max_fails=3 fail_timeout=30s;
     server 10.0.0.2:8080 max_fails=3 fail_timeout=30s;
 }
@@ -400,7 +400,7 @@ sudo nginx -t
 
 ```bash
 # Using OpenSSL
-openssl s_client -connect launchpad.example.com:443 -servername launchpad.example.com
+openssl s_client -connect sortie.example.com:443 -servername sortie.example.com
 
 # Using SSL Labs (public sites)
 # Visit: https://www.ssllabs.com/ssltest/
@@ -409,7 +409,7 @@ openssl s_client -connect launchpad.example.com:443 -servername launchpad.exampl
 ### Verify Headers
 
 ```bash
-curl -I https://launchpad.example.com
+curl -I https://sortie.example.com
 ```
 
 Expected output includes:
@@ -427,7 +427,7 @@ x-content-type-options: nosniff
 curl -I \
   -H "Connection: Upgrade" \
   -H "Upgrade: websocket" \
-  https://launchpad.example.com/ws/sessions/test
+  https://sortie.example.com/ws/sessions/test
 ```
 
 Should return `101 Switching Protocols` (when session exists).
@@ -438,7 +438,7 @@ Should return `101 Switching Protocols` (when session exists).
 
 #### 502 Bad Gateway
 
-- Backend not running: `systemctl status launchpad`
+- Backend not running: `systemctl status sortie`
 - Firewall blocking: `sudo ufw status`
 - Wrong upstream address: Check `proxy_pass` directive
 
@@ -463,13 +463,13 @@ Should return `101 Switching Protocols` (when session exists).
 Enable debug logging temporarily:
 
 ```nginx
-error_log /var/log/nginx/launchpad_error.log debug;
+error_log /var/log/nginx/sortie_error.log debug;
 ```
 
 Check logs:
 
 ```bash
-tail -f /var/log/nginx/launchpad_error.log
+tail -f /var/log/nginx/sortie_error.log
 ```
 
 ## Traefik Configuration
@@ -503,16 +503,16 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "letsencrypt:/letsencrypt"
     networks:
-      - launchpad
+      - sortie
 
-  launchpad:
-    image: your-registry/launchpad:latest
+  sortie:
+    image: your-registry/sortie:latest
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.launchpad.rule=Host(`launchpad.example.com`)"
-      - "traefik.http.routers.launchpad.entrypoints=websecure"
-      - "traefik.http.routers.launchpad.tls.certresolver=letsencrypt"
-      - "traefik.http.services.launchpad.loadbalancer.server.port=8080"
+      - "traefik.http.routers.sortie.rule=Host(`sortie.example.com`)"
+      - "traefik.http.routers.sortie.entrypoints=websecure"
+      - "traefik.http.routers.sortie.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sortie.loadbalancer.server.port=8080"
       # Security headers middleware
       - "traefik.http.middlewares.security-headers.headers.stsSeconds=63072000"
       - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
@@ -522,15 +522,15 @@ services:
       - "traefik.http.middlewares.security-headers.headers.browserXssFilter=true"
       - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
       - "traefik.http.middlewares.security-headers.headers.permissionsPolicy=geolocation=(), microphone=(), camera=()"
-      - "traefik.http.routers.launchpad.middlewares=security-headers"
+      - "traefik.http.routers.sortie.middlewares=security-headers"
     networks:
-      - launchpad
+      - sortie
 
 volumes:
   letsencrypt:
 
 networks:
-  launchpad:
+  sortie:
 ```
 
 ### File-Based Configuration
@@ -576,32 +576,32 @@ accessLog:
 ```
 
 ```yaml
-# /etc/traefik/conf.d/launchpad.yml
+# /etc/traefik/conf.d/sortie.yml
 http:
   routers:
-    launchpad:
-      rule: "Host(`launchpad.example.com`)"
+    sortie:
+      rule: "Host(`sortie.example.com`)"
       entryPoints:
         - websecure
-      service: launchpad
+      service: sortie
       tls:
         certResolver: letsencrypt
       middlewares:
         - security-headers
         - rate-limit
 
-    launchpad-ws:
-      rule: "Host(`launchpad.example.com`) && PathPrefix(`/ws/`)"
+    sortie-ws:
+      rule: "Host(`sortie.example.com`) && PathPrefix(`/ws/`)"
       entryPoints:
         - websecure
-      service: launchpad
+      service: sortie
       tls:
         certResolver: letsencrypt
       middlewares:
         - security-headers
 
   services:
-    launchpad:
+    sortie:
       loadBalancer:
         servers:
           - url: "http://127.0.0.1:8080"
@@ -636,8 +636,8 @@ http:
 # /etc/traefik/conf.d/tls.yml
 tls:
   certificates:
-    - certFile: /etc/ssl/certs/launchpad.example.com.crt
-      keyFile: /etc/ssl/private/launchpad.example.com.key
+    - certFile: /etc/ssl/certs/sortie.example.com.crt
+      keyFile: /etc/ssl/private/sortie.example.com.key
 
   options:
     default:
@@ -660,20 +660,20 @@ For Traefik in Kubernetes using CRDs:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
 spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`launchpad.example.com`)
+    - match: Host(`sortie.example.com`)
       kind: Rule
       services:
-        - name: launchpad
+        - name: sortie
           port: 80
       middlewares:
         - name: security-headers
-          namespace: launchpad
+          namespace: sortie
   tls:
     certResolver: letsencrypt
 ---
@@ -681,7 +681,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: security-headers
-  namespace: launchpad
+  namespace: sortie
 spec:
   headers:
     stsSeconds: 63072000
@@ -709,8 +709,8 @@ traefik --configfile=/etc/traefik/traefik.yml --check
 curl http://localhost:8080/api/overview
 
 # Verify TLS
-openssl s_client -connect launchpad.example.com:443 \
-  -servername launchpad.example.com
+openssl s_client -connect sortie.example.com:443 \
+  -servername sortie.example.com
 ```
 
 ## Caddy Configuration
@@ -738,7 +738,7 @@ Caddy provides automatic HTTPS with minimal configuration.
 }
 
 # Main site
-launchpad.example.com {
+sortie.example.com {
     # TLS configuration
     tls {
         protocols tls1.2 tls1.3
@@ -753,7 +753,7 @@ launchpad.example.com {
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "geolocation=(), microphone=(), camera=()"
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss://launchpad.example.com; frame-ancestors 'self';"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss://sortie.example.com; frame-ancestors 'self';"
         -Server
     }
 
@@ -809,7 +809,7 @@ launchpad.example.com {
 
     # Logging
     log {
-        output file /var/log/caddy/launchpad.log {
+        output file /var/log/caddy/sortie.log {
             roll_size 100mb
             roll_keep 10
         }
@@ -821,8 +821,8 @@ launchpad.example.com {
 ### Using Existing TLS Certificates
 
 ```text
-launchpad.example.com {
-    tls /etc/ssl/certs/launchpad.example.com.crt /etc/ssl/private/launchpad.example.com.key
+sortie.example.com {
+    tls /etc/ssl/certs/sortie.example.com.crt /etc/ssl/private/sortie.example.com.key
 
     # ... rest of configuration
 }
@@ -831,7 +831,7 @@ launchpad.example.com {
 ### Load Balancing with Caddy
 
 ```text
-launchpad.example.com {
+sortie.example.com {
     reverse_proxy localhost:8080 localhost:8081 localhost:8082 {
         lb_policy least_conn
         health_uri /api/apps
@@ -848,7 +848,7 @@ launchpad.example.com {
 ### Rate Limiting with Caddy
 
 ```text
-launchpad.example.com {
+sortie.example.com {
     rate_limit {
         zone static_zone {
             key static
@@ -879,15 +879,15 @@ services:
       - caddy_config:/config
       - ./logs:/var/log/caddy
     networks:
-      - launchpad
+      - sortie
     restart: unless-stopped
 
-  launchpad:
-    image: your-registry/launchpad:latest
+  sortie:
+    image: your-registry/sortie:latest
     expose:
       - "8080"
     networks:
-      - launchpad
+      - sortie
     restart: unless-stopped
 
 volumes:
@@ -895,7 +895,7 @@ volumes:
   caddy_config:
 
 networks:
-  launchpad:
+  sortie:
 ```
 
 ### Testing Caddy Configuration
@@ -911,7 +911,7 @@ caddy fmt --overwrite /etc/caddy/Caddyfile
 caddy reload --config /etc/caddy/Caddyfile
 
 # Test TLS
-curl -I https://launchpad.example.com
+curl -I https://sortie.example.com
 ```
 
 ## Proxy Comparison

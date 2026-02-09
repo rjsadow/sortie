@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/rjsadow/launchpad/tests/integration/testutil"
+	"github.com/rjsadow/sortie/tests/integration/testutil"
 )
 
 func TestAuth_LoginValidCredentials(t *testing.T) {
@@ -158,7 +158,7 @@ func TestAuth_Logout(t *testing.T) {
 
 	// Check that cookie is cleared
 	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "launchpad_access_token" {
+		if cookie.Name == "sortie_access_token" {
 			if cookie.MaxAge >= 0 {
 				t.Error("expected cookie MaxAge < 0 (cleared)")
 			}

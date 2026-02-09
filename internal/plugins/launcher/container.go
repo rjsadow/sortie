@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rjsadow/launchpad/internal/k8s"
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/k8s"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 const (

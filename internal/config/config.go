@@ -1,4 +1,4 @@
-// Package config provides centralized configuration management for Launchpad.
+// Package config provides centralized configuration management for Sortie.
 // Configuration is loaded from environment variables with sensible defaults.
 // Required configuration that is missing will cause the application to fail fast
 // with helpful error messages.
@@ -110,13 +110,13 @@ func (e ValidationErrors) Error() string {
 // Default values
 const (
 	DefaultPort                   = 8080
-	DefaultDBPath                 = "launchpad.db"
+	DefaultDBPath                 = "sortie.db"
 	DefaultBrandingConfigPath     = "branding.json"
 	DefaultPrimaryColor           = "#1F2A3C"
 	DefaultSecondaryColor         = "#2B3445"
 	DefaultTenantName             = "Sortie"
 	DefaultNamespace              = "default"
-	DefaultVNCSidecarImage        = "ghcr.io/rjsadow/launchpad-vnc-sidecar:latest"
+	DefaultVNCSidecarImage        = "ghcr.io/rjsadow/sortie-vnc-sidecar:latest"
 	DefaultGuacdSidecarImage      = "guacamole/guacd:1.5.5"
 	DefaultSessionTimeout         = 2 * time.Hour
 	DefaultSessionCleanupInterval = 5 * time.Minute
@@ -207,11 +207,11 @@ func (c *Config) loadFromEnv() error {
 	var parseErrors ValidationErrors
 
 	// Server configuration
-	if v := os.Getenv("LAUNCHPAD_PORT"); v != "" {
+	if v := os.Getenv("SORTIE_PORT"); v != "" {
 		port, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_PORT",
+				Field:   "SORTIE_PORT",
 				Message: fmt.Sprintf("invalid port number: %q (must be an integer)", v),
 			})
 		} else {
@@ -219,37 +219,37 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_DB"); v != "" {
+	if v := os.Getenv("SORTIE_DB"); v != "" {
 		c.DB = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_SEED"); v != "" {
+	if v := os.Getenv("SORTIE_SEED"); v != "" {
 		c.Seed = v
 	}
 
 	// Branding configuration
-	if v := os.Getenv("LAUNCHPAD_CONFIG"); v != "" {
+	if v := os.Getenv("SORTIE_CONFIG"); v != "" {
 		c.BrandingConfigPath = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_LOGO_URL"); v != "" {
+	if v := os.Getenv("SORTIE_LOGO_URL"); v != "" {
 		c.LogoURL = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_PRIMARY_COLOR"); v != "" {
+	if v := os.Getenv("SORTIE_PRIMARY_COLOR"); v != "" {
 		c.PrimaryColor = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_SECONDARY_COLOR"); v != "" {
+	if v := os.Getenv("SORTIE_SECONDARY_COLOR"); v != "" {
 		c.SecondaryColor = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_TENANT_NAME"); v != "" {
+	if v := os.Getenv("SORTIE_TENANT_NAME"); v != "" {
 		c.TenantName = v
 	}
 
 	// Kubernetes configuration
-	if v := os.Getenv("LAUNCHPAD_NAMESPACE"); v != "" {
+	if v := os.Getenv("SORTIE_NAMESPACE"); v != "" {
 		c.Namespace = v
 	}
 
@@ -257,25 +257,25 @@ func (c *Config) loadFromEnv() error {
 		c.Kubeconfig = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_VNC_SIDECAR_IMAGE"); v != "" {
+	if v := os.Getenv("SORTIE_VNC_SIDECAR_IMAGE"); v != "" {
 		c.VNCSidecarImage = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_GUACD_SIDECAR_IMAGE"); v != "" {
+	if v := os.Getenv("SORTIE_GUACD_SIDECAR_IMAGE"); v != "" {
 		c.GuacdSidecarImage = v
 	}
 
 	// Session configuration
-	if v := os.Getenv("LAUNCHPAD_SESSION_TIMEOUT"); v != "" {
+	if v := os.Getenv("SORTIE_SESSION_TIMEOUT"); v != "" {
 		minutes, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_SESSION_TIMEOUT",
+				Field:   "SORTIE_SESSION_TIMEOUT",
 				Message: fmt.Sprintf("invalid timeout: %q (must be an integer representing minutes)", v),
 			})
 		} else if minutes <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_SESSION_TIMEOUT",
+				Field:   "SORTIE_SESSION_TIMEOUT",
 				Message: fmt.Sprintf("timeout must be positive: %d", minutes),
 			})
 		} else {
@@ -283,16 +283,16 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_SESSION_CLEANUP_INTERVAL"); v != "" {
+	if v := os.Getenv("SORTIE_SESSION_CLEANUP_INTERVAL"); v != "" {
 		minutes, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_SESSION_CLEANUP_INTERVAL",
+				Field:   "SORTIE_SESSION_CLEANUP_INTERVAL",
 				Message: fmt.Sprintf("invalid interval: %q (must be an integer representing minutes)", v),
 			})
 		} else if minutes <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_SESSION_CLEANUP_INTERVAL",
+				Field:   "SORTIE_SESSION_CLEANUP_INTERVAL",
 				Message: fmt.Sprintf("interval must be positive: %d", minutes),
 			})
 		} else {
@@ -300,16 +300,16 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_POD_READY_TIMEOUT"); v != "" {
+	if v := os.Getenv("SORTIE_POD_READY_TIMEOUT"); v != "" {
 		seconds, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_POD_READY_TIMEOUT",
+				Field:   "SORTIE_POD_READY_TIMEOUT",
 				Message: fmt.Sprintf("invalid timeout: %q (must be an integer representing seconds)", v),
 			})
 		} else if seconds <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_POD_READY_TIMEOUT",
+				Field:   "SORTIE_POD_READY_TIMEOUT",
 				Message: fmt.Sprintf("timeout must be positive: %d", seconds),
 			})
 		} else {
@@ -318,20 +318,20 @@ func (c *Config) loadFromEnv() error {
 	}
 
 	// JWT configuration
-	if v := os.Getenv("LAUNCHPAD_JWT_SECRET"); v != "" {
+	if v := os.Getenv("SORTIE_JWT_SECRET"); v != "" {
 		c.JWTSecret = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_JWT_ACCESS_EXPIRY"); v != "" {
+	if v := os.Getenv("SORTIE_JWT_ACCESS_EXPIRY"); v != "" {
 		minutes, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_JWT_ACCESS_EXPIRY",
+				Field:   "SORTIE_JWT_ACCESS_EXPIRY",
 				Message: fmt.Sprintf("invalid expiry: %q (must be an integer representing minutes)", v),
 			})
 		} else if minutes <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_JWT_ACCESS_EXPIRY",
+				Field:   "SORTIE_JWT_ACCESS_EXPIRY",
 				Message: fmt.Sprintf("expiry must be positive: %d", minutes),
 			})
 		} else {
@@ -339,16 +339,16 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_JWT_REFRESH_EXPIRY"); v != "" {
+	if v := os.Getenv("SORTIE_JWT_REFRESH_EXPIRY"); v != "" {
 		hours, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_JWT_REFRESH_EXPIRY",
+				Field:   "SORTIE_JWT_REFRESH_EXPIRY",
 				Message: fmt.Sprintf("invalid expiry: %q (must be an integer representing hours)", v),
 			})
 		} else if hours <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_JWT_REFRESH_EXPIRY",
+				Field:   "SORTIE_JWT_REFRESH_EXPIRY",
 				Message: fmt.Sprintf("expiry must be positive: %d", hours),
 			})
 		} else {
@@ -356,46 +356,46 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_ADMIN_USERNAME"); v != "" {
+	if v := os.Getenv("SORTIE_ADMIN_USERNAME"); v != "" {
 		c.AdminUsername = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_ADMIN_PASSWORD"); v != "" {
+	if v := os.Getenv("SORTIE_ADMIN_PASSWORD"); v != "" {
 		c.AdminPassword = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_ALLOW_REGISTRATION"); v != "" {
+	if v := os.Getenv("SORTIE_ALLOW_REGISTRATION"); v != "" {
 		c.AllowRegistration = strings.EqualFold(v, "true") || v == "1"
 	}
 
 	// OIDC/SSO configuration
-	if v := os.Getenv("LAUNCHPAD_OIDC_ISSUER"); v != "" {
+	if v := os.Getenv("SORTIE_OIDC_ISSUER"); v != "" {
 		c.OIDCIssuer = v
 	}
-	if v := os.Getenv("LAUNCHPAD_OIDC_CLIENT_ID"); v != "" {
+	if v := os.Getenv("SORTIE_OIDC_CLIENT_ID"); v != "" {
 		c.OIDCClientID = v
 	}
-	if v := os.Getenv("LAUNCHPAD_OIDC_CLIENT_SECRET"); v != "" {
+	if v := os.Getenv("SORTIE_OIDC_CLIENT_SECRET"); v != "" {
 		c.OIDCClientSecret = v
 	}
-	if v := os.Getenv("LAUNCHPAD_OIDC_REDIRECT_URL"); v != "" {
+	if v := os.Getenv("SORTIE_OIDC_REDIRECT_URL"); v != "" {
 		c.OIDCRedirectURL = v
 	}
-	if v := os.Getenv("LAUNCHPAD_OIDC_SCOPES"); v != "" {
+	if v := os.Getenv("SORTIE_OIDC_SCOPES"); v != "" {
 		c.OIDCScopes = v
 	}
 
 	// File transfer configuration
-	if v := os.Getenv("LAUNCHPAD_MAX_UPLOAD_SIZE"); v != "" {
+	if v := os.Getenv("SORTIE_MAX_UPLOAD_SIZE"); v != "" {
 		size, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_MAX_UPLOAD_SIZE",
+				Field:   "SORTIE_MAX_UPLOAD_SIZE",
 				Message: fmt.Sprintf("invalid size: %q (must be an integer representing bytes)", v),
 			})
 		} else if size <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_MAX_UPLOAD_SIZE",
+				Field:   "SORTIE_MAX_UPLOAD_SIZE",
 				Message: fmt.Sprintf("size must be positive: %d", size),
 			})
 		} else {
@@ -404,16 +404,16 @@ func (c *Config) loadFromEnv() error {
 	}
 
 	// Gateway configuration
-	if v := os.Getenv("LAUNCHPAD_GATEWAY_RATE_LIMIT"); v != "" {
+	if v := os.Getenv("SORTIE_GATEWAY_RATE_LIMIT"); v != "" {
 		rl, err := strconv.ParseFloat(v, 64)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_GATEWAY_RATE_LIMIT",
+				Field:   "SORTIE_GATEWAY_RATE_LIMIT",
 				Message: fmt.Sprintf("invalid rate: %q (must be a number)", v),
 			})
 		} else if rl < 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_GATEWAY_RATE_LIMIT",
+				Field:   "SORTIE_GATEWAY_RATE_LIMIT",
 				Message: fmt.Sprintf("rate must be non-negative: %v", rl),
 			})
 		} else {
@@ -421,16 +421,16 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_GATEWAY_BURST"); v != "" {
+	if v := os.Getenv("SORTIE_GATEWAY_BURST"); v != "" {
 		b, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_GATEWAY_BURST",
+				Field:   "SORTIE_GATEWAY_BURST",
 				Message: fmt.Sprintf("invalid burst: %q (must be an integer)", v),
 			})
 		} else if b < 1 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_GATEWAY_BURST",
+				Field:   "SORTIE_GATEWAY_BURST",
 				Message: fmt.Sprintf("burst must be positive: %d", b),
 			})
 		} else {
@@ -439,16 +439,16 @@ func (c *Config) loadFromEnv() error {
 	}
 
 	// Resource quota configuration
-	if v := os.Getenv("LAUNCHPAD_MAX_SESSIONS_PER_USER"); v != "" {
+	if v := os.Getenv("SORTIE_MAX_SESSIONS_PER_USER"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_MAX_SESSIONS_PER_USER",
+				Field:   "SORTIE_MAX_SESSIONS_PER_USER",
 				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
 			})
 		} else if n < 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_MAX_SESSIONS_PER_USER",
+				Field:   "SORTIE_MAX_SESSIONS_PER_USER",
 				Message: fmt.Sprintf("value must be non-negative: %d", n),
 			})
 		} else {
@@ -456,16 +456,16 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_MAX_GLOBAL_SESSIONS"); v != "" {
+	if v := os.Getenv("SORTIE_MAX_GLOBAL_SESSIONS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_MAX_GLOBAL_SESSIONS",
+				Field:   "SORTIE_MAX_GLOBAL_SESSIONS",
 				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
 			})
 		} else if n < 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_MAX_GLOBAL_SESSIONS",
+				Field:   "SORTIE_MAX_GLOBAL_SESSIONS",
 				Message: fmt.Sprintf("value must be non-negative: %d", n),
 			})
 		} else {
@@ -473,41 +473,41 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_DEFAULT_CPU_REQUEST"); v != "" {
+	if v := os.Getenv("SORTIE_DEFAULT_CPU_REQUEST"); v != "" {
 		c.DefaultCPURequest = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_DEFAULT_CPU_LIMIT"); v != "" {
+	if v := os.Getenv("SORTIE_DEFAULT_CPU_LIMIT"); v != "" {
 		c.DefaultCPULimit = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_DEFAULT_MEM_REQUEST"); v != "" {
+	if v := os.Getenv("SORTIE_DEFAULT_MEM_REQUEST"); v != "" {
 		c.DefaultMemRequest = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_DEFAULT_MEM_LIMIT"); v != "" {
+	if v := os.Getenv("SORTIE_DEFAULT_MEM_LIMIT"); v != "" {
 		c.DefaultMemLimit = v
 	}
 
 	// Session recording configuration
-	if v := os.Getenv("LAUNCHPAD_RECORDING_ENABLED"); v != "" {
+	if v := os.Getenv("SORTIE_RECORDING_ENABLED"); v != "" {
 		c.RecordingEnabled = strings.EqualFold(v, "true") || v == "1"
 	}
 
-	if v := os.Getenv("LAUNCHPAD_RECORDING_ENDPOINT"); v != "" {
+	if v := os.Getenv("SORTIE_RECORDING_ENDPOINT"); v != "" {
 		c.RecordingEndpoint = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_RECORDING_BUFFER_SIZE"); v != "" {
+	if v := os.Getenv("SORTIE_RECORDING_BUFFER_SIZE"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_RECORDING_BUFFER_SIZE",
+				Field:   "SORTIE_RECORDING_BUFFER_SIZE",
 				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
 			})
 		} else if n < 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_RECORDING_BUFFER_SIZE",
+				Field:   "SORTIE_RECORDING_BUFFER_SIZE",
 				Message: fmt.Sprintf("value must be non-negative: %d", n),
 			})
 		} else {
@@ -516,30 +516,30 @@ func (c *Config) loadFromEnv() error {
 	}
 
 	// Billing/metering configuration
-	if v := os.Getenv("LAUNCHPAD_BILLING_ENABLED"); v != "" {
+	if v := os.Getenv("SORTIE_BILLING_ENABLED"); v != "" {
 		c.BillingEnabled = strings.EqualFold(v, "true") || v == "1"
 	}
 
-	if v := os.Getenv("LAUNCHPAD_BILLING_EXPORTER"); v != "" {
+	if v := os.Getenv("SORTIE_BILLING_EXPORTER"); v != "" {
 		c.BillingExporter = v
 	} else if c.BillingExporter == "" {
 		c.BillingExporter = DefaultBillingExporter
 	}
 
-	if v := os.Getenv("LAUNCHPAD_BILLING_WEBHOOK_URL"); v != "" {
+	if v := os.Getenv("SORTIE_BILLING_WEBHOOK_URL"); v != "" {
 		c.BillingWebhookURL = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_BILLING_EXPORT_INTERVAL"); v != "" {
+	if v := os.Getenv("SORTIE_BILLING_EXPORT_INTERVAL"); v != "" {
 		minutes, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_BILLING_EXPORT_INTERVAL",
+				Field:   "SORTIE_BILLING_EXPORT_INTERVAL",
 				Message: fmt.Sprintf("invalid interval: %q (must be an integer representing minutes)", v),
 			})
 		} else if minutes <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_BILLING_EXPORT_INTERVAL",
+				Field:   "SORTIE_BILLING_EXPORT_INTERVAL",
 				Message: fmt.Sprintf("interval must be positive: %d", minutes),
 			})
 		} else {
@@ -550,16 +550,16 @@ func (c *Config) loadFromEnv() error {
 	}
 
 	// Session queueing configuration
-	if v := os.Getenv("LAUNCHPAD_QUEUE_MAX_SIZE"); v != "" {
+	if v := os.Getenv("SORTIE_QUEUE_MAX_SIZE"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_QUEUE_MAX_SIZE",
+				Field:   "SORTIE_QUEUE_MAX_SIZE",
 				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
 			})
 		} else if n < 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_QUEUE_MAX_SIZE",
+				Field:   "SORTIE_QUEUE_MAX_SIZE",
 				Message: fmt.Sprintf("value must be non-negative: %d", n),
 			})
 		} else {
@@ -567,16 +567,16 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
-	if v := os.Getenv("LAUNCHPAD_QUEUE_TIMEOUT"); v != "" {
+	if v := os.Getenv("SORTIE_QUEUE_TIMEOUT"); v != "" {
 		seconds, err := strconv.Atoi(v)
 		if err != nil {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_QUEUE_TIMEOUT",
+				Field:   "SORTIE_QUEUE_TIMEOUT",
 				Message: fmt.Sprintf("invalid timeout: %q (must be an integer representing seconds)", v),
 			})
 		} else if seconds <= 0 {
 			parseErrors = append(parseErrors, ValidationError{
-				Field:   "LAUNCHPAD_QUEUE_TIMEOUT",
+				Field:   "SORTIE_QUEUE_TIMEOUT",
 				Message: fmt.Sprintf("timeout must be positive: %d", seconds),
 			})
 		} else {
@@ -597,7 +597,7 @@ func (c *Config) Validate() ValidationErrors {
 	// Validate port
 	if c.Port < 1 || c.Port > 65535 {
 		errs = append(errs, ValidationError{
-			Field:   "LAUNCHPAD_PORT",
+			Field:   "SORTIE_PORT",
 			Message: fmt.Sprintf("port must be between 1 and 65535, got %d", c.Port),
 		})
 	}
@@ -605,7 +605,7 @@ func (c *Config) Validate() ValidationErrors {
 	// Validate DB path is not empty
 	if c.DB == "" {
 		errs = append(errs, ValidationError{
-			Field:   "LAUNCHPAD_DB",
+			Field:   "SORTIE_DB",
 			Message: "database path cannot be empty",
 		})
 	}
@@ -613,14 +613,14 @@ func (c *Config) Validate() ValidationErrors {
 	// Validate color format (basic check for hex color)
 	if c.PrimaryColor != "" && !isValidHexColor(c.PrimaryColor) {
 		errs = append(errs, ValidationError{
-			Field:   "LAUNCHPAD_PRIMARY_COLOR",
+			Field:   "SORTIE_PRIMARY_COLOR",
 			Message: fmt.Sprintf("invalid hex color: %q (expected format: #RRGGBB)", c.PrimaryColor),
 		})
 	}
 
 	if c.SecondaryColor != "" && !isValidHexColor(c.SecondaryColor) {
 		errs = append(errs, ValidationError{
-			Field:   "LAUNCHPAD_SECONDARY_COLOR",
+			Field:   "SORTIE_SECONDARY_COLOR",
 			Message: fmt.Sprintf("invalid hex color: %q (expected format: #RRGGBB)", c.SecondaryColor),
 		})
 	}
@@ -628,7 +628,7 @@ func (c *Config) Validate() ValidationErrors {
 	// Validate VNC sidecar image is not empty
 	if c.VNCSidecarImage == "" {
 		errs = append(errs, ValidationError{
-			Field:   "LAUNCHPAD_VNC_SIDECAR_IMAGE",
+			Field:   "SORTIE_VNC_SIDECAR_IMAGE",
 			Message: "VNC sidecar image cannot be empty",
 		})
 	}

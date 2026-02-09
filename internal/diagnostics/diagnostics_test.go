@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/config"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/config"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 func setupTestCollector(t *testing.T) *Collector {

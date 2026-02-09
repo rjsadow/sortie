@@ -1,4 +1,4 @@
-Launchpad has been deployed to namespace "{{ .Values.namespace }}".
+Sortie has been deployed to namespace "{{ .Values.namespace }}".
 
 === Access ===
 {{- if .Values.ingress.enabled }}
@@ -7,7 +7,7 @@ Launchpad has been deployed to namespace "{{ .Values.namespace }}".
 {{- else }}
 
   Port-forward:
-    kubectl port-forward -n {{ .Values.namespace }} svc/{{ include "launchpad.fullname" . }} 8080:{{ .Values.service.port }}
+    kubectl port-forward -n {{ .Values.namespace }} svc/{{ include "sortie.fullname" . }} 8080:{{ .Values.service.port }}
 
   Then open: http://localhost:8080
 {{- end }}

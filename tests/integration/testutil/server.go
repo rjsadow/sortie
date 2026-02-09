@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/config"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/diagnostics"
-	"github.com/rjsadow/launchpad/internal/files"
-	"github.com/rjsadow/launchpad/internal/plugins"
-	"github.com/rjsadow/launchpad/internal/plugins/auth"
-	"github.com/rjsadow/launchpad/internal/server"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/config"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/diagnostics"
+	"github.com/rjsadow/sortie/internal/files"
+	"github.com/rjsadow/sortie/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins/auth"
+	"github.com/rjsadow/sortie/internal/server"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 const (
@@ -82,7 +82,7 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 	}
 
 	// Suppress noisy log output during tests
-	_ = os.Setenv("LAUNCHPAD_LOG_LEVEL", "error")
+	_ = os.Setenv("SORTIE_LOG_LEVEL", "error")
 
 	// 2. Build test config
 	cfg := &config.Config{

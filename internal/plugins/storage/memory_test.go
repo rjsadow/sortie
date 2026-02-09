@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 func TestMemoryStorage_AppCRUD(t *testing.T) {

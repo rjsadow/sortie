@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 func TestSessionFromDB(t *testing.T) {

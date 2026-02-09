@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 // MeteringEventType identifies the kind of metering event.

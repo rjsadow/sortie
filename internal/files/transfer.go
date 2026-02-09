@@ -12,7 +12,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/rjsadow/launchpad/internal/k8s"
+	"github.com/rjsadow/sortie/internal/k8s"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"

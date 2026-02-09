@@ -109,8 +109,8 @@ func TestGetNamespace_Configured(t *testing.T) {
 func TestGetNamespace_EnvVar(t *testing.T) {
 	defer ResetClient()
 
-	os.Setenv("LAUNCHPAD_NAMESPACE", "env-namespace")
-	defer os.Unsetenv("LAUNCHPAD_NAMESPACE")
+	os.Setenv("SORTIE_NAMESPACE", "env-namespace")
+	defer os.Unsetenv("SORTIE_NAMESPACE")
 
 	got := GetNamespace()
 	if got != "env-namespace" {
@@ -121,8 +121,8 @@ func TestGetNamespace_EnvVar(t *testing.T) {
 func TestGetNamespace_ConfiguredOverridesEnv(t *testing.T) {
 	defer ResetClient()
 
-	os.Setenv("LAUNCHPAD_NAMESPACE", "env-namespace")
-	defer os.Unsetenv("LAUNCHPAD_NAMESPACE")
+	os.Setenv("SORTIE_NAMESPACE", "env-namespace")
+	defer os.Unsetenv("SORTIE_NAMESPACE")
 
 	Configure("configured-namespace", "", "")
 	got := GetNamespace()
@@ -134,7 +134,7 @@ func TestGetNamespace_ConfiguredOverridesEnv(t *testing.T) {
 func TestGetNamespace_DefaultFallback(t *testing.T) {
 	defer ResetClient()
 
-	os.Unsetenv("LAUNCHPAD_NAMESPACE")
+	os.Unsetenv("SORTIE_NAMESPACE")
 
 	got := GetNamespace()
 	if got != "default" {

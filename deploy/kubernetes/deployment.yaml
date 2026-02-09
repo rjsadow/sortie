@@ -1,21 +1,21 @@
 ---
-# Namespace for Launchpad
+# Namespace for Sortie
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: launchpad
+  name: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
 
 ---
-# ConfigMap for Launchpad configuration
+# ConfigMap for Sortie configuration
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: launchpad-config
-  namespace: launchpad
+  name: sortie-config
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
 data:
   # Session timeout in minutes
   SESSION_TIMEOUT: "120"
@@ -24,10 +24,10 @@ data:
   # Pod ready timeout in seconds
   POD_READY_TIMEOUT: "120"
   # VNC sidecar image
-  LAUNCHPAD_VNC_SIDECAR_IMAGE: "ghcr.io/rjsadow/launchpad-vnc-sidecar:latest"
+  SORTIE_VNC_SIDECAR_IMAGE: "ghcr.io/rjsadow/sortie-vnc-sidecar:latest"
 
 ---
-# Deployment for Launchpad server
+# Deployment for Sortie server
 # Supports horizontal scaling (replicas > 1). The backend is stateless:
 # all session state is stored in the database. When scaling beyond 1 replica,
 # replace the emptyDir data volume with a PersistentVolumeClaim using a
@@ -35,10 +35,10 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
     app.kubernetes.io/component: server
 spec:
   replicas: 1
@@ -49,23 +49,23 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app.kubernetes.io/name: launchpad
+      app.kubernetes.io/name: sortie
       app.kubernetes.io/component: server
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: launchpad
+        app.kubernetes.io/name: sortie
         app.kubernetes.io/component: server
     spec:
-      serviceAccountName: launchpad
+      serviceAccountName: sortie
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
       containers:
-        - name: launchpad
-          image: ghcr.io/rjsadow/launchpad:latest
+        - name: sortie
+          image: ghcr.io/rjsadow/sortie:latest
           imagePullPolicy: Always
           ports:
             - name: http
@@ -73,9 +73,9 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: launchpad-config
+                name: sortie-config
           env:
-            - name: LAUNCHPAD_NAMESPACE
+            - name: SORTIE_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
@@ -118,14 +118,14 @@ spec:
           emptyDir: {}
 
 ---
-# Service for Launchpad
+# Service for Sortie
 apiVersion: v1
 kind: Service
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
     app.kubernetes.io/component: server
 spec:
   type: ClusterIP
@@ -135,32 +135,32 @@ spec:
       targetPort: http
       protocol: TCP
   selector:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
     app.kubernetes.io/component: server
 
 ---
-# Ingress for Launchpad (optional, requires ingress controller)
+# Ingress for Sortie (optional, requires ingress controller)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
   annotations:
     # Enable WebSocket support for most ingress controllers
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/websocket-services: "launchpad"
+    nginx.ingress.kubernetes.io/websocket-services: "sortie"
 spec:
   rules:
-    - host: launchpad.example.com
+    - host: sortie.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: launchpad
+                name: sortie
                 port:
                   name: http

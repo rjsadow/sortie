@@ -108,7 +108,7 @@ func waitForSessionStatus(sessionID, target string, timeout time.Duration) error
 // time to finalize it. Without this wait, restart fails with "pod already
 // exists" because the old pod is still terminating.
 func waitForPodDeletion(sessionID string, timeout time.Duration) {
-	podName := "launchpad-session-" + sessionID
+	podName := "sortie-session-" + sessionID
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		time.Sleep(2 * time.Second)

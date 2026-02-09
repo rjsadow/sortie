@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // contextKey is a custom type for context keys to avoid collisions
@@ -16,7 +16,7 @@ const (
 	UserContextKey contextKey = "user"
 
 	// AccessTokenCookieName is the name of the cookie used to store the access token
-	AccessTokenCookieName = "launchpad_access_token"
+	AccessTokenCookieName = "sortie_access_token"
 )
 
 // AuthMiddleware creates middleware that validates JWT tokens from the Authorization header

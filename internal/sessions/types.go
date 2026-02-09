@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 // QuotaExceededError is returned when a session cannot be created due to quota limits.

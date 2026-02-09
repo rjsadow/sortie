@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/plugins"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -21,7 +21,7 @@ const (
 	TokenTypeRefresh TokenType = "refresh"
 )
 
-// Claims represents JWT claims for Launchpad tokens
+// Claims represents JWT claims for Sortie tokens
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID      string    `json:"user_id"`
@@ -315,7 +315,7 @@ func (p *JWTAuthProvider) generateToken(user *db.User, tokenType TokenType) (str
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "launchpad",
+			Issuer:    "sortie",
 			Subject:   user.ID,
 		},
 		UserID:      user.ID,

@@ -27,7 +27,7 @@ type ResourceLimits struct {
 	MemoryLimit   string `json:"memory_limit,omitempty"`   // Memory limit (e.g., "512Mi", "2Gi")
 }
 
-// Application represents an app in the launchpad
+// Application represents an app in the sortie
 type Application struct {
 	ID             string          `json:"id"`
 	Name           string          `json:"name"`

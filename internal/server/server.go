@@ -1,4 +1,4 @@
-// Package server provides the HTTP handler assembly for the Launchpad application.
+// Package server provides the HTTP handler assembly for the Sortie application.
 // It accepts all dependencies as parameters so that both main() and tests
 // can build the same handler chain without route drift.
 package server
@@ -7,14 +7,14 @@ import (
 	"io/fs"
 	"net/http"
 
-	"github.com/rjsadow/launchpad/internal/config"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/diagnostics"
-	"github.com/rjsadow/launchpad/internal/files"
-	"github.com/rjsadow/launchpad/internal/gateway"
-	"github.com/rjsadow/launchpad/internal/middleware"
-	"github.com/rjsadow/launchpad/internal/plugins/auth"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/config"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/diagnostics"
+	"github.com/rjsadow/sortie/internal/files"
+	"github.com/rjsadow/sortie/internal/gateway"
+	"github.com/rjsadow/sortie/internal/middleware"
+	"github.com/rjsadow/sortie/internal/plugins/auth"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 // App holds all dependencies needed to build the HTTP handler.

@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "launchpad.fullname" . }}
+  name: {{ include "sortie.fullname" . }}
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "launchpad.labels" . | nindent 4 }}
+    {{- include "sortie.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
 spec:
   type: {{ .Values.service.type }}
@@ -15,4 +15,4 @@ spec:
       targetPort: http
       protocol: TCP
   selector:
-    {{- include "launchpad.serverLabels" . | nindent 4 }}
+    {{- include "sortie.serverLabels" . | nindent 4 }}

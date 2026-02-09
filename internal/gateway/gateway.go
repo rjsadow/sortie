@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/guacamole"
-	"github.com/rjsadow/launchpad/internal/middleware"
-	"github.com/rjsadow/launchpad/internal/plugins"
-	"github.com/rjsadow/launchpad/internal/sessions"
-	"github.com/rjsadow/launchpad/internal/websocket"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/guacamole"
+	"github.com/rjsadow/sortie/internal/middleware"
+	"github.com/rjsadow/sortie/internal/plugins"
+	"github.com/rjsadow/sortie/internal/sessions"
+	"github.com/rjsadow/sortie/internal/websocket"
 )
 
 // Handler is the gateway entry point for all WebSocket stream connections.
@@ -112,7 +112,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // authenticate extracts and validates a JWT from the request.
 // WebSocket clients cannot set custom headers, so the token is accepted from:
 //  1. query parameter "token"
-//  2. cookie (launchpad_access_token)
+//  2. cookie (sortie_access_token)
 //  3. Authorization header (for non-browser clients)
 func (h *Handler) authenticate(r *http.Request) (*plugins.User, error) {
 	token := ""

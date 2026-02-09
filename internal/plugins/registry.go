@@ -55,15 +55,15 @@ func DefaultRegistryConfig() *RegistryConfig {
 func LoadRegistryConfig() *RegistryConfig {
 	cfg := DefaultRegistryConfig()
 
-	if v := os.Getenv("LAUNCHPAD_PLUGIN_LAUNCHER"); v != "" {
+	if v := os.Getenv("SORTIE_PLUGIN_LAUNCHER"); v != "" {
 		cfg.Launcher = strings.ToLower(v)
 	}
 
-	if v := os.Getenv("LAUNCHPAD_PLUGIN_AUTH"); v != "" {
+	if v := os.Getenv("SORTIE_PLUGIN_AUTH"); v != "" {
 		cfg.Auth = strings.ToLower(v)
 	}
 
-	if v := os.Getenv("LAUNCHPAD_PLUGIN_STORAGE"); v != "" {
+	if v := os.Getenv("SORTIE_PLUGIN_STORAGE"); v != "" {
 		cfg.Storage = strings.ToLower(v)
 	}
 

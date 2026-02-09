@@ -7,7 +7,7 @@ web/node_modules
 
 # Build artifacts (will be built in container)
 web/dist
-launchpad
+sortie
 
 # IDE and editor files
 .vscode

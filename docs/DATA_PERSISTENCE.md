@@ -1,11 +1,11 @@
 # Data Persistence Strategy
 
-This document defines what data persists in Launchpad, where it is stored,
+This document defines what data persists in Sortie, where it is stored,
 and how to manage it across deployments.
 
 ## Overview
 
-Launchpad uses a layered persistence strategy:
+Sortie uses a layered persistence strategy:
 
 | Data Type        | Storage                  | Persistence | Survives Restart |
 | ---------------- | ------------------------ | ----------- | ---------------- |
@@ -23,15 +23,15 @@ User preferences are stored client-side in the browser's localStorage.
 
 | Key                   | Value                  | Purpose                  |
 | --------------------- | ---------------------- | ------------------------ |
-| `launchpad-theme`     | `'dark'` or `'light'`  | Color scheme preference  |
-| `launchpad-collapsed` | JSON array of names    | Collapsed categories     |
+| `sortie-theme`     | `'dark'` or `'light'`  | Color scheme preference  |
+| `sortie-collapsed` | JSON array of names    | Collapsed categories     |
 
 ### Storage Location
 
 ```javascript
 // web/src/App.tsx
-localStorage.getItem('launchpad-theme')
-localStorage.getItem('launchpad-collapsed')
+localStorage.getItem('sortie-theme')
+localStorage.getItem('sortie-collapsed')
 ```
 
 ### Characteristics
@@ -92,14 +92,14 @@ type Application struct {
 
 ### Seeding
 
-On first run, if the `applications` table is empty, Launchpad seeds from JSON:
+On first run, if the `applications` table is empty, Sortie seeds from JSON:
 
 ```bash
 # Via environment variable
-LAUNCHPAD_SEED=/path/to/apps.json
+SORTIE_SEED=/path/to/apps.json
 
 # Or command-line flag
-./launchpad -seed /path/to/apps.json
+./sortie -seed /path/to/apps.json
 ```
 
 Example seed file (`examples/apps-with-containers.json`):
@@ -209,9 +209,9 @@ termination.
 ### Configuration
 
 ```bash
-LAUNCHPAD_SESSION_TIMEOUT=120          # Minutes until expiry
-LAUNCHPAD_SESSION_CLEANUP_INTERVAL=5   # Minutes between cleanup
-LAUNCHPAD_POD_READY_TIMEOUT=120        # Seconds to wait for pod
+SORTIE_SESSION_TIMEOUT=120          # Minutes until expiry
+SORTIE_SESSION_CLEANUP_INTERVAL=5   # Minutes between cleanup
+SORTIE_POD_READY_TIMEOUT=120        # Seconds to wait for pod
 ```
 
 ## Workspace Volume
@@ -220,7 +220,7 @@ Workspace volumes provide temporary storage for container sessions.
 
 ### Current Configuration
 
-In `deploy/kubernetes/deployment.yaml`, the Launchpad server uses ephemeral storage:
+In `deploy/kubernetes/deployment.yaml`, the Sortie server uses ephemeral storage:
 
 ```yaml
 volumeMounts:
@@ -343,14 +343,14 @@ CREATE INDEX idx_analytics_timestamp ON analytics(timestamp);
 
 ```bash
 # From within the cluster
-kubectl exec -n launchpad deployment/launchpad -- \
-  sqlite3 /data/launchpad.db ".backup '/data/backup.db'"
+kubectl exec -n sortie deployment/sortie -- \
+  sqlite3 /data/sortie.db ".backup '/data/backup.db'"
 
 # Copy to local machine
-POD=$(kubectl get pod -n launchpad -l app=launchpad \
+POD=$(kubectl get pod -n sortie -l app=sortie \
   -o jsonpath='{.items[0].metadata.name}')
-kubectl cp launchpad/$POD:/data/backup.db \
-  ./launchpad-backup-$(date +%Y%m%d).db
+kubectl cp sortie/$POD:/data/backup.db \
+  ./sortie-backup-$(date +%Y%m%d).db
 ```
 
 #### Automated Backup CronJob
@@ -359,8 +359,8 @@ kubectl cp launchpad/$POD:/data/backup.db \
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: launchpad-backup
-  namespace: launchpad
+  name: sortie-backup
+  namespace: sortie
 spec:
   schedule: "0 2 * * *"  # Daily at 2 AM
   jobTemplate:
@@ -375,8 +375,8 @@ spec:
                 - -c
                 - |
                   apk add --no-cache sqlite
-                  BACKUP="/backup/launchpad-$(date +%Y%m%d).db"
-                  sqlite3 /data/launchpad.db ".backup '$BACKUP'"
+                  BACKUP="/backup/sortie-$(date +%Y%m%d).db"
+                  sqlite3 /data/sortie.db ".backup '$BACKUP'"
               volumeMounts:
                 - name: data
                   mountPath: /data
@@ -386,10 +386,10 @@ spec:
           volumes:
             - name: data
               persistentVolumeClaim:
-                claimName: launchpad-data
+                claimName: sortie-data
             - name: backup
               persistentVolumeClaim:
-                claimName: launchpad-backup
+                claimName: sortie-backup
           restartPolicy: OnFailure
 ```
 
@@ -401,8 +401,8 @@ Create a separate PVC for backups:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: launchpad-backup
-  namespace: launchpad
+  name: sortie-backup
+  namespace: sortie
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -413,22 +413,22 @@ spec:
 
 ### Restore Procedure
 
-1. Stop the Launchpad deployment:
+1. Stop the Sortie deployment:
 
    ```bash
-   kubectl scale deployment launchpad -n launchpad --replicas=0
+   kubectl scale deployment sortie -n sortie --replicas=0
    ```
 
 2. Copy backup to the data volume:
 
    ```bash
-   kubectl cp ./launchpad-backup.db launchpad/restore-pod:/data/launchpad.db
+   kubectl cp ./sortie-backup.db sortie/restore-pod:/data/sortie.db
    ```
 
 3. Restart the deployment:
 
    ```bash
-   kubectl scale deployment launchpad -n launchpad --replicas=1
+   kubectl scale deployment sortie -n sortie --replicas=1
    ```
 
 ### Disaster Recovery
@@ -446,11 +446,11 @@ For disaster recovery, sync backups to external storage:
 
 ```bash
 # Example: sync to S3-compatible storage
-kubectl exec -n launchpad deployment/launchpad -- \
-  sqlite3 /data/launchpad.db ".backup '/tmp/backup.db'"
+kubectl exec -n sortie deployment/sortie -- \
+  sqlite3 /data/sortie.db ".backup '/tmp/backup.db'"
 
-kubectl cp launchpad/launchpad-pod:/tmp/backup.db - | \
-  aws s3 cp - s3://backups/launchpad/$(date +%Y%m%d).db
+kubectl cp sortie/sortie-pod:/tmp/backup.db - | \
+  aws s3 cp - s3://backups/sortie/$(date +%Y%m%d).db
 ```
 
 ## Configuration Persistence
@@ -460,11 +460,11 @@ kubectl cp launchpad/launchpad-pod:/tmp/backup.db - | \
 Primary configuration via environment (`.env.example`):
 
 ```bash
-LAUNCHPAD_PORT=8080
-LAUNCHPAD_DB=launchpad.db
-LAUNCHPAD_SEED=examples/apps.json
-LAUNCHPAD_CONFIG=branding.json
-LAUNCHPAD_NAMESPACE=launchpad
+SORTIE_PORT=8080
+SORTIE_DB=sortie.db
+SORTIE_SEED=examples/apps.json
+SORTIE_CONFIG=branding.json
+SORTIE_NAMESPACE=sortie
 ```
 
 ### Branding Configuration

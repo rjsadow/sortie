@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "launchpad.name" -}}
+{{- define "sortie.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "launchpad.fullname" -}}
+{{- define "sortie.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "launchpad.chart" -}}
+{{- define "sortie.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "launchpad.labels" -}}
-helm.sh/chart: {{ include "launchpad.chart" . }}
-{{ include "launchpad.selectorLabels" . }}
+{{- define "sortie.labels" -}}
+helm.sh/chart: {{ include "sortie.chart" . }}
+{{ include "sortie.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -43,22 +43,22 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "launchpad.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "launchpad.name" . }}
+{{- define "sortie.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "sortie.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Server component labels
 */}}
-{{- define "launchpad.serverLabels" -}}
-{{ include "launchpad.selectorLabels" . }}
+{{- define "sortie.serverLabels" -}}
+{{ include "sortie.selectorLabels" . }}
 app.kubernetes.io/component: server
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "launchpad.serviceAccountName" -}}
-{{- default (include "launchpad.fullname" .) .Values.serviceAccount.name }}
+{{- define "sortie.serviceAccountName" -}}
+{{- default (include "sortie.fullname" .) .Values.serviceAccount.name }}
 {{- end }}

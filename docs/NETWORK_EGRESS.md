@@ -1,6 +1,6 @@
 # Network Egress Rules
 
-Launchpad supports per-application network egress policies
+Sortie supports per-application network egress policies
 to control what network destinations session pods can reach.
 This provides defense-in-depth by restricting outbound
 connections from containerized sessions.
@@ -128,7 +128,7 @@ app with an egress policy:
 
 1. A pod is created for the session (as usual).
 2. A per-session `NetworkPolicy` named
-   `launchpad-egress-{session-id}` is created.
+   `sortie-egress-{session-id}` is created.
 3. The policy targets only the session pod via label
    selectors.
 4. When the session is terminated, the NetworkPolicy is
@@ -174,7 +174,7 @@ will be created but have no effect.
 
 ### RBAC
 
-The Launchpad service account needs permission to manage
+The Sortie service account needs permission to manage
 NetworkPolicies. This is included in the Helm chart and
 deploy manifests:
 
@@ -189,7 +189,7 @@ deploy manifests:
 The Helm chart includes a default NetworkPolicy for
 session pods that allows:
 
-- **Ingress**: Only from the Launchpad server on
+- **Ingress**: Only from the Sortie server on
   VNC/RDP/proxy ports
 - **Egress**: DNS + HTTP/HTTPS to any destination
 

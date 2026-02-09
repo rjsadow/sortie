@@ -1,7 +1,7 @@
 # Template Marketplace
 
 The Template Marketplace provides pre-configured application templates that
-administrators can easily add to their Launchpad instance.
+administrators can easily add to their Sortie instance.
 
 ## Overview
 
@@ -19,7 +19,7 @@ Templates are pre-defined container application configurations that include:
 3. Search for specific templates by name, description, or tags
 4. Click a template to view details
 5. Customize the Application ID (must be unique)
-6. Click **Add to Launchpad** to add the application
+6. Click **Add to Sortie** to add the application
 
 ## Available Categories
 
@@ -131,7 +131,7 @@ Example template:
 
 ## API Integration
 
-When adding a template to Launchpad, the frontend sends a POST request to
+When adding a template to Sortie, the frontend sends a POST request to
 `/api/apps` with the application configuration. The backend should:
 
 1. Validate the application data

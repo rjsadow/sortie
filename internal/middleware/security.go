@@ -1,4 +1,4 @@
-// Package middleware provides HTTP middleware for the Launchpad server.
+// Package middleware provides HTTP middleware for the Sortie server.
 package middleware
 
 import (

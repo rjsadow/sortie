@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 // Type identifies the workload orchestration backend.

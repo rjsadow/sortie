@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 func TestGetLoadStatus_UnlimitedSessions(t *testing.T) {

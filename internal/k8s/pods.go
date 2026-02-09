@@ -15,11 +15,11 @@ import (
 
 const (
 	// VNCSidecarImage is the default VNC sidecar container image
-	VNCSidecarImage = "ghcr.io/rjsadow/launchpad-vnc-sidecar:latest"
+	VNCSidecarImage = "ghcr.io/rjsadow/sortie-vnc-sidecar:latest"
 
 	// BrowserSidecarImage is the default browser sidecar container image
 	// Used for web_proxy apps - provides VNC + browser that connects to the web app
-	BrowserSidecarImage = "ghcr.io/rjsadow/launchpad-browser-sidecar:latest"
+	BrowserSidecarImage = "ghcr.io/rjsadow/sortie-browser-sidecar:latest"
 
 	// X11SocketVolumeName is the name of the shared X11 socket volume
 	X11SocketVolumeName = "x11-socket"
@@ -31,10 +31,10 @@ const (
 	WorkspaceMountPath = "/workspace"
 
 	// SessionLabelKey is the label key for session identification
-	SessionLabelKey = "launchpad.io/session-id"
+	SessionLabelKey = "sortie.io/session-id"
 
 	// AppLabelKey is the label key for app identification
-	AppLabelKey = "launchpad.io/app-id"
+	AppLabelKey = "sortie.io/app-id"
 
 	// ComponentLabelKey is the label key for component identification
 	ComponentLabelKey = "app.kubernetes.io/component"
@@ -88,7 +88,7 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 	vncImage := GetVNCSidecarImage()
 
 	// Sanitize pod name (must be DNS-1123 compliant)
-	podName := fmt.Sprintf("launchpad-session-%s", config.SessionID)
+	podName := fmt.Sprintf("sortie-session-%s", config.SessionID)
 
 	// Build environment variables for app container
 	var appEnv []corev1.EnvVar
@@ -131,9 +131,9 @@ func BuildPodSpec(config *PodConfig) *corev1.Pod {
 				ComponentLabelKey: "session",
 			},
 			Annotations: map[string]string{
-				"launchpad.io/app-name":      config.AppName,
-				"launchpad.io/created-at":    time.Now().UTC().Format(time.RFC3339),
-				"launchpad.io/websocket-port": websocketPort,
+				"sortie.io/app-name":      config.AppName,
+				"sortie.io/created-at":    time.Now().UTC().Format(time.RFC3339),
+				"sortie.io/websocket-port": websocketPort,
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -375,7 +375,7 @@ func GetPodIP(ctx context.Context, podName string) (string, error) {
 	return pod.Status.PodIP, nil
 }
 
-// ListSessionPods lists all pods belonging to launchpad sessions
+// ListSessionPods lists all pods belonging to sortie sessions
 func ListSessionPods(ctx context.Context) (*corev1.PodList, error) {
 	client, err := GetClient()
 	if err != nil {
@@ -401,7 +401,7 @@ func BuildWebProxyPodSpec(config *PodConfig) *corev1.Pod {
 	browserImage := GetBrowserSidecarImage()
 
 	// Sanitize pod name (must be DNS-1123 compliant)
-	podName := fmt.Sprintf("launchpad-session-%s", config.SessionID)
+	podName := fmt.Sprintf("sortie-session-%s", config.SessionID)
 
 	// Build environment variables for app container
 	var appEnv []corev1.EnvVar
@@ -428,10 +428,10 @@ func BuildWebProxyPodSpec(config *PodConfig) *corev1.Pod {
 				ComponentLabelKey: "session",
 			},
 			Annotations: map[string]string{
-				"launchpad.io/app-name":       config.AppName,
-				"launchpad.io/created-at":     time.Now().UTC().Format(time.RFC3339),
-				"launchpad.io/container-port": fmt.Sprintf("%d", port),
-				"launchpad.io/websocket-port": "6080",
+				"sortie.io/app-name":       config.AppName,
+				"sortie.io/created-at":     time.Now().UTC().Format(time.RFC3339),
+				"sortie.io/container-port": fmt.Sprintf("%d", port),
+				"sortie.io/websocket-port": "6080",
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -553,7 +553,7 @@ func BuildWindowsPodSpec(config *PodConfig) *corev1.Pod {
 	guacdImage := GetGuacdSidecarImage()
 
 	// Sanitize pod name (must be DNS-1123 compliant)
-	podName := fmt.Sprintf("launchpad-session-%s", config.SessionID)
+	podName := fmt.Sprintf("sortie-session-%s", config.SessionID)
 
 	// Build environment variables for app container
 	var appEnv []corev1.EnvVar
@@ -577,10 +577,10 @@ func BuildWindowsPodSpec(config *PodConfig) *corev1.Pod {
 				ComponentLabelKey: "session",
 			},
 			Annotations: map[string]string{
-				"launchpad.io/app-name":   config.AppName,
-				"launchpad.io/created-at": time.Now().UTC().Format(time.RFC3339),
-				"launchpad.io/protocol":   "rdp",
-				"launchpad.io/guacd-port": "4822",
+				"sortie.io/app-name":   config.AppName,
+				"sortie.io/created-at": time.Now().UTC().Format(time.RFC3339),
+				"sortie.io/protocol":   "rdp",
+				"sortie.io/guacd-port": "4822",
 			},
 		},
 		Spec: corev1.PodSpec{

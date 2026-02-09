@@ -4,10 +4,10 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "launchpad.fullname" . }}-session-isolation
+  name: {{ include "sortie.fullname" . }}-session-isolation
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "launchpad.labels" . | nindent 4 }}
+    {{- include "sortie.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
@@ -19,7 +19,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              {{- include "launchpad.serverLabels" . | nindent 14 }}
+              {{- include "sortie.serverLabels" . | nindent 14 }}
       ports:
         # VNC ports for container apps
         - protocol: TCP
@@ -60,18 +60,18 @@ spec:
         - protocol: TCP
           port: 80
 ---
-# NetworkPolicy for the launchpad server
+# NetworkPolicy for the sortie server
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "launchpad.fullname" . }}-server
+  name: {{ include "sortie.fullname" . }}-server
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "launchpad.labels" . | nindent 4 }}
+    {{- include "sortie.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "launchpad.serverLabels" . | nindent 6 }}
+      {{- include "sortie.serverLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
     - Egress

@@ -1,13 +1,13 @@
 ---
 # NetworkPolicy for session pod isolation
-# Session pods can only communicate with the launchpad server
+# Session pods can only communicate with the sortie server
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: launchpad-session-isolation
-  namespace: launchpad
+  name: sortie-session-isolation
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
 spec:
   podSelector:
     matchLabels:
@@ -16,11 +16,11 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Allow incoming traffic from the launchpad server on WebSocket port
+    # Allow incoming traffic from the sortie server on WebSocket port
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: launchpad
+              app.kubernetes.io/name: sortie
               app.kubernetes.io/component: server
       ports:
         - protocol: TCP
@@ -50,18 +50,18 @@ spec:
           port: 80
 
 ---
-# NetworkPolicy for the launchpad server
+# NetworkPolicy for the sortie server
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: launchpad-server
-  namespace: launchpad
+  name: sortie-server
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: launchpad
+      app.kubernetes.io/name: sortie
       app.kubernetes.io/component: server
   policyTypes:
     - Ingress

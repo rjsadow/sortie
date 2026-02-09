@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/rjsadow/launchpad/tests/integration/testutil"
+	"github.com/rjsadow/sortie/tests/integration/testutil"
 )
 
 func TestAdmin_GetSettings(t *testing.T) {

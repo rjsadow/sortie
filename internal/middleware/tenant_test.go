@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 func setupTestDatabase(t *testing.T) *db.DB {

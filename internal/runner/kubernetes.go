@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/k8s"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/k8s"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -75,7 +75,7 @@ func (r *KubernetesRunner) GetIP(ctx context.Context, name string) (string, erro
 	return k8s.GetPodIP(ctx, name)
 }
 
-// ListWorkloads returns all launchpad session pods.
+// ListWorkloads returns all sortie session pods.
 func (r *KubernetesRunner) ListWorkloads(ctx context.Context) ([]WorkloadInfo, error) {
 	podList, err := k8s.ListSessionPods(ctx)
 	if err != nil {

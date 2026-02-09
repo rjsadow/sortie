@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/gorilla/websocket"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 var upgrader = websocket.Upgrader{

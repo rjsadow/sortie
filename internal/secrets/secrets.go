@@ -1,4 +1,4 @@
-// Package secrets provides centralized secrets management for Launchpad.
+// Package secrets provides centralized secrets management for Sortie.
 // It supports multiple external secret stores with a unified interface.
 //
 // Supported providers:
@@ -24,7 +24,7 @@ import (
 )
 
 // Provider defines the interface for secret store backends.
-// All providers must implement this interface to be usable with Launchpad.
+// All providers must implement this interface to be usable with Sortie.
 type Provider interface {
 	// Name returns the provider name for logging and debugging.
 	Name() string
@@ -115,35 +115,35 @@ func LoadConfig() *Config {
 	cfg := DefaultConfig()
 
 	// Provider selection
-	if v := os.Getenv("LAUNCHPAD_SECRETS_PROVIDER"); v != "" {
+	if v := os.Getenv("SORTIE_SECRETS_PROVIDER"); v != "" {
 		cfg.Provider = ProviderType(strings.ToLower(v))
 	}
 
 	// Vault configuration
-	if v := os.Getenv("LAUNCHPAD_VAULT_ADDR"); v != "" {
+	if v := os.Getenv("SORTIE_VAULT_ADDR"); v != "" {
 		cfg.VaultAddr = v
 	} else if v := os.Getenv("VAULT_ADDR"); v != "" {
 		cfg.VaultAddr = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_VAULT_TOKEN"); v != "" {
+	if v := os.Getenv("SORTIE_VAULT_TOKEN"); v != "" {
 		cfg.VaultToken = v
 	} else if v := os.Getenv("VAULT_TOKEN"); v != "" {
 		cfg.VaultToken = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_VAULT_MOUNT_PATH"); v != "" {
+	if v := os.Getenv("SORTIE_VAULT_MOUNT_PATH"); v != "" {
 		cfg.VaultMountPath = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_VAULT_NAMESPACE"); v != "" {
+	if v := os.Getenv("SORTIE_VAULT_NAMESPACE"); v != "" {
 		cfg.VaultNamespace = v
 	} else if v := os.Getenv("VAULT_NAMESPACE"); v != "" {
 		cfg.VaultNamespace = v
 	}
 
 	// AWS configuration
-	if v := os.Getenv("LAUNCHPAD_AWS_REGION"); v != "" {
+	if v := os.Getenv("SORTIE_AWS_REGION"); v != "" {
 		cfg.AWSRegion = v
 	} else if v := os.Getenv("AWS_REGION"); v != "" {
 		cfg.AWSRegion = v
@@ -151,18 +151,18 @@ func LoadConfig() *Config {
 		cfg.AWSRegion = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_AWS_SECRET_PREFIX"); v != "" {
+	if v := os.Getenv("SORTIE_AWS_SECRET_PREFIX"); v != "" {
 		cfg.AWSSecretPrefix = v
 	}
 
 	// Kubernetes configuration
-	if v := os.Getenv("LAUNCHPAD_K8S_SECRET_NAMESPACE"); v != "" {
+	if v := os.Getenv("SORTIE_K8S_SECRET_NAMESPACE"); v != "" {
 		cfg.K8sNamespace = v
-	} else if v := os.Getenv("LAUNCHPAD_NAMESPACE"); v != "" {
+	} else if v := os.Getenv("SORTIE_NAMESPACE"); v != "" {
 		cfg.K8sNamespace = v
 	}
 
-	if v := os.Getenv("LAUNCHPAD_K8S_SECRET_NAME"); v != "" {
+	if v := os.Getenv("SORTIE_K8S_SECRET_NAME"); v != "" {
 		cfg.K8sSecretName = v
 	}
 
@@ -183,19 +183,19 @@ func (c *Config) Validate() error {
 
 	case ProviderTypeVault:
 		if c.VaultAddr == "" {
-			return fmt.Errorf("LAUNCHPAD_VAULT_ADDR or VAULT_ADDR is required for vault provider")
+			return fmt.Errorf("SORTIE_VAULT_ADDR or VAULT_ADDR is required for vault provider")
 		}
 		// Token can be obtained via other auth methods, so not strictly required
 
 	case ProviderTypeAWS:
 		if c.AWSRegion == "" {
-			return fmt.Errorf("LAUNCHPAD_AWS_REGION or AWS_REGION is required for aws provider")
+			return fmt.Errorf("SORTIE_AWS_REGION or AWS_REGION is required for aws provider")
 		}
 		// AWS credentials are obtained from environment, instance profile, etc.
 
 	case ProviderTypeKubernetes:
 		if c.K8sSecretName == "" {
-			return fmt.Errorf("LAUNCHPAD_K8S_SECRET_NAME is required for kubernetes provider")
+			return fmt.Errorf("SORTIE_K8S_SECRET_NAME is required for kubernetes provider")
 		}
 
 	default:

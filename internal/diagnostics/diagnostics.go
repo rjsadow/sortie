@@ -13,9 +13,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/config"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/config"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // Collector gathers diagnostic information from the system.

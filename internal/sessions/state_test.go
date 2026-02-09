@@ -3,7 +3,7 @@ package sessions
 import (
 	"testing"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 func TestCanTransition(t *testing.T) {

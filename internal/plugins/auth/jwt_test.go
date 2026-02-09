@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 const testSecret = "this-is-a-test-secret-that-is-at-least-32-characters-long"
@@ -309,7 +309,7 @@ func TestAuthenticate(t *testing.T) {
 			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
-				Issuer:    "launchpad",
+				Issuer:    "sortie",
 			},
 			UserID:    "test-user-bob",
 			Username:  "bob",

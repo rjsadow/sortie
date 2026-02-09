@@ -312,9 +312,9 @@ func TestRegisterAllPluginTypes(t *testing.T) {
 
 func TestLoadRegistryConfig(t *testing.T) {
 	// Test with no env vars set - should return defaults
-	t.Setenv("LAUNCHPAD_PLUGIN_LAUNCHER", "")
-	t.Setenv("LAUNCHPAD_PLUGIN_AUTH", "")
-	t.Setenv("LAUNCHPAD_PLUGIN_STORAGE", "")
+	t.Setenv("SORTIE_PLUGIN_LAUNCHER", "")
+	t.Setenv("SORTIE_PLUGIN_AUTH", "")
+	t.Setenv("SORTIE_PLUGIN_STORAGE", "")
 
 	cfg := LoadRegistryConfig()
 	if cfg.Launcher != "url" {
@@ -329,9 +329,9 @@ func TestLoadRegistryConfig(t *testing.T) {
 }
 
 func TestLoadRegistryConfigWithEnvVars(t *testing.T) {
-	t.Setenv("LAUNCHPAD_PLUGIN_LAUNCHER", "Container")
-	t.Setenv("LAUNCHPAD_PLUGIN_AUTH", "OIDC")
-	t.Setenv("LAUNCHPAD_PLUGIN_STORAGE", "Postgres")
+	t.Setenv("SORTIE_PLUGIN_LAUNCHER", "Container")
+	t.Setenv("SORTIE_PLUGIN_AUTH", "OIDC")
+	t.Setenv("SORTIE_PLUGIN_STORAGE", "Postgres")
 
 	cfg := LoadRegistryConfig()
 	if cfg.Launcher != "container" {
@@ -914,9 +914,9 @@ func TestSentinelErrors(t *testing.T) {
 
 func TestLoadRegistryConfigPartialEnv(t *testing.T) {
 	// Set only one env var
-	t.Setenv("LAUNCHPAD_PLUGIN_LAUNCHER", "k8s")
-	t.Setenv("LAUNCHPAD_PLUGIN_AUTH", "")
-	t.Setenv("LAUNCHPAD_PLUGIN_STORAGE", "")
+	t.Setenv("SORTIE_PLUGIN_LAUNCHER", "k8s")
+	t.Setenv("SORTIE_PLUGIN_AUTH", "")
+	t.Setenv("SORTIE_PLUGIN_STORAGE", "")
 
 	cfg := LoadRegistryConfig()
 	if cfg.Launcher != "k8s" {

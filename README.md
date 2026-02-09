@@ -31,9 +31,9 @@ Kubernetes so users just need a browser.
 ### Run locally (no Kubernetes needed for URL-type apps)
 
 ```bash
-git clone https://github.com/rjsadow/launchpad.git
-cd launchpad
-cp .env.example .env          # edit to set LAUNCHPAD_JWT_SECRET
+git clone https://github.com/rjsadow/sortie.git
+cd sortie
+cp .env.example .env          # edit to set SORTIE_JWT_SECRET
 make dev                       # starts frontend (:5173) + backend (:8080)
 ```
 
@@ -47,7 +47,7 @@ from your `.env`, and start adding apps.
 make kind
 
 # Or deploy with Helm
-helm install sortie charts/launchpad \
+helm install sortie charts/sortie \
   --namespace sortie --create-namespace \
   --set ingress.host=sortie.example.com
 ```
@@ -57,8 +57,8 @@ helm install sortie charts/launchpad \
 ```bash
 docker build -t sortie .
 docker run -p 8080:8080 \
-  -e LAUNCHPAD_JWT_SECRET=$(openssl rand -base64 32) \
-  -e LAUNCHPAD_ADMIN_PASSWORD=changeme \
+  -e SORTIE_JWT_SECRET=$(openssl rand -base64 32) \
+  -e SORTIE_ADMIN_PASSWORD=changeme \
   sortie
 ```
 
@@ -99,11 +99,11 @@ Key options:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `LAUNCHPAD_PORT` | Server port | `8080` |
-| `LAUNCHPAD_JWT_SECRET` | Signing key for auth tokens | *(required)* |
-| `LAUNCHPAD_ADMIN_PASSWORD` | Initial admin password | *(required)* |
-| `LAUNCHPAD_NAMESPACE` | Kubernetes namespace for pods | `launchpad` |
-| `LAUNCHPAD_SESSION_TIMEOUT` | Session lifetime | `120m` |
+| `SORTIE_PORT` | Server port | `8080` |
+| `SORTIE_JWT_SECRET` | Signing key for auth tokens | *(required)* |
+| `SORTIE_ADMIN_PASSWORD` | Initial admin password | *(required)* |
+| `SORTIE_NAMESPACE` | Kubernetes namespace for pods | `sortie` |
+| `SORTIE_SESSION_TIMEOUT` | Session lifetime | `120m` |
 
 See `.env.example` for the full list.
 
@@ -121,7 +121,7 @@ internal/
   middleware/        Auth and security middleware
   plugins/           Extensible plugin system
 web/                 React frontend (Vite + TypeScript)
-charts/launchpad/    Helm chart
+charts/sortie/    Helm chart
 deploy/              Kubernetes manifests and Kind config
 ```
 

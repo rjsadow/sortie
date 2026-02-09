@@ -3,14 +3,14 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "launchpad.fullname" . }}
+  name: {{ include "sortie.fullname" . }}
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "launchpad.labels" . | nindent 4 }}
+    {{- include "sortie.labels" . | nindent 4 }}
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/websocket-services: {{ include "launchpad.fullname" . | quote }}
+    nginx.ingress.kubernetes.io/websocket-services: {{ include "sortie.fullname" . | quote }}
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -23,7 +23,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "launchpad.fullname" . }}
+                name: {{ include "sortie.fullname" . }}
                 port:
                   name: http
 {{- end }}

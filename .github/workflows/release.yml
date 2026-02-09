@@ -66,13 +66,13 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
-            -o launchpad-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }} .
+            -o sortie-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: launchpad-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: launchpad-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}
+          name: sortie-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: sortie-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}
 
   # Create GitHub release with artifacts and SBOM
   release:
@@ -87,13 +87,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: launchpad-*
+          pattern: sortie-*
           merge-multiple: true
 
       - name: Create checksums
         run: |
           cd artifacts
-          sha256sum launchpad-* > checksums.txt
+          sha256sum sortie-* > checksums.txt
           cat checksums.txt
 
       - name: Generate Source SBOM (SPDX)
@@ -116,7 +116,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/launchpad-*
+            artifacts/sortie-*
             artifacts/checksums.txt
             artifacts/sbom-source.spdx.json
             artifacts/sbom-source.cyclonedx.json

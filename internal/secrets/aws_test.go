@@ -34,7 +34,7 @@ func TestNewAWSProvider(t *testing.T) {
 		},
 		{
 			name:    "with prefix",
-			cfg:     &Config{AWSRegion: "eu-west-1", AWSSecretPrefix: "prod/launchpad"},
+			cfg:     &Config{AWSRegion: "eu-west-1", AWSSecretPrefix: "prod/sortie"},
 			wantErr: false,
 		},
 	}
@@ -143,7 +143,7 @@ func TestAWSProvider_GetWithPrefix(t *testing.T) {
 		receivedBody = string(bodyBytes)
 
 		resp := awsSecretResponse{
-			Name:         "prod/launchpad/db-password",
+			Name:         "prod/sortie/db-password",
 			SecretString: "prefixed-secret",
 			VersionId:    "v1",
 		}
@@ -155,7 +155,7 @@ func TestAWSProvider_GetWithPrefix(t *testing.T) {
 	p := &AWSProvider{
 		client:       &http.Client{Transport: &rewriteTransport{base: http.DefaultTransport, baseURL: server.URL}},
 		region:       "us-east-1",
-		secretPrefix: "prod/launchpad",
+		secretPrefix: "prod/sortie",
 	}
 
 	_, err := p.Get(context.Background(), "db-password")
@@ -296,8 +296,8 @@ func TestAWSProvider_ListWithPrefix(t *testing.T) {
 				ARN  string `json:"ARN"`
 				Name string `json:"Name"`
 			}{
-				{Name: "prod/launchpad/key1"},
-				{Name: "prod/launchpad/key2"},
+				{Name: "prod/sortie/key1"},
+				{Name: "prod/sortie/key2"},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -308,7 +308,7 @@ func TestAWSProvider_ListWithPrefix(t *testing.T) {
 	p := &AWSProvider{
 		client:       &http.Client{Transport: &rewriteTransport{base: http.DefaultTransport, baseURL: server.URL}},
 		region:       "us-east-1",
-		secretPrefix: "prod/launchpad",
+		secretPrefix: "prod/sortie",
 	}
 
 	keys, err := p.List(context.Background())

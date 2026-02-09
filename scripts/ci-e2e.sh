@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# CI E2E test infrastructure for Launchpad.
+# CI E2E test infrastructure for Sortie.
 #
 # Usage:
 #   ./scripts/ci-e2e.sh setup          # Create Kind cluster, build/load images, deploy via Helm
@@ -9,8 +9,8 @@
 #
 set -euo pipefail
 
-CLUSTER_NAME="launchpad-e2e"
-NAMESPACE="launchpad"
+CLUSTER_NAME="sortie-e2e"
+NAMESPACE="sortie"
 PORT_FORWARD_PORT=18080
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -54,33 +54,33 @@ setup() {
 
     # Build main app image
     if [ -f "${ROOT_DIR}/Dockerfile" ]; then
-        docker build -t ghcr.io/rjsadow/launchpad:e2e "${ROOT_DIR}"
-        kind load docker-image ghcr.io/rjsadow/launchpad:e2e --name "$CLUSTER_NAME"
+        docker build -t ghcr.io/rjsadow/sortie:e2e "${ROOT_DIR}"
+        kind load docker-image ghcr.io/rjsadow/sortie:e2e --name "$CLUSTER_NAME"
     fi
 
     # Build VNC sidecar
     if [ -d "${ROOT_DIR}/docker/vnc-sidecar" ]; then
-        docker build -t ghcr.io/rjsadow/launchpad-vnc-sidecar:e2e "${ROOT_DIR}/docker/vnc-sidecar"
-        kind load docker-image ghcr.io/rjsadow/launchpad-vnc-sidecar:e2e --name "$CLUSTER_NAME"
+        docker build -t ghcr.io/rjsadow/sortie-vnc-sidecar:e2e "${ROOT_DIR}/docker/vnc-sidecar"
+        kind load docker-image ghcr.io/rjsadow/sortie-vnc-sidecar:e2e --name "$CLUSTER_NAME"
     fi
 
     # Build browser sidecar
     if [ -d "${ROOT_DIR}/docker/browser-sidecar" ]; then
-        docker build -t ghcr.io/rjsadow/launchpad-browser-sidecar:e2e "${ROOT_DIR}/docker/browser-sidecar"
-        kind load docker-image ghcr.io/rjsadow/launchpad-browser-sidecar:e2e --name "$CLUSTER_NAME"
+        docker build -t ghcr.io/rjsadow/sortie-browser-sidecar:e2e "${ROOT_DIR}/docker/browser-sidecar"
+        kind load docker-image ghcr.io/rjsadow/sortie-browser-sidecar:e2e --name "$CLUSTER_NAME"
     fi
 
-    log_info "Deploying Launchpad via Helm..."
-    helm upgrade --install launchpad "${ROOT_DIR}/charts/launchpad" \
+    log_info "Deploying Sortie via Helm..."
+    helm upgrade --install sortie "${ROOT_DIR}/charts/sortie" \
         --namespace "$NAMESPACE" \
         --create-namespace \
-        --set image.repository=ghcr.io/rjsadow/launchpad \
+        --set image.repository=ghcr.io/rjsadow/sortie \
         --set image.tag=e2e \
         --set image.pullPolicy=Never \
         --wait --timeout 180s
 
     log_info "Starting port-forward on localhost:${PORT_FORWARD_PORT}..."
-    kubectl port-forward -n "$NAMESPACE" svc/launchpad "${PORT_FORWARD_PORT}:80" &
+    kubectl port-forward -n "$NAMESPACE" svc/sortie "${PORT_FORWARD_PORT}:80" &
     local pf_pid=$!
     echo "$pf_pid" > /tmp/e2e-port-forward.pid
 
@@ -88,14 +88,14 @@ setup() {
     local retries=60
     while [ $retries -gt 0 ]; do
         if curl -sf "http://localhost:${PORT_FORWARD_PORT}/readyz" > /dev/null 2>&1; then
-            log_info "Launchpad is ready!"
+            log_info "Sortie is ready!"
             return 0
         fi
         retries=$((retries - 1))
         sleep 2
     done
 
-    log_error "Timed out waiting for Launchpad to be ready"
+    log_error "Timed out waiting for Sortie to be ready"
     collect_logs
     exit 1
 }
@@ -116,7 +116,7 @@ collect_logs() {
     done
 
     # Collect session pod logs (they run in the same namespace with specific labels)
-    for pod in $(kubectl get pods -n "$NAMESPACE" -l managed-by=launchpad -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+    for pod in $(kubectl get pods -n "$NAMESPACE" -l managed-by=sortie -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
         for container in $(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name}' 2>/dev/null); do
             kubectl logs "$pod" -n "$NAMESPACE" -c "$container" > "${LOG_DIR}/session_${pod}_${container}.log" 2>&1 || true
         done

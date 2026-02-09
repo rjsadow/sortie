@@ -1,5 +1,5 @@
 ---
-# HorizontalPodAutoscaler for the Launchpad server Deployment.
+# HorizontalPodAutoscaler for the Sortie server Deployment.
 #
 # Scaling Rules:
 #   1. CPU utilization: scale up when average CPU exceeds 70% of requests.
@@ -21,7 +21,7 @@
 #
 # Custom metrics (optional):
 #   If a Prometheus adapter or KEDA is available, the commented-out section
-#   below can scale on the launchpad_active_sessions metric exposed at /metrics.
+#   below can scale on the sortie_active_sessions metric exposed at /metrics.
 #   This provides session-aware scaling independent of CPU/memory.
 #
 # Prerequisites:
@@ -31,16 +31,16 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
     app.kubernetes.io/component: server
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: launchpad
+    name: sortie
   minReplicas: 2
   maxReplicas: 10
 
@@ -66,7 +66,7 @@ spec:
     # - type: Pods
     #   pods:
     #     metric:
-    #       name: launchpad_active_sessions
+    #       name: sortie_active_sessions
     #     target:
     #       type: AverageValue
     #       averageValue: "50"
@@ -97,14 +97,14 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
     app.kubernetes.io/component: server
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: launchpad
+      app.kubernetes.io/name: sortie
       app.kubernetes.io/component: server

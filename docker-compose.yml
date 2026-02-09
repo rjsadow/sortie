@@ -1,6 +1,6 @@
-# Launchpad - Full Stack Docker Compose
+# Sortie - Full Stack Docker Compose
 #
-# Deploy the full Launchpad stack (backend + web + SQLite DB) in one command:
+# Deploy the full Sortie stack (backend + web + SQLite DB) in one command:
 #
 #   docker compose up -d
 #
@@ -11,44 +11,44 @@
 #   Copy .env.example to .env and customize, or set environment variables below.
 #
 # Persistent data:
-#   SQLite database is stored in a named volume (launchpad-data).
+#   SQLite database is stored in a named volume (sortie-data).
 #
 # Note: Container session features (VNC/RDP streaming) require Kubernetes.
-#   In Docker Compose mode, Launchpad works as an application launcher
+#   In Docker Compose mode, Sortie works as an application launcher
 #   (URL-based apps) without container orchestration.
 
 services:
-  launchpad:
-    image: ghcr.io/rjsadow/launchpad:latest
+  sortie:
+    image: ghcr.io/rjsadow/sortie:latest
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${LAUNCHPAD_PORT:-8080}:8080"
+      - "${SORTIE_PORT:-8080}:8080"
     environment:
       # --- Server ---
-      LAUNCHPAD_PORT: "8080"
-      LAUNCHPAD_DB: "/data/launchpad.db"
+      SORTIE_PORT: "8080"
+      SORTIE_DB: "/data/sortie.db"
 
       # --- Authentication (required) ---
       # Generate a secret: openssl rand -base64 32
-      LAUNCHPAD_JWT_SECRET: "${LAUNCHPAD_JWT_SECRET:?Set LAUNCHPAD_JWT_SECRET (min 32 chars)}"
-      LAUNCHPAD_ADMIN_USERNAME: "${LAUNCHPAD_ADMIN_USERNAME:-admin}"
-      LAUNCHPAD_ADMIN_PASSWORD: "${LAUNCHPAD_ADMIN_PASSWORD:?Set LAUNCHPAD_ADMIN_PASSWORD}"
-      LAUNCHPAD_JWT_ACCESS_EXPIRY: "${LAUNCHPAD_JWT_ACCESS_EXPIRY:-15}"
-      LAUNCHPAD_JWT_REFRESH_EXPIRY: "${LAUNCHPAD_JWT_REFRESH_EXPIRY:-24}"
-      LAUNCHPAD_ALLOW_REGISTRATION: "${LAUNCHPAD_ALLOW_REGISTRATION:-false}"
+      SORTIE_JWT_SECRET: "${SORTIE_JWT_SECRET:?Set SORTIE_JWT_SECRET (min 32 chars)}"
+      SORTIE_ADMIN_USERNAME: "${SORTIE_ADMIN_USERNAME:-admin}"
+      SORTIE_ADMIN_PASSWORD: "${SORTIE_ADMIN_PASSWORD:?Set SORTIE_ADMIN_PASSWORD}"
+      SORTIE_JWT_ACCESS_EXPIRY: "${SORTIE_JWT_ACCESS_EXPIRY:-15}"
+      SORTIE_JWT_REFRESH_EXPIRY: "${SORTIE_JWT_REFRESH_EXPIRY:-24}"
+      SORTIE_ALLOW_REGISTRATION: "${SORTIE_ALLOW_REGISTRATION:-false}"
 
       # --- Branding (optional) ---
-      LAUNCHPAD_TENANT_NAME: "${LAUNCHPAD_TENANT_NAME:-Launchpad}"
-      LAUNCHPAD_PRIMARY_COLOR: "${LAUNCHPAD_PRIMARY_COLOR:-#398D9B}"
-      LAUNCHPAD_SECONDARY_COLOR: "${LAUNCHPAD_SECONDARY_COLOR:-#4AB7C3}"
+      SORTIE_TENANT_NAME: "${SORTIE_TENANT_NAME:-Sortie}"
+      SORTIE_PRIMARY_COLOR: "${SORTIE_PRIMARY_COLOR:-#398D9B}"
+      SORTIE_SECONDARY_COLOR: "${SORTIE_SECONDARY_COLOR:-#4AB7C3}"
 
       # --- Sessions (optional, only relevant with Kubernetes) ---
-      LAUNCHPAD_SESSION_TIMEOUT: "${LAUNCHPAD_SESSION_TIMEOUT:-120}"
-      LAUNCHPAD_SESSION_CLEANUP_INTERVAL: "${LAUNCHPAD_SESSION_CLEANUP_INTERVAL:-5}"
+      SORTIE_SESSION_TIMEOUT: "${SORTIE_SESSION_TIMEOUT:-120}"
+      SORTIE_SESSION_CLEANUP_INTERVAL: "${SORTIE_SESSION_CLEANUP_INTERVAL:-5}"
     volumes:
-      - launchpad-data:/data
+      - sortie-data:/data
     # Health endpoints (for external monitoring / load balancers):
     #   Liveness:  GET http://localhost:8080/healthz
     #   Readiness: GET http://localhost:8080/readyz
@@ -60,5 +60,5 @@ services:
       - no-new-privileges:true
 
 volumes:
-  launchpad-data:
+  sortie-data:
     driver: local

@@ -2,11 +2,11 @@
 
 - **Status:** Accepted
 - **Date:** 2025-02-07
-- **Issue:** [#31](https://github.com/rjsadow/launchpad/issues/31)
+- **Issue:** [#31](https://github.com/rjsadow/sortie/issues/31)
 
 ## Context
 
-Sortie (Launchpad) is a self-hosted application launcher
+Sortie (Sortie) is a self-hosted application launcher
 that streams containerized desktop applications to user
 browsers. Users browse a catalog, click launch, and get a
 running desktop app streamed with no local install required.
@@ -235,7 +235,7 @@ point for all stream connections:
 - **Authorization:** Non-admin users can only access
   sessions they own
 - **Rate limiting:** Per-IP token bucket
-  (configurable via `LAUNCHPAD_GATEWAY_RATE_LIMIT`)
+  (configurable via `SORTIE_GATEWAY_RATE_LIMIT`)
 - **Audit logging:** All gateway connections are recorded
 
 ## Consequences

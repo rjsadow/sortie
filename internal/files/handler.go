@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/middleware"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/middleware"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 // Handler handles file transfer HTTP requests for session workspaces.

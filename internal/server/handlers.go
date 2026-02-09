@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/middleware"
-	"github.com/rjsadow/launchpad/internal/plugins"
-	"github.com/rjsadow/launchpad/internal/plugins/auth"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/middleware"
+	"github.com/rjsadow/sortie/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins/auth"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 // handlers binds HTTP handler methods to an App's dependencies.
@@ -451,9 +451,9 @@ func (h *handlers) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 <head><title>SSO Login</title></head>
 <body>
 <script>
-localStorage.setItem('launchpad-access-token', %q);
-localStorage.setItem('launchpad-refresh-token', %q);
-localStorage.setItem('launchpad-user', JSON.stringify(%s));
+localStorage.setItem('sortie-access-token', %q);
+localStorage.setItem('sortie-refresh-token', %q);
+localStorage.setItem('sortie-user', JSON.stringify(%s));
 window.location.href = '/';
 </script>
 <noscript><p>Login successful. <a href="/">Click here</a> to continue.</p></noscript>
@@ -1959,7 +1959,7 @@ func (h *handlers) handleSupportInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	info := map[string]any{
-		"application": "launchpad",
+		"application": "sortie",
 		"go_version":  runtime.Version(),
 		"os":          runtime.GOOS,
 		"arch":        runtime.GOARCH,

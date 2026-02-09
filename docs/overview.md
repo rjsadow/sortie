@@ -1,8 +1,8 @@
-# Launchpad Overview
+# Sortie Overview
 
-## What is Launchpad?
+## What is Sortie?
 
-Launchpad is an open-source web application that provides a centralized
+Sortie is an open-source web application that provides a centralized
 portal for launching internal applications within large organizations.
 Instead of maintaining bookmarks, wikis, or scattered documentation,
 users access a single page to find and launch any application they need.
@@ -34,7 +34,7 @@ users access a single page to find and launch any application they need.
 ┌─────────────────────────────────────────┐
 │           User's Browser                │
 │  ┌───────────────────────────────────┐  │
-│  │         Launchpad UI              │  │
+│  │         Sortie UI              │  │
 │  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ │  │
 │  │  │App 1│ │App 2│ │App 3│ │App N│ │  │
 │  │  └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘ │  │
@@ -48,7 +48,7 @@ users access a single page to find and launch any application they need.
     └────────┘ └────────┘ └────────┘
 ```
 
-Launchpad is a **static** application - it links to other applications
+Sortie is a **static** application - it links to other applications
 but does not host them.
 
 ## Brand Guidelines
@@ -56,4 +56,4 @@ but does not host them.
 - Primary Color: `#398D9B` (Teal)
 - Secondary Color: `#4AB7C3` (Light Teal)
 - Font: Chalet NewYorkNineteenEighty
-- See `/launchpad - Brand Guide.pdf` for complete guidelines
+- See `/sortie - Brand Guide.pdf` for complete guidelines

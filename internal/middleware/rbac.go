@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // Role constants define the available roles in the system.

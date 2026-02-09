@@ -9,9 +9,9 @@ export interface AuthResponse {
 }
 
 // Storage keys
-const ACCESS_TOKEN_KEY = 'launchpad-access-token';
-const REFRESH_TOKEN_KEY = 'launchpad-refresh-token';
-const USER_KEY = 'launchpad-user';
+const ACCESS_TOKEN_KEY = 'sortie-access-token';
+const REFRESH_TOKEN_KEY = 'sortie-refresh-token';
+const USER_KEY = 'sortie-user';
 
 // Get stored tokens
 export function getAccessToken(): string | null {

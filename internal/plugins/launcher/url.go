@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // URLLauncher implements LauncherPlugin for URL-based application launches.

@@ -3,7 +3,7 @@ package launcher
 import (
 	"testing"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 func TestReExportedConstants(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 // ValidTransitions defines the allowed state transitions for sessions.

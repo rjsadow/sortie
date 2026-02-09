@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // NoopAuthProvider implements AuthProvider with no authentication.

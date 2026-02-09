@@ -25,7 +25,7 @@
       "category": "Development",
       "launch_type": "container",
       "os_type": "windows",
-      "container_image": "ghcr.io/rjsadow/launchpad-xrdp-test:latest",
+      "container_image": "ghcr.io/rjsadow/sortie-xrdp-test:latest",
       "resource_limits": {
         "cpu_request": "500m",
         "cpu_limit": "2",

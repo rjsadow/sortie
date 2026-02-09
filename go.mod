@@ -1,4 +1,4 @@
-module github.com/rjsadow/launchpad
+module github.com/rjsadow/sortie
 
 go 1.24.0
 

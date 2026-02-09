@@ -12,7 +12,7 @@ frontend: deps
 
 # Build the Go binary (requires frontend to be built first)
 backend: frontend
-	go build -o launchpad .
+	go build -o sortie .
 
 # Build everything
 build: backend
@@ -38,12 +38,12 @@ dev-frontend: deps
 # This runs both servers - frontend proxies API calls to backend
 dev:
 	@echo "=============================================="
-	@echo "  Launchpad Development Environment"
+	@echo "  Sortie Development Environment"
 	@echo "=============================================="
 	@echo ""
 	@echo "  Frontend: http://localhost:5173  (use this)"
 	@echo "  Backend:  http://localhost:8080  (API only)"
-	@echo "  Database: SQLite (launchpad.db)"
+	@echo "  Database: SQLite (sortie.db)"
 	@echo ""
 	@echo "  Press Ctrl+C to stop all servers"
 	@echo "=============================================="
@@ -57,11 +57,11 @@ dev:
 
 # Clean build artifacts
 clean:
-	rm -rf web/dist web/node_modules launchpad launchpad.db
+	rm -rf web/dist web/node_modules sortie sortie.db
 
 # Run the production server
 run: build
-	./launchpad
+	./sortie
 
 # Lint frontend code
 lint:

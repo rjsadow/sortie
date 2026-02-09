@@ -9,10 +9,10 @@ import (
 
 func TestEnvProvider_Get(t *testing.T) {
 	// Set up test environment variables
-	os.Setenv("LAUNCHPAD_SECRET_DB_PASSWORD", "test-password")
+	os.Setenv("SORTIE_SECRET_DB_PASSWORD", "test-password")
 	os.Setenv("API_KEY", "test-api-key")
 	defer func() {
-		os.Unsetenv("LAUNCHPAD_SECRET_DB_PASSWORD")
+		os.Unsetenv("SORTIE_SECRET_DB_PASSWORD")
 		os.Unsetenv("API_KEY")
 	}()
 
@@ -63,8 +63,8 @@ func TestEnvProvider_Get(t *testing.T) {
 }
 
 func TestEnvProvider_GetWithMetadata(t *testing.T) {
-	os.Setenv("LAUNCHPAD_SECRET_TEST_KEY", "test-value")
-	defer os.Unsetenv("LAUNCHPAD_SECRET_TEST_KEY")
+	os.Setenv("SORTIE_SECRET_TEST_KEY", "test-value")
+	defer os.Unsetenv("SORTIE_SECRET_TEST_KEY")
 
 	p := NewEnvProvider()
 	ctx := context.Background()
@@ -90,11 +90,11 @@ func TestEnvProvider_GetWithMetadata(t *testing.T) {
 
 func TestEnvProvider_List(t *testing.T) {
 	// Clear any existing secrets and set test ones
-	os.Setenv("LAUNCHPAD_SECRET_KEY1", "value1")
-	os.Setenv("LAUNCHPAD_SECRET_KEY2", "value2")
+	os.Setenv("SORTIE_SECRET_KEY1", "value1")
+	os.Setenv("SORTIE_SECRET_KEY2", "value2")
 	defer func() {
-		os.Unsetenv("LAUNCHPAD_SECRET_KEY1")
-		os.Unsetenv("LAUNCHPAD_SECRET_KEY2")
+		os.Unsetenv("SORTIE_SECRET_KEY1")
+		os.Unsetenv("SORTIE_SECRET_KEY2")
 	}()
 
 	p := NewEnvProvider()
@@ -155,10 +155,10 @@ func TestEnvProvider_NormalizeKey(t *testing.T) {
 func TestConfig_LoadConfig(t *testing.T) {
 	// Clear environment
 	envVars := []string{
-		"LAUNCHPAD_SECRETS_PROVIDER",
-		"LAUNCHPAD_VAULT_ADDR",
+		"SORTIE_SECRETS_PROVIDER",
+		"SORTIE_VAULT_ADDR",
 		"VAULT_ADDR",
-		"LAUNCHPAD_AWS_REGION",
+		"SORTIE_AWS_REGION",
 		"AWS_REGION",
 	}
 	originalValues := make(map[string]string)
@@ -184,8 +184,8 @@ func TestConfig_LoadConfig(t *testing.T) {
 	}
 
 	// Test with environment variables
-	os.Setenv("LAUNCHPAD_SECRETS_PROVIDER", "vault")
-	os.Setenv("LAUNCHPAD_VAULT_ADDR", "http://vault:8200")
+	os.Setenv("SORTIE_SECRETS_PROVIDER", "vault")
+	os.Setenv("SORTIE_VAULT_ADDR", "http://vault:8200")
 
 	cfg = LoadConfig()
 	if cfg.Provider != ProviderTypeVault {
@@ -264,8 +264,8 @@ func TestConfig_Validate(t *testing.T) {
 }
 
 func TestManager_GetOrDefault(t *testing.T) {
-	os.Setenv("LAUNCHPAD_SECRET_EXISTING", "found-value")
-	defer os.Unsetenv("LAUNCHPAD_SECRET_EXISTING")
+	os.Setenv("SORTIE_SECRET_EXISTING", "found-value")
+	defer os.Unsetenv("SORTIE_SECRET_EXISTING")
 
 	cfg := &Config{Provider: ProviderTypeEnv}
 	mgr, err := NewManager(cfg)
@@ -338,8 +338,8 @@ func TestNewManager_UnknownProvider(t *testing.T) {
 }
 
 func TestManager_Get(t *testing.T) {
-	os.Setenv("LAUNCHPAD_SECRET_MGR_TEST", "manager-value")
-	defer os.Unsetenv("LAUNCHPAD_SECRET_MGR_TEST")
+	os.Setenv("SORTIE_SECRET_MGR_TEST", "manager-value")
+	defer os.Unsetenv("SORTIE_SECRET_MGR_TEST")
 
 	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
 	if err != nil {
@@ -372,8 +372,8 @@ func TestManager_GetNotFound(t *testing.T) {
 }
 
 func TestManager_GetWithMetadata(t *testing.T) {
-	os.Setenv("LAUNCHPAD_SECRET_META_TEST", "meta-value")
-	defer os.Unsetenv("LAUNCHPAD_SECRET_META_TEST")
+	os.Setenv("SORTIE_SECRET_META_TEST", "meta-value")
+	defer os.Unsetenv("SORTIE_SECRET_META_TEST")
 
 	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
 	if err != nil {
@@ -391,11 +391,11 @@ func TestManager_GetWithMetadata(t *testing.T) {
 }
 
 func TestManager_List(t *testing.T) {
-	os.Setenv("LAUNCHPAD_SECRET_LIST_A", "a")
-	os.Setenv("LAUNCHPAD_SECRET_LIST_B", "b")
+	os.Setenv("SORTIE_SECRET_LIST_A", "a")
+	os.Setenv("SORTIE_SECRET_LIST_B", "b")
 	defer func() {
-		os.Unsetenv("LAUNCHPAD_SECRET_LIST_A")
-		os.Unsetenv("LAUNCHPAD_SECRET_LIST_B")
+		os.Unsetenv("SORTIE_SECRET_LIST_A")
+		os.Unsetenv("SORTIE_SECRET_LIST_B")
 	}()
 
 	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
@@ -422,8 +422,8 @@ func TestManager_List(t *testing.T) {
 }
 
 func TestManager_MustGet_Success(t *testing.T) {
-	os.Setenv("LAUNCHPAD_SECRET_MUST_GET", "required-value")
-	defer os.Unsetenv("LAUNCHPAD_SECRET_MUST_GET")
+	os.Setenv("SORTIE_SECRET_MUST_GET", "required-value")
+	defer os.Unsetenv("SORTIE_SECRET_MUST_GET")
 
 	mgr, err := NewManager(&Config{Provider: ProviderTypeEnv})
 	if err != nil {
@@ -491,9 +491,9 @@ func TestDefaultConfig(t *testing.T) {
 func TestLoadConfig_VaultFallback(t *testing.T) {
 	// Clear relevant env vars
 	envVars := []string{
-		"LAUNCHPAD_SECRETS_PROVIDER", "LAUNCHPAD_VAULT_ADDR", "VAULT_ADDR",
-		"LAUNCHPAD_VAULT_TOKEN", "VAULT_TOKEN", "LAUNCHPAD_VAULT_MOUNT_PATH",
-		"LAUNCHPAD_VAULT_NAMESPACE", "VAULT_NAMESPACE",
+		"SORTIE_SECRETS_PROVIDER", "SORTIE_VAULT_ADDR", "VAULT_ADDR",
+		"SORTIE_VAULT_TOKEN", "VAULT_TOKEN", "SORTIE_VAULT_MOUNT_PATH",
+		"SORTIE_VAULT_NAMESPACE", "VAULT_NAMESPACE",
 	}
 	for _, v := range envVars {
 		os.Unsetenv(v)
@@ -510,12 +510,12 @@ func TestLoadConfig_VaultFallback(t *testing.T) {
 }
 
 func TestLoadConfig_VaultToken(t *testing.T) {
-	os.Unsetenv("LAUNCHPAD_VAULT_TOKEN")
+	os.Unsetenv("SORTIE_VAULT_TOKEN")
 	os.Unsetenv("VAULT_TOKEN")
 
-	// Test LAUNCHPAD_VAULT_TOKEN
-	os.Setenv("LAUNCHPAD_VAULT_TOKEN", "lp-token")
-	defer os.Unsetenv("LAUNCHPAD_VAULT_TOKEN")
+	// Test SORTIE_VAULT_TOKEN
+	os.Setenv("SORTIE_VAULT_TOKEN", "lp-token")
+	defer os.Unsetenv("SORTIE_VAULT_TOKEN")
 
 	cfg := LoadConfig()
 	if cfg.VaultToken != "lp-token" {
@@ -524,7 +524,7 @@ func TestLoadConfig_VaultToken(t *testing.T) {
 }
 
 func TestLoadConfig_VaultTokenFallback(t *testing.T) {
-	os.Unsetenv("LAUNCHPAD_VAULT_TOKEN")
+	os.Unsetenv("SORTIE_VAULT_TOKEN")
 	os.Setenv("VAULT_TOKEN", "fallback-token")
 	defer os.Unsetenv("VAULT_TOKEN")
 
@@ -535,8 +535,8 @@ func TestLoadConfig_VaultTokenFallback(t *testing.T) {
 }
 
 func TestLoadConfig_VaultMountPath(t *testing.T) {
-	os.Setenv("LAUNCHPAD_VAULT_MOUNT_PATH", "custom/mount")
-	defer os.Unsetenv("LAUNCHPAD_VAULT_MOUNT_PATH")
+	os.Setenv("SORTIE_VAULT_MOUNT_PATH", "custom/mount")
+	defer os.Unsetenv("SORTIE_VAULT_MOUNT_PATH")
 
 	cfg := LoadConfig()
 	if cfg.VaultMountPath != "custom/mount" {
@@ -545,11 +545,11 @@ func TestLoadConfig_VaultMountPath(t *testing.T) {
 }
 
 func TestLoadConfig_VaultNamespace(t *testing.T) {
-	os.Unsetenv("LAUNCHPAD_VAULT_NAMESPACE")
+	os.Unsetenv("SORTIE_VAULT_NAMESPACE")
 	os.Unsetenv("VAULT_NAMESPACE")
 
-	os.Setenv("LAUNCHPAD_VAULT_NAMESPACE", "my-namespace")
-	defer os.Unsetenv("LAUNCHPAD_VAULT_NAMESPACE")
+	os.Setenv("SORTIE_VAULT_NAMESPACE", "my-namespace")
+	defer os.Unsetenv("SORTIE_VAULT_NAMESPACE")
 
 	cfg := LoadConfig()
 	if cfg.VaultNamespace != "my-namespace" {
@@ -558,7 +558,7 @@ func TestLoadConfig_VaultNamespace(t *testing.T) {
 }
 
 func TestLoadConfig_VaultNamespaceFallback(t *testing.T) {
-	os.Unsetenv("LAUNCHPAD_VAULT_NAMESPACE")
+	os.Unsetenv("SORTIE_VAULT_NAMESPACE")
 	os.Setenv("VAULT_NAMESPACE", "fallback-ns")
 	defer os.Unsetenv("VAULT_NAMESPACE")
 
@@ -569,7 +569,7 @@ func TestLoadConfig_VaultNamespaceFallback(t *testing.T) {
 }
 
 func TestLoadConfig_AWSRegionFallbacks(t *testing.T) {
-	os.Unsetenv("LAUNCHPAD_AWS_REGION")
+	os.Unsetenv("SORTIE_AWS_REGION")
 	os.Unsetenv("AWS_REGION")
 	os.Unsetenv("AWS_DEFAULT_REGION")
 
@@ -594,21 +594,21 @@ func TestLoadConfig_AWSRegionFallbacks(t *testing.T) {
 }
 
 func TestLoadConfig_AWSSecretPrefix(t *testing.T) {
-	os.Setenv("LAUNCHPAD_AWS_SECRET_PREFIX", "prod/launchpad")
-	defer os.Unsetenv("LAUNCHPAD_AWS_SECRET_PREFIX")
+	os.Setenv("SORTIE_AWS_SECRET_PREFIX", "prod/sortie")
+	defer os.Unsetenv("SORTIE_AWS_SECRET_PREFIX")
 
 	cfg := LoadConfig()
-	if cfg.AWSSecretPrefix != "prod/launchpad" {
-		t.Errorf("AWSSecretPrefix = %v, want prod/launchpad", cfg.AWSSecretPrefix)
+	if cfg.AWSSecretPrefix != "prod/sortie" {
+		t.Errorf("AWSSecretPrefix = %v, want prod/sortie", cfg.AWSSecretPrefix)
 	}
 }
 
 func TestLoadConfig_K8sNamespace(t *testing.T) {
-	os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAMESPACE")
-	os.Unsetenv("LAUNCHPAD_NAMESPACE")
+	os.Unsetenv("SORTIE_K8S_SECRET_NAMESPACE")
+	os.Unsetenv("SORTIE_NAMESPACE")
 
-	os.Setenv("LAUNCHPAD_K8S_SECRET_NAMESPACE", "k8s-ns")
-	defer os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAMESPACE")
+	os.Setenv("SORTIE_K8S_SECRET_NAMESPACE", "k8s-ns")
+	defer os.Unsetenv("SORTIE_K8S_SECRET_NAMESPACE")
 
 	cfg := LoadConfig()
 	if cfg.K8sNamespace != "k8s-ns" {
@@ -617,9 +617,9 @@ func TestLoadConfig_K8sNamespace(t *testing.T) {
 }
 
 func TestLoadConfig_K8sNamespaceFallback(t *testing.T) {
-	os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAMESPACE")
-	os.Setenv("LAUNCHPAD_NAMESPACE", "fallback-ns")
-	defer os.Unsetenv("LAUNCHPAD_NAMESPACE")
+	os.Unsetenv("SORTIE_K8S_SECRET_NAMESPACE")
+	os.Setenv("SORTIE_NAMESPACE", "fallback-ns")
+	defer os.Unsetenv("SORTIE_NAMESPACE")
 
 	cfg := LoadConfig()
 	if cfg.K8sNamespace != "fallback-ns" {
@@ -628,8 +628,8 @@ func TestLoadConfig_K8sNamespaceFallback(t *testing.T) {
 }
 
 func TestLoadConfig_K8sSecretName(t *testing.T) {
-	os.Setenv("LAUNCHPAD_K8S_SECRET_NAME", "my-secret")
-	defer os.Unsetenv("LAUNCHPAD_K8S_SECRET_NAME")
+	os.Setenv("SORTIE_K8S_SECRET_NAME", "my-secret")
+	defer os.Unsetenv("SORTIE_K8S_SECRET_NAME")
 
 	cfg := LoadConfig()
 	if cfg.K8sSecretName != "my-secret" {
@@ -720,8 +720,8 @@ func TestNewManager_EnvProvider(t *testing.T) {
 }
 
 func TestLoadConfig_ProviderCaseInsensitive(t *testing.T) {
-	os.Setenv("LAUNCHPAD_SECRETS_PROVIDER", "VAULT")
-	defer os.Unsetenv("LAUNCHPAD_SECRETS_PROVIDER")
+	os.Setenv("SORTIE_SECRETS_PROVIDER", "VAULT")
+	defer os.Unsetenv("SORTIE_SECRETS_PROVIDER")
 
 	cfg := LoadConfig()
 	if cfg.Provider != ProviderType("vault") {

@@ -14,8 +14,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/plugins"
 	"golang.org/x/oauth2"
 )
 
@@ -386,7 +386,7 @@ func (p *OIDCAuthProvider) generateToken(user *db.User, tokenType TokenType) (st
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "launchpad",
+			Issuer:    "sortie",
 			Subject:   user.ID,
 		},
 		UserID:    user.ID,

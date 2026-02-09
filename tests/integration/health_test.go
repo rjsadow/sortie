@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/rjsadow/launchpad/tests/integration/testutil"
+	"github.com/rjsadow/sortie/tests/integration/testutil"
 )
 
 func TestHealth_Liveness(t *testing.T) {

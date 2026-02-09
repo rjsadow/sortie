@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/sessions"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 // HTTPProxy handles reverse proxying HTTP requests to web_proxy session pods

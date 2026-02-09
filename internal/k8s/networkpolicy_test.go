@@ -3,7 +3,7 @@ package k8s
 import (
 	"testing"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -43,8 +43,8 @@ func TestBuildSessionNetworkPolicy_Allowlist(t *testing.T) {
 		t.Fatal("expected non-nil NetworkPolicy")
 	}
 
-	if np.Name != "launchpad-egress-sess-1" {
-		t.Errorf("expected name launchpad-egress-sess-1, got %s", np.Name)
+	if np.Name != "sortie-egress-sess-1" {
+		t.Errorf("expected name sortie-egress-sess-1, got %s", np.Name)
 	}
 
 	if len(np.Spec.PolicyTypes) != 1 || np.Spec.PolicyTypes[0] != "Egress" {

@@ -1,6 +1,6 @@
 # Plugin System Architecture
 
-Launchpad uses a plugin architecture for extensible connectors, allowing new
+Sortie uses a plugin architecture for extensible connectors, allowing new
 functionality to be added without modifying core code.
 
 ## Overview
@@ -19,9 +19,9 @@ Configure plugins via environment variables:
 
 ```bash
 # Select plugins (defaults shown)
-export LAUNCHPAD_PLUGIN_LAUNCHER=url       # or: container
-export LAUNCHPAD_PLUGIN_AUTH=noop          # default, no auth
-export LAUNCHPAD_PLUGIN_STORAGE=sqlite     # or: memory
+export SORTIE_PLUGIN_LAUNCHER=url       # or: container
+export SORTIE_PLUGIN_AUTH=noop          # default, no auth
+export SORTIE_PLUGIN_STORAGE=sqlite     # or: memory
 ```
 
 ### Using the Plugin Registry
@@ -29,10 +29,10 @@ export LAUNCHPAD_PLUGIN_STORAGE=sqlite     # or: memory
 ```go
 import (
     "context"
-    "github.com/rjsadow/launchpad/internal/plugins"
-    _ "github.com/rjsadow/launchpad/internal/plugins/launcher"
-    _ "github.com/rjsadow/launchpad/internal/plugins/auth"
-    _ "github.com/rjsadow/launchpad/internal/plugins/storage"
+    "github.com/rjsadow/sortie/internal/plugins"
+    _ "github.com/rjsadow/sortie/internal/plugins/launcher"
+    _ "github.com/rjsadow/sortie/internal/plugins/auth"
+    _ "github.com/rjsadow/sortie/internal/plugins/storage"
 )
 
 func main() {
@@ -64,7 +64,7 @@ func main() {
 Simple redirect-based launching where users are directed to the application URL.
 
 ```bash
-export LAUNCHPAD_PLUGIN_LAUNCHER=url
+export SORTIE_PLUGIN_LAUNCHER=url
 ```
 
 #### Container Launcher (`container`)
@@ -72,12 +72,12 @@ export LAUNCHPAD_PLUGIN_LAUNCHER=url
 Kubernetes container-based launching with VNC sidecar for interactive desktop applications.
 
 ```bash
-export LAUNCHPAD_PLUGIN_LAUNCHER=container
+export SORTIE_PLUGIN_LAUNCHER=container
 
 # Optional configuration
-export LAUNCHPAD_NAMESPACE=default
+export SORTIE_NAMESPACE=default
 export KUBECONFIG=/path/to/kubeconfig
-export LAUNCHPAD_VNC_SIDECAR_IMAGE=theasp/novnc:latest
+export SORTIE_VNC_SIDECAR_IMAGE=theasp/novnc:latest
 ```
 
 ### Auth Plugins
@@ -88,7 +88,7 @@ No-operation auth provider that allows all access. Suitable for
 development and trusted environments.
 
 ```bash
-export LAUNCHPAD_PLUGIN_AUTH=noop
+export SORTIE_PLUGIN_AUTH=noop
 ```
 
 ### Storage Plugins
@@ -98,8 +98,8 @@ export LAUNCHPAD_PLUGIN_AUTH=noop
 SQLite database storage provider. Default and recommended for production.
 
 ```bash
-export LAUNCHPAD_PLUGIN_STORAGE=sqlite
-export LAUNCHPAD_DB=launchpad.db
+export SORTIE_PLUGIN_STORAGE=sqlite
+export SORTIE_DB=sortie.db
 ```
 
 #### Memory Storage (`memory`)
@@ -107,7 +107,7 @@ export LAUNCHPAD_DB=launchpad.db
 In-memory storage for testing and development. Data is lost on restart.
 
 ```bash
-export LAUNCHPAD_PLUGIN_STORAGE=memory
+export SORTIE_PLUGIN_STORAGE=memory
 ```
 
 ## Creating Custom Plugins
@@ -157,7 +157,7 @@ Register your plugin in an `init()` function:
 ```go
 package myplugin
 
-import "github.com/rjsadow/launchpad/internal/plugins"
+import "github.com/rjsadow/sortie/internal/plugins"
 
 func init() {
     plugins.RegisterGlobal(plugins.PluginTypeLauncher, "myplugin", func() plugins.Plugin {
@@ -183,7 +183,7 @@ package oidc
 
 import (
     "context"
-    "github.com/rjsadow/launchpad/internal/plugins"
+    "github.com/rjsadow/sortie/internal/plugins"
 )
 
 type OIDCAuthProvider struct {
@@ -241,17 +241,17 @@ cfg := &plugins.RegistryConfig{
     Storage:  "sqlite",
     PluginConfigs: map[string]map[string]string{
         "launcher.container": {
-            "namespace":         "launchpad",
+            "namespace":         "sortie",
             "session_timeout":   "2h",
             "pod_ready_timeout": "5m",
         },
         "auth.oidc": {
             "issuer":        "https://auth.example.com",
-            "client_id":     "launchpad",
+            "client_id":     "sortie",
             "client_secret": "secret",
         },
         "storage.sqlite": {
-            "db_path": "/data/launchpad.db",
+            "db_path": "/data/sortie.db",
         },
     },
 }

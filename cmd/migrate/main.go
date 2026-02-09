@@ -25,7 +25,7 @@ type migration struct {
 }
 
 func main() {
-	dbPath := flag.String("db", "launchpad.db", "Path to SQLite database")
+	dbPath := flag.String("db", "sortie.db", "Path to SQLite database")
 	migrationsDir := flag.String("dir", "migrations", "Path to migrations directory")
 	flag.Parse()
 

@@ -1,17 +1,17 @@
-# Default values for launchpad
+# Default values for sortie
 
 # Namespace configuration
-namespace: launchpad
+namespace: sortie
 
 # Image configuration
 image:
-  repository: ghcr.io/rjsadow/launchpad
+  repository: ghcr.io/rjsadow/sortie
   tag: latest
   pullPolicy: Always
 
 # VNC sidecar image for container sessions
 vncSidecar:
-  image: ghcr.io/rjsadow/launchpad-vnc-sidecar:latest
+  image: ghcr.io/rjsadow/sortie-vnc-sidecar:latest
 
 # Guacd sidecar image for Windows RDP sessions
 guacdSidecar:
@@ -48,7 +48,7 @@ session:
   cleanupInterval: "5"     # Cleanup interval in minutes
   podReadyTimeout: "300"   # Pod ready timeout in seconds
 
-# Resource limits for the launchpad server
+# Resource limits for the sortie server
 resources:
   requests:
     cpu: "100m"
@@ -65,7 +65,7 @@ service:
 # Ingress configuration
 ingress:
   enabled: false
-  host: launchpad.example.com
+  host: sortie.example.com
   annotations: {}
 
 # Network policies

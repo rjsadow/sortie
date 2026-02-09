@@ -103,7 +103,7 @@ jobs:
         run: go vet ./...
 
       - name: Go build
-        run: go build -v -o launchpad .
+        run: go build -v -o sortie .
 
       - name: Go test (unit)
         run: |
@@ -175,14 +175,14 @@ jobs:
 
       - name: Verify binary exists
         run: |
-          test -f launchpad || (echo "Binary not found" && exit 1)
-          ./launchpad -h || true
+          test -f sortie || (echo "Binary not found" && exit 1)
+          ./sortie -h || true
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: launchpad-linux-amd64
-          path: launchpad
+          name: sortie-linux-amd64
+          path: sortie
           retention-days: 7
 
   # Docker image build
@@ -201,17 +201,17 @@ jobs:
         with:
           context: .
           push: false
-          tags: launchpad:${{ github.sha }}
+          tags: sortie:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Test Docker image
         run: |
-          docker build -t launchpad:test .
-          docker run --rm -d -p 8080:8080 --name launchpad-test launchpad:test
+          docker build -t sortie:test .
+          docker run --rm -d -p 8080:8080 --name sortie-test sortie:test
           sleep 3
-          curl -f http://localhost:8080/ || (docker logs launchpad-test && exit 1)
-          docker stop launchpad-test
+          curl -f http://localhost:8080/ || (docker logs sortie-test && exit 1)
+          docker stop sortie-test
 
   # Security: Go vulnerability scanning
   go-security:

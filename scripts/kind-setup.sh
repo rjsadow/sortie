@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Kind cluster setup script for Launchpad local development
+# Kind cluster setup script for Sortie local development
 #
 # Usage:
 #   ./scripts/kind-setup.sh          # Create cluster and deploy
@@ -9,7 +9,7 @@
 #
 set -euo pipefail
 
-CLUSTER_NAME="launchpad"
+CLUSTER_NAME="sortie"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -56,32 +56,32 @@ create_cluster() {
 load_images() {
     log_info "Building and loading images into Kind..."
 
-    # Build launchpad image if Dockerfile exists
+    # Build sortie image if Dockerfile exists
     if [ -f "${ROOT_DIR}/Dockerfile" ]; then
-        log_info "Building launchpad image..."
-        docker build -t ghcr.io/rjsadow/launchpad:latest "${ROOT_DIR}"
-        kind load docker-image ghcr.io/rjsadow/launchpad:latest --name "$CLUSTER_NAME"
+        log_info "Building sortie image..."
+        docker build -t ghcr.io/rjsadow/sortie:latest "${ROOT_DIR}"
+        kind load docker-image ghcr.io/rjsadow/sortie:latest --name "$CLUSTER_NAME"
     fi
 
     # Build VNC sidecar if it exists
     if [ -d "${ROOT_DIR}/docker/vnc-sidecar" ]; then
         log_info "Building VNC sidecar image..."
-        docker build -t ghcr.io/rjsadow/launchpad-vnc-sidecar:latest "${ROOT_DIR}/docker/vnc-sidecar"
-        kind load docker-image ghcr.io/rjsadow/launchpad-vnc-sidecar:latest --name "$CLUSTER_NAME"
+        docker build -t ghcr.io/rjsadow/sortie-vnc-sidecar:latest "${ROOT_DIR}/docker/vnc-sidecar"
+        kind load docker-image ghcr.io/rjsadow/sortie-vnc-sidecar:latest --name "$CLUSTER_NAME"
     fi
 
     # Build VNC browser sidecar if it exists
     if [ -d "${ROOT_DIR}/docker/browser-sidecar" ]; then
         log_info "Building browser sidecar image..."
-        docker build -t ghcr.io/rjsadow/launchpad-browser-sidecar:latest "${ROOT_DIR}/docker/browser-sidecar"
-        kind load docker-image ghcr.io/rjsadow/launchpad-browser-sidecar:latest --name "$CLUSTER_NAME"
+        docker build -t ghcr.io/rjsadow/sortie-browser-sidecar:latest "${ROOT_DIR}/docker/browser-sidecar"
+        kind load docker-image ghcr.io/rjsadow/sortie-browser-sidecar:latest --name "$CLUSTER_NAME"
     fi
 
     # Build guacd sidecar if it exists (for Windows RDP support)
     if [ -d "${ROOT_DIR}/docker/guacd-sidecar" ]; then
         log_info "Building guacd sidecar image..."
-        docker build -t ghcr.io/rjsadow/launchpad-guacd-sidecar:latest "${ROOT_DIR}/docker/guacd-sidecar"
-        kind load docker-image ghcr.io/rjsadow/launchpad-guacd-sidecar:latest --name "$CLUSTER_NAME"
+        docker build -t ghcr.io/rjsadow/sortie-guacd-sidecar:latest "${ROOT_DIR}/docker/guacd-sidecar"
+        kind load docker-image ghcr.io/rjsadow/sortie-guacd-sidecar:latest --name "$CLUSTER_NAME"
     fi
 }
 
@@ -91,8 +91,8 @@ load_windows_images() {
     # Build xrdp test image (Linux with xrdp for testing the RDP pipeline)
     if [ -d "${ROOT_DIR}/docker/xrdp-test" ]; then
         log_info "Building xrdp test image..."
-        docker build -t ghcr.io/rjsadow/launchpad-xrdp-test:latest "${ROOT_DIR}/docker/xrdp-test"
-        kind load docker-image ghcr.io/rjsadow/launchpad-xrdp-test:latest --name "$CLUSTER_NAME"
+        docker build -t ghcr.io/rjsadow/sortie-xrdp-test:latest "${ROOT_DIR}/docker/xrdp-test"
+        kind load docker-image ghcr.io/rjsadow/sortie-xrdp-test:latest --name "$CLUSTER_NAME"
     fi
 
     # Also load the official guacd image (used as default sidecar if not overridden)
@@ -103,11 +103,11 @@ load_windows_images() {
 
 deploy_helm() {
     local extra_args=("$@")
-    log_info "Deploying Launchpad via Helm..."
+    log_info "Deploying Sortie via Helm..."
 
     # Install or upgrade the release
-    helm upgrade --install launchpad "${ROOT_DIR}/charts/launchpad" \
-        --namespace launchpad \
+    helm upgrade --install sortie "${ROOT_DIR}/charts/sortie" \
+        --namespace sortie \
         --create-namespace \
         --set image.pullPolicy=Never \
         "${extra_args[@]}" \
@@ -117,14 +117,14 @@ deploy_helm() {
 }
 
 show_access_info() {
-    log_info "Launchpad is deployed!"
+    log_info "Sortie is deployed!"
     echo ""
-    echo "To access Launchpad:"
-    echo "  kubectl port-forward -n launchpad svc/launchpad 8080:80"
+    echo "To access Sortie:"
+    echo "  kubectl port-forward -n sortie svc/sortie 8080:80"
     echo "  Then open http://localhost:8080"
     echo ""
     echo "To view logs:"
-    echo "  kubectl logs -n launchpad -l app.kubernetes.io/name=launchpad -f"
+    echo "  kubectl logs -n sortie -l app.kubernetes.io/name=sortie -f"
     echo ""
     echo "To teardown:"
     echo "  ./scripts/kind-setup.sh teardown"
@@ -144,11 +144,11 @@ seed_windows_app() {
     log_info "Seeding Windows RDP test app via API..."
 
     # Wait for the service to be ready
-    kubectl wait --for=condition=Available deployment/launchpad \
-        -n launchpad --timeout=120s 2>/dev/null || true
+    kubectl wait --for=condition=Available deployment/sortie \
+        -n sortie --timeout=120s 2>/dev/null || true
 
     # Port-forward in background
-    kubectl port-forward -n launchpad svc/launchpad 18080:80 &>/dev/null &
+    kubectl port-forward -n sortie svc/sortie 18080:80 &>/dev/null &
     local pf_pid=$!
     sleep 3
 
@@ -174,7 +174,7 @@ seed_windows_app() {
                 "category": "Development",
                 "launch_type": "container",
                 "os_type": "windows",
-                "container_image": "ghcr.io/rjsadow/launchpad-xrdp-test:latest",
+                "container_image": "ghcr.io/rjsadow/sortie-xrdp-test:latest",
                 "resource_limits": {
                     "cpu_request": "500m",
                     "cpu_limit": "2",

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,7 +12,7 @@ import (
 )
 
 // NetworkPolicyLabelKey is the label key used to associate NetworkPolicies with sessions
-const NetworkPolicyLabelKey = "launchpad.io/egress-policy"
+const NetworkPolicyLabelKey = "sortie.io/egress-policy"
 
 // BuildSessionNetworkPolicy creates a Kubernetes NetworkPolicy for a session pod
 // based on the application's egress policy. Returns nil if no custom policy is needed.
@@ -21,7 +21,7 @@ func BuildSessionNetworkPolicy(sessionID, appID string, policy *db.EgressPolicy)
 		return nil
 	}
 
-	name := fmt.Sprintf("launchpad-egress-%s", sessionID)
+	name := fmt.Sprintf("sortie-egress-%s", sessionID)
 
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -172,7 +172,7 @@ func DeleteNetworkPolicy(ctx context.Context, name string) error {
 // DeleteSessionNetworkPolicy deletes the NetworkPolicy for a session.
 // Ignores not-found errors since the policy may not exist.
 func DeleteSessionNetworkPolicy(ctx context.Context, sessionID string) error {
-	name := fmt.Sprintf("launchpad-egress-%s", sessionID)
+	name := fmt.Sprintf("sortie-egress-%s", sessionID)
 	_ = DeleteNetworkPolicy(ctx, name)
 	return nil
 }

@@ -25,24 +25,24 @@ function App() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => {
-    const stored = localStorage.getItem('launchpad-theme');
+    const stored = localStorage.getItem('sortie-theme');
     if (stored) return stored === 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
-    const stored = localStorage.getItem('launchpad-collapsed');
+    const stored = localStorage.getItem('sortie-collapsed');
     return stored ? new Set(JSON.parse(stored)) : new Set();
   });
   const [selectedCategory, setSelectedCategory] = useState<string | null>(() => {
-    const stored = localStorage.getItem('launchpad-category-filter');
+    const stored = localStorage.getItem('sortie-category-filter');
     return stored && stored !== 'null' ? stored : null;
   });
   const [favorites, setFavorites] = useState<Set<string>>(() => {
-    const stored = localStorage.getItem('launchpad-favorites');
+    const stored = localStorage.getItem('sortie-favorites');
     return stored ? new Set(JSON.parse(stored)) : new Set();
   });
   const [recentApps, setRecentApps] = useState<string[]>(() => {
-    const stored = localStorage.getItem('launchpad-recents');
+    const stored = localStorage.getItem('sortie-recents');
     return stored ? JSON.parse(stored) : [];
   });
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -121,23 +121,23 @@ function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('launchpad-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('sortie-theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
   useEffect(() => {
-    localStorage.setItem('launchpad-collapsed', JSON.stringify([...collapsedCategories]));
+    localStorage.setItem('sortie-collapsed', JSON.stringify([...collapsedCategories]));
   }, [collapsedCategories]);
 
   useEffect(() => {
-    localStorage.setItem('launchpad-category-filter', selectedCategory || 'null');
+    localStorage.setItem('sortie-category-filter', selectedCategory || 'null');
   }, [selectedCategory]);
 
   useEffect(() => {
-    localStorage.setItem('launchpad-favorites', JSON.stringify([...favorites]));
+    localStorage.setItem('sortie-favorites', JSON.stringify([...favorites]));
   }, [favorites]);
 
   useEffect(() => {
-    localStorage.setItem('launchpad-recents', JSON.stringify(recentApps));
+    localStorage.setItem('sortie-recents', JSON.stringify(recentApps));
   }, [recentApps]);
 
   // Get all unique categories from all apps (before search filtering)

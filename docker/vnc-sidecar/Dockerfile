@@ -1,8 +1,8 @@
-# VNC Sidecar Container for Launchpad
+# VNC Sidecar Container for Sortie
 # Provides X11 display and VNC server via TigerVNC Xvnc, and WebSocket via websockify
 FROM ubuntu:22.04@sha256:34577a83cd7a8f1e55f6eb173fd9bb70c16127a83d6bf06f56f6b1fff9e406b9
 
-LABEL org.opencontainers.image.source="https://github.com/rjsadow/launchpad"
+LABEL org.opencontainers.image.source="https://github.com/rjsadow/sortie"
 LABEL org.opencontainers.image.description="VNC sidecar for streaming thick-client applications"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 

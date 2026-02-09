@@ -23,13 +23,13 @@ COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
 
 # Build static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o launchpad .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o sortie .
 
 # Runtime stage: Minimal image
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:5d09f5106208a46853a7bebc12c4ce0a2da33f863c45716be11bb4a5b2760e41
 
-COPY --from=backend /app/launchpad /launchpad
+COPY --from=backend /app/sortie /sortie
 
 EXPOSE 8080
 
-ENTRYPOINT ["/launchpad"]
+ENTRYPOINT ["/sortie"]

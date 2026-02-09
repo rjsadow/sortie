@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/tests/integration/testutil"
+	"github.com/rjsadow/sortie/tests/integration/testutil"
 )
 
 func createContainerApp(t *testing.T, ts *testutil.TestServer, id string) {

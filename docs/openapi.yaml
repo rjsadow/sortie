@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
-  title: Launchpad API
+  title: Sortie API
   description: |
-    API for Launchpad - a centralized application launcher for large organizations.
+    API for Sortie - a centralized application launcher for large organizations.
 
-    Launchpad provides a single portal to launch dozens or hundreds of custom applications,
+    Sortie provides a single portal to launch dozens or hundreds of custom applications,
     with support for both URL-based and container-based application launching.
   version: 1.0.0
   contact:
-    name: Launchpad Team
+    name: Sortie Team
   license:
     name: MIT
     identifier: MIT
@@ -16,7 +16,7 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development server
-  - url: https://launchpad.example.com
+  - url: https://sortie.example.com
     description: Production server
 
 tags:
@@ -49,7 +49,7 @@ paths:
       tags:
         - Health
       summary: Get service health status
-      description: Returns the health status of the Launchpad service and its dependencies.
+      description: Returns the health status of the Sortie service and its dependencies.
       operationId: getHealth
       security: []  # Public endpoint
       responses:
@@ -253,7 +253,7 @@ paths:
       tags:
         - Apps
       summary: Create an application
-      description: Creates a new application in the launchpad.
+      description: Creates a new application in the sortie.
       operationId: createApp
       requestBody:
         required: true
@@ -365,7 +365,7 @@ paths:
       tags:
         - Apps
       summary: Delete an application
-      description: Deletes an application from the launchpad.
+      description: Deletes an application from the sortie.
       operationId: deleteApp
       responses:
         '204':
@@ -684,7 +684,7 @@ components:
     sessionCookie:
       type: apiKey
       in: cookie
-      name: launchpad_session
+      name: sortie_session
       description: Session cookie set after successful authentication
 
   schemas:
@@ -857,7 +857,7 @@ components:
         pod_name:
           type: string
           description: Kubernetes pod name
-          example: "launchpad-sess-abc123"
+          example: "sortie-sess-abc123"
         status:
           type: string
           enum:

@@ -1,12 +1,12 @@
 ---
-# ServiceAccount for Launchpad
+# ServiceAccount for Sortie
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: launchpad
-  namespace: launchpad
+  name: sortie
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
     app.kubernetes.io/component: server
 
 ---
@@ -14,10 +14,10 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: launchpad-session-manager
-  namespace: launchpad
+  name: sortie-session-manager
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
 rules:
   # Pod management for sessions
   - apiGroups: [""]
@@ -41,15 +41,15 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: launchpad-session-manager
-  namespace: launchpad
+  name: sortie-session-manager
+  namespace: sortie
   labels:
-    app.kubernetes.io/name: launchpad
+    app.kubernetes.io/name: sortie
 subjects:
   - kind: ServiceAccount
-    name: launchpad
-    namespace: launchpad
+    name: sortie
+    namespace: sortie
 roleRef:
   kind: Role
-  name: launchpad-session-manager
+  name: sortie-session-manager
   apiGroup: rbac.authorization.k8s.io

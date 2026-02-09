@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
-	"github.com/rjsadow/launchpad/internal/runner"
+	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/runner"
 )
 
 // MockWorkload tracks a workload created by MockRunner.

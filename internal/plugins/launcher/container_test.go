@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 func TestNewContainerLauncher(t *testing.T) {

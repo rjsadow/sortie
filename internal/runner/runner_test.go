@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/db"
+	"github.com/rjsadow/sortie/internal/db"
 )
 
 // --- Mock Runner for testing the interface contract ---

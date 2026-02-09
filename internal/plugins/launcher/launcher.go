@@ -8,11 +8,11 @@
 // To add a new launcher:
 //  1. Create a new file implementing LauncherPlugin
 //  2. Register it in init() using plugins.RegisterGlobal()
-//  3. Configure via LAUNCHPAD_PLUGIN_LAUNCHER environment variable
+//  3. Configure via SORTIE_PLUGIN_LAUNCHER environment variable
 package launcher
 
 import (
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // Re-export types for convenience

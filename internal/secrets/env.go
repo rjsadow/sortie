@@ -16,7 +16,7 @@ type EnvProvider struct {
 // NewEnvProvider creates a new environment variable provider.
 func NewEnvProvider() *EnvProvider {
 	return &EnvProvider{
-		prefix: "LAUNCHPAD_SECRET_",
+		prefix: "SORTIE_SECRET_",
 	}
 }
 

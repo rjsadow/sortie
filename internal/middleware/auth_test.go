@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rjsadow/launchpad/internal/plugins"
+	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 // mockAuthProvider implements plugins.AuthProvider for testing.
