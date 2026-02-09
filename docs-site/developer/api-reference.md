@@ -1,21 +1,24 @@
 # API Reference
 
-Sortie exposes a REST API for managing applications, sessions, templates, and users.
-The full OpenAPI specification is available at `openapi.yaml` in the repository root.
+Sortie exposes a REST API for managing applications,
+sessions, templates, and users. The full OpenAPI
+specification is available at `openapi.yaml` in the
+repository root.
 
 ## Authentication
 
-All API requests (except `/api/auth/*` and `/api/config`) require a valid JWT token.
+All API requests (except `/api/auth/*` and `/api/config`)
+require a valid JWT token.
 
 Include the token in the `Authorization` header:
 
-```
+```http
 Authorization: Bearer <token>
 ```
 
 ### Login
 
-```
+```http
 POST /api/auth/login
 Content-Type: application/json
 
@@ -26,7 +29,7 @@ Returns access and refresh tokens.
 
 ### Refresh Token
 
-```
+```http
 POST /api/auth/refresh
 Content-Type: application/json
 

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2025-02-07
-- **Issue:** [#31](https://github.com/rjsadow/sortie/issues/31)
+- **Issue:** Streaming protocol selection
 
 ## Context
 
