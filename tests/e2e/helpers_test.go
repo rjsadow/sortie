@@ -7,77 +7,58 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 func jsonReader(s string) io.Reader {
 	return strings.NewReader(s)
 }
 
-func authGet(t *testing.T, url, token string) *http.Response {
-	t.Helper()
+func authGet(url, token string) *http.Response {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	return resp
 }
 
-func authPost(t *testing.T, url, token string, body []byte) *http.Response {
-	t.Helper()
+func authPost(url, token string, body []byte) *http.Response {
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	return resp
 }
 
-func authPut(t *testing.T, url, token string, body []byte) *http.Response {
-	t.Helper()
+func authPut(url, token string, body []byte) *http.Response {
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	return resp
 }
 
-func authDelete(t *testing.T, url, token string) *http.Response {
-	t.Helper()
+func authDelete(url, token string) *http.Response {
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	return resp
 }
 
-func waitForSessionRunning(t *testing.T, sessionID string, timeout time.Duration) {
-	t.Helper()
+func waitForSessionRunning(sessionID string, timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		resp := authGet(t, baseURL+"/api/sessions/"+sessionID, adminToken)
+		resp := authGet(baseURL+"/api/sessions/"+sessionID, adminToken)
 		var session map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&session)
 		resp.Body.Close()
@@ -87,11 +68,11 @@ func waitForSessionRunning(t *testing.T, sessionID string, timeout time.Duration
 			return
 		}
 		if status == "failed" {
-			t.Fatalf("session %s failed", sessionID)
+			Fail(fmt.Sprintf("session %s failed", sessionID))
 		}
 		time.Sleep(2 * time.Second)
 	}
-	t.Fatalf("timeout waiting for session %s to reach running", sessionID)
+	Fail(fmt.Sprintf("timeout waiting for session %s to reach running", sessionID))
 }
 
 // waitForSessionStatus polls until the session reaches the target status.
@@ -126,23 +107,13 @@ func waitForSessionStatus(sessionID, target string, timeout time.Duration) error
 // terminated. The stop endpoint triggers pod deletion, but Kubernetes needs
 // time to finalize it. Without this wait, restart fails with "pod already
 // exists" because the old pod is still terminating.
-func waitForPodDeletion(t *testing.T, sessionID string, timeout time.Duration) {
-	t.Helper()
+func waitForPodDeletion(sessionID string, timeout time.Duration) {
 	podName := "launchpad-session-" + sessionID
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		// Use the admin sessions endpoint to check if the pod still exists
-		// by looking at whether kubectl would find it. We check via the
-		// session API — when the pod is gone, a fresh GET should show
-		// the session as stopped with no running pod.
-		cmd := fmt.Sprintf("kubectl get pod %s -n launchpad --no-headers 2>&1", podName)
-		// We can't run kubectl from within the test binary directly,
-		// so we poll with a simple delay instead.
-		_ = cmd
 		time.Sleep(2 * time.Second)
 
-		// Double-check the session is stopped
-		resp := authGet(t, baseURL+"/api/sessions/"+sessionID, adminToken)
+		resp := authGet(baseURL+"/api/sessions/"+sessionID, adminToken)
 		var session map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&session)
 		resp.Body.Close()
@@ -154,11 +125,10 @@ func waitForPodDeletion(t *testing.T, sessionID string, timeout time.Duration) {
 			return
 		}
 	}
-	t.Logf("warning: pod %s may not be fully deleted after %v", podName, timeout)
+	GinkgoWriter.Printf("warning: pod %s may not be fully deleted after %v\n", podName, timeout)
 }
 
-func createE2EApp(t *testing.T, id, launchType string) {
-	t.Helper()
+func createE2EApp(id, launchType string) {
 	body := []byte(fmt.Sprintf(`{
 		"id": %q,
 		"name": "E2E App %s",
@@ -166,16 +136,37 @@ func createE2EApp(t *testing.T, id, launchType string) {
 		"container_image": "nginx:latest"
 	}`, id, id, launchType))
 
-	resp := authPost(t, baseURL+"/api/apps", adminToken, body)
+	resp := authPost(baseURL+"/api/apps", adminToken, body)
 	resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-		t.Fatalf("failed to create app %s: %d", id, resp.StatusCode)
-	}
+	Expect(resp.StatusCode).To(SatisfyAny(
+		Equal(http.StatusCreated),
+		Equal(http.StatusConflict),
+	), "failed to create app %s: %d", id, resp.StatusCode)
 }
 
-func deleteE2EApp(t *testing.T, id string) {
-	t.Helper()
-	resp := authDelete(t, baseURL+"/api/apps/"+id, adminToken)
+func deleteE2EApp(id string) {
+	resp := authDelete(baseURL+"/api/apps/"+id, adminToken)
 	resp.Body.Close()
+}
+
+func login(base, username, password string) (string, error) {
+	body := fmt.Sprintf(`{"username":%q,"password":%q}`, username, password)
+	resp, err := http.Post(base+"/api/auth/login", "application/json", jsonReader(body))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("login returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.AccessToken, nil
 }
