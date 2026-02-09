@@ -29,6 +29,7 @@ type App struct {
 	DiagCollector       *diagnostics.Collector
 	Config              *config.Config
 	StaticFS            fs.FS // web/dist content (nil disables static serving)
+	DocsFS              fs.FS // docs-site/dist content (nil disables docs serving)
 }
 
 // Handler builds and returns the complete HTTP handler with all routes
@@ -118,6 +119,14 @@ func (a *App) Handler() http.Handler {
 
 	// Legacy apps.json
 	mux.HandleFunc("/apps.json", h.handleAppsJSON)
+
+	// Documentation site (VitePress static files)
+	if a.DocsFS != nil {
+		mux.HandleFunc("/docs/", h.docsHandler())
+		mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/docs/", http.StatusMovedPermanently)
+		})
+	}
 
 	// Static file serving and SPA routing
 	if a.StaticFS != nil {

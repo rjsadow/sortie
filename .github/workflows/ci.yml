@@ -48,6 +48,37 @@ jobs:
           path: web/dist
           retention-days: 1
 
+  # Documentation site build
+  docs:
+    name: Docs Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs-site
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload docs artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-dist
+          path: docs-site/dist
+          retention-days: 1
+
   # Go lint with golangci-lint
   go-lint:
     name: Go Lint
@@ -65,6 +96,9 @@ jobs:
       - name: Create placeholder web/dist for go:embed
         run: mkdir -p web/dist && touch web/dist/.gitkeep
 
+      - name: Create placeholder docs-site/dist for go:embed
+        run: mkdir -p docs-site/dist && touch docs-site/dist/.gitkeep
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
@@ -74,7 +108,7 @@ jobs:
   go:
     name: Go Build
     runs-on: ubuntu-latest
-    needs: frontend
+    needs: [frontend, docs]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,6 +124,12 @@ jobs:
         with:
           name: frontend-dist
           path: web/dist
+
+      - name: Download docs artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-dist
+          path: docs-site/dist
 
       - name: Go mod tidy check
         run: |
@@ -121,7 +161,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: frontend
+    needs: [frontend, docs]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,6 +177,12 @@ jobs:
         with:
           name: frontend-dist
           path: web/dist
+
+      - name: Download docs artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-dist
+          path: docs-site/dist
 
       - name: Run integration tests
         run: go test -v -race -timeout 5m -coverprofile=integration-coverage.out ./tests/integration/...
@@ -273,7 +319,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Markdown lint (existing)
+  # Markdown lint
   markdown-lint:
     name: Markdown Lint
     runs-on: ubuntu-latest
@@ -285,11 +331,11 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@v19
         with:
           globs: |
-            docs/**/*.md
+            docs-site/**/*.md
             agents/**/*.md
             *.md
 
-  # Link check (existing)
+  # Link check
   link-check:
     name: Link Check
     runs-on: ubuntu-latest
@@ -300,6 +346,6 @@ jobs:
       - name: Check links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --no-progress --exclude localhost 'docs/**/*.md' '*.md'
+          args: --no-progress --exclude localhost 'docs-site/**/*.md' '*.md'
           fail: true
           failIfEmpty: false

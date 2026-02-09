@@ -1,26 +1,18 @@
-# Sortie
+# Getting Started
 
-A self-hosted application launcher that gives your organization
+Sortie is a self-hosted application launcher that gives your organization
 one portal to access every internal tool. Users browse a catalog,
 click launch, and get a running desktop app streamed to their
 browser — no local install required.
 
-## The Problem
-
-Teams juggle dozens of internal tools across scattered bookmarks,
-wikis, and Slack messages. Installing desktop software on every
-workstation is slow and hard to manage. Sortie solves both: a
-single web page lists every app, and containerized apps run in
-Kubernetes so users just need a browser.
-
 ## Core Concepts
 
-| Concept     | What it is |
-|-------------|-----------|
-| **App**     | An entry in the catalog. Can be a simple URL link, a Linux container streamed via VNC, or a Windows container streamed via RDP. |
-| **Session** | A running instance of a container app. Sortie creates a Kubernetes pod, streams the desktop to the browser, and cleans up when the user is done. |
-| **User**    | An authenticated person with a role (`admin` or `user`). Admins manage the catalog, users launch apps. |
-| **Template**| A pre-configured app definition from the built-in marketplace. Admins can add apps to the catalog in one click. |
+| Concept      | What it is |
+|--------------|-----------|
+| **App**      | An entry in the catalog. Can be a simple URL link, a Linux container streamed via VNC, or a Windows container streamed via RDP. |
+| **Session**  | A running instance of a container app. Sortie creates a Kubernetes pod, streams the desktop to the browser, and cleans up when the user is done. |
+| **User**     | An authenticated person with a role (`admin` or `user`). Admins manage the catalog, users launch apps. |
+| **Template** | A pre-configured app definition from the built-in marketplace. Admins can add apps to the catalog in one click. |
 
 ## Quickstart
 
@@ -84,13 +76,13 @@ Browser ──▶ Sortie (Go server) ──▶ Kubernetes API
 
 ## Tech Stack
 
-| Layer      | Technology |
-|------------|-----------|
-| Backend    | Go, `net/http`, SQLite |
-| Frontend   | React, TypeScript, Tailwind CSS, Vite |
-| Streaming  | noVNC (Linux), Apache Guacamole (Windows) |
+| Layer         | Technology |
+|---------------|-----------|
+| Backend       | Go, `net/http`, SQLite |
+| Frontend      | React, TypeScript, Tailwind CSS, Vite |
+| Streaming     | noVNC (Linux), Apache Guacamole (Windows) |
 | Orchestration | Kubernetes, Helm |
-| Auth       | JWT (access + refresh tokens), bcrypt |
+| Auth          | JWT (access + refresh tokens), bcrypt |
 
 ## Configuration
 
@@ -121,21 +113,6 @@ internal/
   middleware/        Auth and security middleware
   plugins/           Extensible plugin system
 web/                 React frontend (Vite + TypeScript)
-charts/sortie/    Helm chart
+charts/sortie/       Helm chart
 deploy/              Kubernetes manifests and Kind config
 ```
-
-## Documentation
-
-Full documentation is available at `/docs/` when running Sortie, or browse
-the source in [`docs-site/`](docs-site/).
-
-- [Getting Started](docs-site/guide/index.md)
-- [Development Guide](docs-site/developer/development.md)
-- [Kubernetes Deployment](docs-site/admin/kubernetes.md)
-- [Reverse Proxy Setup](docs-site/admin/reverse-proxy.md)
-  (NGINX, Traefik, Caddy)
-- [Data Persistence & Backup](docs-site/admin/data-persistence.md)
-- [Disaster Recovery](docs-site/admin/disaster-recovery.md)
-- [Plugin System](docs-site/developer/plugin-system.md)
-- [Template Marketplace](docs-site/guide/templates.md)

@@ -31,6 +31,9 @@ import (
 //go:embed all:web/dist
 var embeddedFiles embed.FS
 
+//go:embed all:docs-site/dist
+var embeddedDocs embed.FS
+
 //go:embed web/src/data/templates.json
 var embeddedTemplates []byte
 
@@ -235,6 +238,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Get the docs subdirectory from the embedded filesystem
+	docsFS, err := fs.Sub(embeddedDocs, "docs-site/dist")
+	if err != nil {
+		slog.Warn("failed to access embedded docs", "error", err)
+	}
+
 	// Publish basic application metrics via expvar
 	serverStartTime := time.Now()
 	expvar.NewString("app.name").Set("sortie")
@@ -269,6 +278,7 @@ func main() {
 		DiagCollector:       diagCollector,
 		Config:              appConfig,
 		StaticFS:            distFS,
+		DocsFS:              docsFS,
 	}
 
 	handler := app.Handler()
