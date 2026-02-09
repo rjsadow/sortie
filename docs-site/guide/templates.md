@@ -132,12 +132,9 @@ Example template:
 ## API Integration
 
 When adding a template to Sortie, the frontend sends a POST request to
-`/api/apps` with the application configuration. The backend should:
-
-1. Validate the application data
-2. Ensure the ID is unique
-3. Store the application in the configuration
-4. Return the created application
+`/api/apps` with the application configuration. The backend validates
+the data, ensures the ID is unique, stores the application, and returns
+the created application.
 
 ## Resource Limits
 

@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend frontend backend deps kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all
+.PHONY: all build clean dev dev-backend dev-frontend dev-docs frontend backend deps docs-deps docs kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all
 
 all: build
 
@@ -6,12 +6,20 @@ all: build
 deps:
 	cd web && npm install
 
+# Install docs dependencies
+docs-deps:
+	cd docs-site && npm install
+
 # Build the frontend
 frontend: deps
 	cd web && npm run build
 
-# Build the Go binary (requires frontend to be built first)
-backend: frontend
+# Build the docs site
+docs: docs-deps
+	cd docs-site && npm run build
+
+# Build the Go binary (requires frontend and docs to be built first)
+backend: frontend docs
 	go build -o sortie .
 
 # Build everything
@@ -23,8 +31,13 @@ web/dist/.placeholder:
 	@echo '<!DOCTYPE html><html><body>Dev placeholder</body></html>' > web/dist/index.html
 	@touch web/dist/.placeholder
 
+# Create minimal docs-site dist placeholder for Go compilation during dev
+docs-site/dist/.placeholder:
+	@mkdir -p docs-site/dist
+	@touch docs-site/dist/.placeholder
+
 # Run Go backend in development mode
-dev-backend: web/dist/.placeholder
+dev-backend: web/dist/.placeholder docs-site/dist/.placeholder
 	@echo "Starting backend on http://localhost:8080"
 	go run .
 
@@ -32,6 +45,11 @@ dev-backend: web/dist/.placeholder
 dev-frontend: deps
 	@echo "Starting frontend on http://localhost:5173"
 	cd web && npm run dev
+
+# Run docs dev server
+dev-docs: docs-deps
+	@echo "Starting docs on http://localhost:5174"
+	cd docs-site && npm run dev
 
 # Run full development environment (backend + frontend)
 # Use: make dev
@@ -50,6 +68,8 @@ dev:
 	@echo ""
 	@mkdir -p web/dist
 	@echo '<!DOCTYPE html><html><body>Dev placeholder</body></html>' > web/dist/index.html
+	@mkdir -p docs-site/dist
+	@touch docs-site/dist/.placeholder
 	@trap 'kill 0' EXIT; \
 		(cd web && npm install --silent && npm run dev) & \
 		(sleep 2 && go run .) & \
@@ -57,7 +77,7 @@ dev:
 
 # Clean build artifacts
 clean:
-	rm -rf web/dist web/node_modules sortie sortie.db
+	rm -rf web/dist web/node_modules docs-site/dist docs-site/node_modules docs-site/.vitepress/cache sortie sortie.db
 
 # Run the production server
 run: build

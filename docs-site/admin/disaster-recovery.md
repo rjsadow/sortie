@@ -458,6 +458,6 @@ kubectl logs -n sortie deployment/sortie --tail=100
 
 ## Related Documentation
 
-- [Data Persistence Strategy](DATA_PERSISTENCE.md) - Storage architecture details
-- [Kubernetes Deployment](KUBERNETES.md) - Pod orchestration setup
-- [High Availability Guide](deployment.md) - HA configuration options
+- [Data Persistence Strategy](./data-persistence) - Storage architecture details
+- [Kubernetes Deployment](./kubernetes) - Pod orchestration setup
+- [High Availability Guide](./deployment) - HA configuration options

@@ -2160,6 +2160,73 @@ func (h *handlers) handleAppsJSON(w http.ResponseWriter, r *http.Request) {
 
 // --- Static file serving ---
 
+// docsHandler serves VitePress static files with clean URL support.
+// VitePress generates .html files but uses clean URLs (no extension),
+// so we try: exact path → path.html → path/index.html.
+func (h *handlers) docsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Strip the /docs/ prefix to get the path within DocsFS
+		path := strings.TrimPrefix(r.URL.Path, "/docs/")
+
+		// Resolve the file path: try exact → .html → /index.html
+		resolved := h.resolveDocsPath(path)
+		if resolved == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		f, err := h.app.DocsFS.Open(resolved)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+
+		stat, err := f.Stat()
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Set content type for HTML files
+		if strings.HasSuffix(resolved, ".html") {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		} else if strings.HasPrefix(resolved, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
+
+		http.ServeContent(w, r, resolved, stat.ModTime(), f.(io.ReadSeeker))
+	}
+}
+
+// resolveDocsPath finds the actual file path in DocsFS for a clean URL.
+func (h *handlers) resolveDocsPath(path string) string {
+	// Root → index.html
+	if path == "" || path == "/" {
+		return "index.html"
+	}
+	path = strings.TrimSuffix(path, "/")
+
+	// Exact match for non-directory files (assets like .js, .css, images)
+	if info, err := fs.Stat(h.app.DocsFS, path); err == nil && !info.IsDir() {
+		return path
+	}
+	// Clean URL → .html file
+	if !strings.Contains(path, ".") {
+		htmlPath := path + ".html"
+		if _, err := fs.Stat(h.app.DocsFS, htmlPath); err == nil {
+			return htmlPath
+		}
+	}
+	// Directory → index.html
+	indexPath := path + "/index.html"
+	if _, err := fs.Stat(h.app.DocsFS, indexPath); err == nil {
+		return indexPath
+	}
+	return ""
+}
+
 func (h *handlers) staticHandler(fileServer http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
