@@ -138,7 +138,7 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
         <div className="flex items-center gap-3">
           <button
             onClick={handleClose}
-            className={`flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
+            className={`flex items-center gap-1 px-2 py-1 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
             aria-label="Back to dashboard"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

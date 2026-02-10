@@ -45,9 +45,9 @@ export function TemplateBrowser({ isOpen, onClose, onAddApp, darkMode }: Templat
   const sidebarBg = darkMode ? 'bg-gray-900' : 'bg-gray-50';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
       <div
-        className={`relative w-full max-w-5xl h-[85vh] mx-4 rounded-lg shadow-xl ${bgColor} flex flex-col overflow-hidden`}
+        className={`relative w-full max-w-5xl h-[85vh] mx-4 rounded-2xl shadow-2xl ${bgColor} flex flex-col overflow-hidden`}
       >
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${borderColor}`}>
