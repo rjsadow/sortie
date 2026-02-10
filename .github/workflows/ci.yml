@@ -195,6 +195,70 @@ jobs:
           path: integration-coverage.out
           retention-days: 7
 
+  # Playwright E2E tests (browser-based frontend tests)
+  playwright-e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: [frontend, docs]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist
+
+      - name: Download docs artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-dist
+          path: docs-site/dist
+
+      - name: Install Node dependencies
+        run: npm --prefix web ci
+
+      - name: Install Playwright browsers
+        run: web/node_modules/.bin/playwright install --with-deps chromium firefox webkit
+
+      - name: Build Go binary
+        run: go build -o sortie .
+
+      - name: Run Playwright tests
+        run: web/node_modules/.bin/playwright test --config web/playwright.config.ts
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 7
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-test-results
+          path: web/test-results/
+          retention-days: 7
+
   # Full binary build via Makefile
   binary-build:
     name: Binary Build (Makefile)

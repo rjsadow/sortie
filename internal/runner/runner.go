@@ -20,6 +20,7 @@ const (
 	TypeKubernetes Type = "kubernetes"
 	TypeDocker     Type = "docker"
 	TypeNomad      Type = "nomad"
+	TypeMock       Type = "mock"
 )
 
 // WorkloadConfig contains the configuration for creating a workload.

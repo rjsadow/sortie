@@ -48,6 +48,7 @@ func main() {
 	port := flag.Int("port", config.DefaultPort, "Port to listen on")
 	dbPath := flag.String("db", config.DefaultDBPath, "Path to SQLite database")
 	seedPath := flag.String("seed", "", "Path to apps.json for initial seeding")
+	mockRunnerFlag := flag.Bool("mock-runner", false, "Use in-memory mock runner (no Kubernetes required)")
 	flag.Parse()
 
 	// Load configuration (env vars + flag overrides)
@@ -57,9 +58,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize Kubernetes configuration
-	k8s.Configure(appConfig.Namespace, appConfig.Kubeconfig, appConfig.VNCSidecarImage)
-	k8s.ConfigureGuacdSidecar(appConfig.GuacdSidecarImage)
+	// Initialize Kubernetes configuration (skip when using mock runner)
+	if !*mockRunnerFlag {
+		k8s.Configure(appConfig.Namespace, appConfig.Kubeconfig, appConfig.VNCSidecarImage)
+		k8s.ConfigureGuacdSidecar(appConfig.GuacdSidecarImage)
+	}
 
 	// Initialize database
 	database, err := db.Open(appConfig.DB)
@@ -172,8 +175,13 @@ func main() {
 			"interval", appConfig.BillingExportInterval)
 	}
 
-	// Initialize workload runner (Kubernetes by default)
-	workloadRunner := runner.NewKubernetesRunner()
+	// Initialize workload runner
+	var workloadRunner runner.Runner
+	if *mockRunnerFlag {
+		workloadRunner = runner.NewMockRunner()
+	} else {
+		workloadRunner = runner.NewKubernetesRunner()
+	}
 	slog.Info("Workload runner initialized", "type", workloadRunner.Type())
 
 	// Initialize session manager with config

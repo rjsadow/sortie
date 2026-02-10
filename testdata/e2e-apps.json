@@ -1,0 +1,21 @@
+{
+  "applications": [
+    {
+      "id": "test-container",
+      "name": "Test Container App",
+      "description": "Container app for E2E testing",
+      "category": "Testing",
+      "launch_type": "container",
+      "container_image": "nginx:latest"
+    },
+    {
+      "id": "test-webproxy",
+      "name": "Test Web Proxy App",
+      "description": "Web proxy app for E2E testing",
+      "category": "Testing",
+      "launch_type": "web_proxy",
+      "container_image": "nginx:latest",
+      "container_port": 80
+    }
+  ]
+}
