@@ -85,19 +85,19 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
 
     if (!session) {
       if (sessionCreationStarted || isLoading) {
-        return { connectionState: 'creating', statusMessage: 'Creating session...' };
+        return { connectionState: 'creating', statusMessage: 'Preparing session...' };
       }
       return { connectionState: 'idle', statusMessage: '' };
     }
 
     switch (session.status) {
       case 'creating':
-        return { connectionState: 'waiting', statusMessage: 'Starting container...' };
+        return { connectionState: 'waiting', statusMessage: 'Launching application...' };
       case 'running':
         if (session.websocket_url || session.guacamole_url || session.proxy_url) {
           return { connectionState: 'connecting', statusMessage: 'Connecting to display...' };
         }
-        return { connectionState: 'waiting', statusMessage: 'Waiting for container...' };
+        return { connectionState: 'waiting', statusMessage: 'Preparing display...' };
       case 'failed':
         return { connectionState: 'error', statusMessage: error || 'Session failed to start' };
       case 'stopped':
@@ -133,9 +133,9 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
   return (
     <div className={`fixed inset-0 z-50 flex flex-col ${bgColor}`}>
       {/* Header - 48px */}
-      <header className={`flex-shrink-0 h-12 flex items-center justify-between px-4 ${headerBgColor} border-b ${borderColor}`}>
+      <header className={`flex-shrink-0 h-12 flex items-center justify-between px-4 ${headerBgColor} border-b ${borderColor} relative`}>
         {/* Left side - Back button and app info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 z-10">
           <button
             onClick={handleClose}
             className={`flex items-center gap-1 px-2 py-1 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
@@ -167,7 +167,8 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
           </div>
         </div>
 
-        {/* Center - Connection status */}
+        {/* Center - Connection status (absolutely positioned for true centering) */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="flex items-center gap-2">
           {connectionState === 'connected' ? (
             <>
@@ -189,9 +190,10 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
             </>
           )}
         </div>
+        </div>
 
         {/* Right side - Close button */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 z-10">
           <button
             onClick={handleClose}
             className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}

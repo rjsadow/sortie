@@ -40,7 +40,7 @@ test.describe('Sessions', () => {
     // violation since status text appears in both the header and the center overlay)
     const banner = page.getByRole('banner');
     await expect(
-      banner.getByText('Creating session...').or(banner.getByText('Starting container...')),
+      banner.getByText('Prepaing session...').or(banner.getByText('Launching application...')),
     ).toBeVisible({ timeout: 5_000 });
 
     // Wait for session to progress past creating. The banner shows statusMessage
@@ -49,7 +49,7 @@ test.describe('Sessions', () => {
     await expect(
       banner
         .getByText('Connecting to display...')
-        .or(banner.getByText('Waiting for container...'))
+        .or(banner.getByText('Preparing display...'))
         .or(banner.getByText('Connection error'))
         .or(banner.getByText('Connecting...'))
         .or(banner.getByText('Error')),
@@ -188,7 +188,7 @@ test.describe('Sessions', () => {
     await expect(
       banner
         .getByText('Connecting to display...')
-        .or(banner.getByText('Waiting for container...'))
+        .or(banner.getByText('Preparing display...'))
         .or(banner.getByText('Connection error'))
         .or(banner.getByText('Connecting...'))
         .or(banner.getByText('Error')),
