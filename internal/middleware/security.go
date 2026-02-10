@@ -22,14 +22,15 @@ func SecurityHeaders(next http.Handler) http.Handler {
 
 		// Content Security Policy
 		// - default-src 'self': Only allow resources from same origin
-		// - script-src 'self': Only allow scripts from same origin
+		// - script-src 'self' 'unsafe-inline': Allow scripts from same origin + inline
+		//   (VitePress docs use inline scripts for dark mode/platform detection)
 		// - style-src 'self' 'unsafe-inline': Allow inline styles for UI frameworks
 		// - img-src 'self' data: https:: Allow images from self, data URIs, and HTTPS sources
 		// - connect-src 'self' ws: wss:: Allow API calls and WebSocket connections
 		// - frame-ancestors 'none': Prevent framing (redundant with X-Frame-Options but more modern)
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; "+
-				"script-src 'self'; "+
+				"script-src 'self' 'unsafe-inline'; "+
 				"style-src 'self' 'unsafe-inline'; "+
 				"img-src 'self' data: https:; "+
 				"connect-src 'self' ws: wss:; "+
