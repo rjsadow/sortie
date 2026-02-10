@@ -30,26 +30,37 @@ test.describe('Dashboard', () => {
 
   test('displays app cards', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     for (const app of TEST_APPS) {
       await expect(page.getByText(app.name)).toBeVisible();
     }
   });
 
-  test('filters apps by search', async ({ page }) => {
+  test('filters apps by search via command palette', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
-    await page.getByPlaceholder('Search applications...').fill('App One');
-    await expect(page.getByText('Test App One')).toBeVisible();
-    await expect(page.getByText('Test App Two')).not.toBeVisible();
-    await expect(page.getByText('Test App Three')).not.toBeVisible();
+    // Open command palette with keyboard shortcut
+    await page.keyboard.press('Control+k');
+    const palette = page.locator('[role="listbox"]');
+    await expect(palette).toBeVisible();
+
+    // Type search query
+    await page.getByPlaceholder('Search apps and actions...').fill('App One');
+
+    // Only matching app should appear in palette results
+    await expect(palette.getByText('Test App One')).toBeVisible();
+    await expect(palette.getByText('Test App Two')).not.toBeVisible();
+    await expect(palette.getByText('Test App Three')).not.toBeVisible();
+
+    // Close palette
+    await page.keyboard.press('Escape');
   });
 
   test('filters apps by category', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // Click the Productivity category filter pill (rounded-full buttons)
     await page.locator('button.rounded-full', { hasText: /Productivity/ }).click();
@@ -82,9 +93,16 @@ test.describe('Dashboard', () => {
 
   test('shows empty state for unmatched search', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
-    await page.getByPlaceholder('Search applications...').fill('xyznonexistent');
-    await expect(page.getByText('No applications found')).toBeVisible();
+    // Open command palette
+    await page.keyboard.press('Control+k');
+    await expect(page.getByPlaceholder('Search apps and actions...')).toBeVisible();
+
+    await page.getByPlaceholder('Search apps and actions...').fill('xyznonexistent');
+    await expect(page.getByText('No results found')).toBeVisible();
+
+    // Close palette
+    await page.keyboard.press('Escape');
   });
 });

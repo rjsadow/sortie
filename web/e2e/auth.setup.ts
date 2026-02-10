@@ -11,7 +11,7 @@ setup('authenticate as admin', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign In' }).click();
 
   // Wait for dashboard to load
-  await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+  await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
   // Save signed-in state
   await page.context().storageState({ path: ADMIN_FILE });

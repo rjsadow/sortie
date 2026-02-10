@@ -3,16 +3,21 @@ import { test, expect } from '@playwright/test';
 test.describe('Admin Panel', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
   });
 
+  const openAdminPanel = async (page: import('@playwright/test').Page) => {
+    await page.getByLabel('User menu').click();
+    await page.getByRole('button', { name: 'Admin Panel' }).click();
+  };
+
   test('opens admin panel', async ({ page }) => {
-    await page.getByRole('button', { name: /Admin settings/i }).click();
+    await openAdminPanel(page);
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
   });
 
   test('shows all five tabs', async ({ page }) => {
-    await page.getByRole('button', { name: /Admin settings/i }).click();
+    await openAdminPanel(page);
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
 
     for (const tab of ['Settings', 'Users', 'Apps', 'Templates', 'Sessions']) {
@@ -21,7 +26,7 @@ test.describe('Admin Panel', () => {
   });
 
   test('switches between tabs', async ({ page }) => {
-    await page.getByRole('button', { name: /Admin settings/i }).click();
+    await openAdminPanel(page);
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
 
     // Click Users tab
@@ -45,7 +50,7 @@ test.describe('Admin Panel', () => {
     // Auto-accept confirmation dialogs for delete operations
     page.on('dialog', (dialog) => dialog.accept());
 
-    await page.getByRole('button', { name: /Admin settings/i }).click();
+    await openAdminPanel(page);
     await page.getByRole('button', { name: 'Users', exact: true }).click();
 
     // Open create user form
@@ -75,7 +80,7 @@ test.describe('Admin Panel', () => {
     // Auto-accept confirmation dialogs for delete operations
     page.on('dialog', (dialog) => dialog.accept());
 
-    await page.getByRole('button', { name: /Admin settings/i }).click();
+    await openAdminPanel(page);
     await page.getByRole('button', { name: 'Apps', exact: true }).click();
 
     // Open create app form
@@ -105,7 +110,7 @@ test.describe('Admin Panel', () => {
   });
 
   test('closes admin panel', async ({ page }) => {
-    await page.getByRole('button', { name: /Admin settings/i }).click();
+    await openAdminPanel(page);
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
 
     // Close via the X button (first SVG close button in the panel)
