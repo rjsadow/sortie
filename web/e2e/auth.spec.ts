@@ -77,7 +77,7 @@ test.describe('Authentication', () => {
     await expect(page.getByText('Sign in to access your applications')).toBeVisible();
   });
 
-  test('registers a new user and auto-logs in', async ({ page, request }) => {
+  test('registers a new user and auto-logs in', async ({ page }) => {
     const username = `testuser_${Date.now()}`;
 
     await page.goto('/');

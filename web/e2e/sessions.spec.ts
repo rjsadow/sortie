@@ -174,7 +174,6 @@ test.describe('Sessions', () => {
 
   test('closes session page with back button and auto-terminates', async ({
     page,
-    request,
   }) => {
     await page.goto('/');
     await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
