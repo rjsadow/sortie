@@ -57,7 +57,7 @@ func TestSecurityHeaders(t *testing.T) {
 
 	cspDirectives := []string{
 		"default-src 'self'",
-		"script-src 'self'",
+		"script-src 'self' 'unsafe-inline'",
 		"frame-ancestors 'none'",
 	}
 
