@@ -31,7 +31,7 @@ test.describe('Sessions', () => {
 
   test('launches a container session and shows status transitions', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // Click the container app card
     await page.getByText('Test Container App').click();
@@ -57,7 +57,7 @@ test.describe('Sessions', () => {
 
     // Go back to dashboard
     await page.getByLabel('Back to dashboard').click();
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
   });
 
   test('shows session in session manager after launch', async ({ page, request }) => {
@@ -68,7 +68,7 @@ test.describe('Sessions', () => {
     await waitForSessionRunning(request, token, session.id);
 
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // Open session manager
     await page.getByLabel('Manage sessions').click();
@@ -94,7 +94,7 @@ test.describe('Sessions', () => {
     await waitForSessionRunning(request, token, session.id);
 
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // Open session manager
     await page.getByLabel('Manage sessions').click();
@@ -120,10 +120,11 @@ test.describe('Sessions', () => {
     await waitForSessionRunning(request, token, session.id);
 
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
-    // Open admin panel
-    await page.getByRole('button', { name: /Admin settings/i }).click();
+    // Open admin panel via user menu
+    await page.getByLabel('User menu').click();
+    await page.getByRole('button', { name: 'Admin Panel' }).click();
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
 
     // Click Sessions tab
@@ -153,7 +154,7 @@ test.describe('Sessions', () => {
     await waitForSessionRunning(request, token, session.id);
 
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // The sessions button should show a green badge with a numeric count.
     // Note: parallel browser workers share the server, so the count may be > 1.
@@ -166,7 +167,7 @@ test.describe('Sessions', () => {
 
     // Reload to see updated state
     await page.reload();
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // Badge count should decrease (may still be visible if other browser workers have sessions)
     // Just verify the page loaded correctly after termination
@@ -176,7 +177,7 @@ test.describe('Sessions', () => {
     page,
   }) => {
     await page.goto('/');
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // Click the container app card to open session page
     await page.getByText('Test Container App').click();
@@ -196,7 +197,7 @@ test.describe('Sessions', () => {
 
     // Click back to dashboard (this auto-terminates the session)
     await page.getByLabel('Back to dashboard').click();
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
     // Verify we returned to the dashboard successfully.
     // The afterEach cleanup handles any sessions not auto-terminated.

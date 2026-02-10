@@ -16,13 +16,15 @@ import {
   isAuthenticated,
   fetchWithAuth
 } from './services/auth';
+import { CommandPalette } from './components/CommandPalette';
+import { UserMenu } from './components/UserMenu';
 import sortieIconWhite from './assets/sortie-icon-white.svg';
 
 function App() {
   const [user, setUser] = useState<User | null>(() => getStoredUser());
   const [authLoading, setAuthLoading] = useState(true);
   const [apps, setApps] = useState<Application[]>([]);
-  const [search, setSearch] = useState('');
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem('sortie-theme');
@@ -144,16 +146,7 @@ function App() {
   const allCategories = [...new Set(apps.map((app) => app.category))].sort();
 
   const filteredApps = apps.filter((app) => {
-    // First apply search filter
-    const matchesSearch =
-      app.name.toLowerCase().includes(search.toLowerCase()) ||
-      app.description.toLowerCase().includes(search.toLowerCase()) ||
-      app.category.toLowerCase().includes(search.toLowerCase());
-
-    // Then apply category filter
-    const matchesCategory = selectedCategory === null || app.category === selectedCategory;
-
-    return matchesSearch && matchesCategory;
+    return selectedCategory === null || app.category === selectedCategory;
   });
 
   const categories = [...new Set(filteredApps.map((app) => app.category))];
@@ -206,6 +199,14 @@ function App() {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // Cmd/Ctrl+K toggles command palette
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      if (isCommandPaletteOpen) return;
       if (visibleApps.length === 0) return;
 
       const columnsMap: Record<string, number> = {
@@ -267,7 +268,7 @@ function App() {
           break;
       }
     },
-    [visibleApps, focusedIndex]
+    [visibleApps, focusedIndex, isCommandPaletteOpen]
   );
 
   useEffect(() => {
@@ -281,10 +282,10 @@ function App() {
     }
   }, [focusedIndex]);
 
-  // Reset focus when search or category filter changes
+  // Reset focus when category filter changes
   useEffect(() => {
     setFocusedIndex(-1);
-  }, [search, selectedCategory]);
+  }, [selectedCategory]);
 
   const handleLogin = (loggedInUser: User) => {
     setStoredUser(loggedInUser);
@@ -375,166 +376,83 @@ function App() {
     <div className="min-h-screen bg-gradient-to-b from-gray-100 via-gray-50 to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950 transition-colors flex flex-col">
       {/* Header */}
       <header className="bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-primary-light text-white shadow-lg sticky top-0 z-30 border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between">
+            {/* Logo */}
             <div className="flex items-center gap-3">
-              <img src={sortieIconWhite} alt="Sortie" className="w-10 h-10" />
-              <h1 className="text-2xl font-bold">Sortie</h1>
+              <img src={sortieIconWhite} alt="Sortie" className="w-9 h-9" />
+              <h1 className="text-xl font-bold">Sortie</h1>
             </div>
+
+            {/* Right side controls */}
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search applications..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full sm:w-80 px-4 py-2 pl-10 rounded-xl bg-white/90 backdrop-blur-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-accent shadow-sm border border-white/50"
-                />
-                <svg
-                  className="absolute left-3 top-2.5 w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
-              {/* Docs button */}
-              <a
-                href="/docs/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
-                aria-label="Documentation"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span className="hidden sm:inline">Docs</span>
-              </a>
-              {/* Templates button */}
+              {/* Search hint — opens command palette */}
               <button
-                onClick={() => setIsTemplateBrowserOpen(true)}
-                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
-                aria-label="Browse templates"
+                onClick={() => setIsCommandPaletteOpen(true)}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/15 hover:border-white/25 transition-colors text-sm text-white/70 hover:text-white/90"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                  />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                <span className="hidden sm:inline">Templates</span>
+                <span>Search...</span>
+                <kbd className="ml-1 px-1.5 py-0.5 text-[10px] font-medium bg-white/10 rounded border border-white/15">
+                  {navigator.platform?.includes('Mac') ? '\u2318K' : 'Ctrl+K'}
+                </kbd>
               </button>
+
               {/* Sessions button */}
               <button
                 onClick={() => setShowSessionManager(true)}
-                className="relative px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                className="relative px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/15 hover:border-white/25 transition-colors text-sm font-medium flex items-center gap-2"
                 aria-label="Manage sessions"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                  />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
                 <span className="hidden sm:inline">Sessions</span>
                 {activeSessionCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-green-500 text-white text-xs font-bold px-1">
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-green-500 text-white text-[10px] font-bold px-1 shadow-sm">
                     {activeSessionCount}
                   </span>
                 )}
               </button>
-              {/* Audit Log button (only for admins) */}
-              {isAdmin && (
-                <button
-                  onClick={() => setShowAuditLog(true)}
-                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
-                  aria-label="Audit log"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span className="hidden sm:inline">Audit</span>
-                </button>
-              )}
-              {/* Admin button (only for admins) */}
-              {isAdmin && (
-                <button
-                  onClick={() => setShowAdmin(true)}
-                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
-                  aria-label="Admin settings"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span className="hidden sm:inline">Admin</span>
-                </button>
-              )}
-              {/* Dark mode toggle */}
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors"
-                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {darkMode ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                    />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                    />
-                  </svg>
-                )}
-              </button>
-              {/* User menu */}
-              <div className="flex items-center gap-2 pl-2 border-l border-white/20">
-                <span className="text-sm hidden sm:inline">{user.displayName || user.username}</span>
-                <button
-                  onClick={handleLogout}
-                  className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors"
-                  aria-label="Sign out"
-                  title="Sign out"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                    />
-                  </svg>
-                </button>
-              </div>
+
+              {/* Avatar / User Menu */}
+              <UserMenu
+                user={user}
+                isAdmin={isAdmin}
+                darkMode={darkMode}
+                onToggleDarkMode={() => setDarkMode(!darkMode)}
+                onOpenDocs={() => window.open('/docs/', '_blank', 'noopener,noreferrer')}
+                onOpenAdmin={() => setShowAdmin(true)}
+                onOpenAuditLog={() => setShowAuditLog(true)}
+                onLogout={handleLogout}
+              />
             </div>
           </div>
         </div>
       </header>
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        apps={apps}
+        isAdmin={isAdmin}
+        darkMode={darkMode}
+        onLaunchApp={(app) => {
+          trackRecentApp(app.id);
+          if (app.launch_type === 'container' || app.launch_type === 'web_proxy') {
+            setSelectedContainerApp(app);
+          } else {
+            window.open(app.url, '_blank', 'noopener,noreferrer');
+          }
+        }}
+        onOpenTemplates={() => setIsTemplateBrowserOpen(true)}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onOpenAdmin={() => setShowAdmin(true)}
+        onOpenAuditLog={() => setShowAuditLog(true)}
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 flex-grow w-full animate-fade-in-up">

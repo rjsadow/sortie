@@ -17,9 +17,10 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Sign In' }).click();
 
     // Should reach the dashboard
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
-    // Admin should see admin button
-    await expect(page.getByRole('button', { name: /Admin settings/i })).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
+    // Admin should see admin items in user menu
+    await page.getByLabel('User menu').click();
+    await expect(page.getByRole('button', { name: 'Admin Panel' })).toBeVisible();
   });
 
   test('shows error for invalid credentials', async ({ page }) => {
@@ -53,10 +54,11 @@ test.describe('Authentication', () => {
     await page.getByLabel('Username').fill('admin');
     await page.getByLabel('Password').fill('admin123');
     await page.getByRole('button', { name: 'Sign In' }).click();
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
-    // Log out
-    await page.getByRole('button', { name: /Sign out/i }).click();
+    // Log out via user menu
+    await page.getByLabel('User menu').click();
+    await page.getByRole('button', { name: /Sign Out/i }).click();
 
     // Should be back at login
     await expect(page.getByText('Sign in to access your applications')).toBeVisible();
@@ -90,6 +92,6 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Create Account' }).click();
 
     // Should be auto-logged in to dashboard
-    await expect(page.getByPlaceholder('Search applications...')).toBeVisible();
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
   });
 });
