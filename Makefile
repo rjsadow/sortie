@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend dev-docs frontend backend deps docs-deps docs kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all
+.PHONY: all build clean dev dev-backend dev-frontend dev-docs frontend backend deps docs-deps docs kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all playwright-install test-playwright test-playwright-ui test-playwright-report
 
 all: build
 
@@ -123,3 +123,16 @@ migrate-down:
 
 migrate-status:
 	go run ./cmd/migrate status
+
+# Playwright E2E tests
+playwright-install:
+	web/node_modules/.bin/playwright install --with-deps chromium firefox webkit
+
+test-playwright: build
+	web/node_modules/.bin/playwright test --config web/playwright.config.ts
+
+test-playwright-ui: build
+	web/node_modules/.bin/playwright test --config web/playwright.config.ts --ui
+
+test-playwright-report:
+	web/node_modules/.bin/playwright show-report web/playwright-report
