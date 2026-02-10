@@ -48,7 +48,7 @@ function SessionCard({
   const mutedText = darkMode ? 'text-gray-400' : 'text-gray-600';
 
   return (
-    <div className={`${cardBg} rounded-lg border ${borderColor} p-4`}>
+    <div className={`${cardBg} rounded-xl border ${borderColor} p-4`}>
       <div className="flex items-start gap-3">
         {/* Status indicator */}
         <div className="flex-shrink-0 mt-1">
@@ -84,14 +84,14 @@ function SessionCard({
         {canReconnect ? (
           <button
             onClick={onReconnect}
-            className="flex-1 px-3 py-2 text-sm font-medium text-white bg-brand-accent hover:bg-brand-primary rounded-lg transition-colors"
+            className="flex-1 px-3 py-2 text-sm font-medium text-white bg-brand-accent hover:bg-brand-primary rounded-xl transition-colors"
           >
             Reconnect
           </button>
         ) : isCreating ? (
           <button
             disabled
-            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg ${
+            className={`flex-1 px-3 py-2 text-sm font-medium rounded-xl ${
               darkMode ? 'bg-gray-700 text-gray-500' : 'bg-gray-100 text-gray-400'
             } cursor-not-allowed`}
           >
@@ -100,7 +100,7 @@ function SessionCard({
         ) : null}
         <button
           onClick={onTerminate}
-          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+          className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
             darkMode
               ? 'bg-gray-700 text-red-400 hover:bg-red-900/30'
               : 'bg-gray-100 text-red-600 hover:bg-red-50'
@@ -167,14 +167,14 @@ export function SessionManager({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 z-40"
+        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Slide-over panel */}
       <div
-        className={`fixed inset-y-0 right-0 w-full max-w-md ${bgColor} shadow-xl z-50 flex flex-col`}
+        className={`fixed inset-y-0 right-0 w-full max-w-md ${bgColor} shadow-xl z-50 flex flex-col backdrop-blur-xl`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="session-manager-title"

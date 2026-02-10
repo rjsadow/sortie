@@ -74,15 +74,35 @@ export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps)
     }
   };
 
-  const bgColor = darkMode ? 'bg-gray-900' : 'bg-gray-50';
-  const cardBg = darkMode ? 'bg-gray-800' : 'bg-white';
   const textColor = darkMode ? 'text-gray-100' : 'text-gray-900';
   const inputBg = darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300';
   const inputText = darkMode ? 'text-gray-100 placeholder-gray-400' : 'text-gray-900 placeholder-gray-500';
 
   return (
-    <div className={`min-h-screen flex items-center justify-center ${bgColor} px-4`}>
-      <div className={`w-full max-w-md ${cardBg} rounded-xl shadow-lg p-8`}>
+    <div className="min-h-screen flex items-center justify-center bg-brand-primary px-4 relative overflow-hidden">
+      {/* Aurora background ribbons */}
+      <div
+        className="absolute top-[-20%] left-[-25%] w-[900px] h-[350px] rounded-full bg-brand-accent/40 blur-[80px]"
+        style={{ animation: 'aurora-1 25s ease-in-out infinite' }}
+      />
+      <div
+        className="absolute top-[5%] right-[-20%] w-[800px] h-[300px] rounded-full bg-aurora-teal/50 blur-[70px]"
+        style={{ animation: 'aurora-2 30s ease-in-out infinite' }}
+      />
+      <div
+        className="absolute bottom-[-15%] left-[-15%] w-[1000px] h-[320px] rounded-full bg-aurora-sage/35 blur-[90px]"
+        style={{ animation: 'aurora-3 28s ease-in-out infinite' }}
+      />
+      <div
+        className="absolute top-[40%] left-[20%] w-[600px] h-[250px] rounded-full bg-brand-primary-light/50 blur-[60px]"
+        style={{ animation: 'aurora-4 22s ease-in-out infinite' }}
+      />
+      <div
+        className="absolute top-[15%] left-[40%] w-[500px] h-[200px] rounded-full bg-brand-accent-muted/40 blur-[70px]"
+        style={{ animation: 'aurora-5 26s ease-in-out infinite' }}
+      />
+
+      <div className={`relative w-full max-w-md rounded-2xl shadow-2xl p-8 backdrop-blur-xl border border-white/15 ${darkMode ? 'bg-gray-800/50' : 'bg-white/50'}`}>
         {/* Logo */}
         <div className="flex justify-center mb-6">
           <img src={sortieIconFull} alt="Sortie" className="w-16 h-16" />
@@ -105,7 +125,7 @@ export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps)
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
+              className={`w-full px-4 py-2 rounded-lg border shadow-sm ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
               placeholder="Choose a username"
               autoComplete="username"
               autoFocus
@@ -121,7 +141,7 @@ export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps)
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
+              className={`w-full px-4 py-2 rounded-lg border shadow-sm ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
               placeholder="your@email.com"
               autoComplete="email"
             />
@@ -136,7 +156,7 @@ export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps)
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
+              className={`w-full px-4 py-2 rounded-lg border shadow-sm ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
               placeholder="Your display name (optional)"
             />
           </div>
@@ -150,7 +170,7 @@ export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps)
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
+              className={`w-full px-4 py-2 rounded-lg border shadow-sm ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
               placeholder="At least 6 characters"
               autoComplete="new-password"
             />
@@ -165,7 +185,7 @@ export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps)
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className={`w-full px-4 py-2 rounded-lg border ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
+              className={`w-full px-4 py-2 rounded-lg border shadow-sm ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-brand-accent`}
               placeholder="Confirm your password"
               autoComplete="new-password"
             />
@@ -178,7 +198,7 @@ export function Register({ onRegister, onBackToLogin, darkMode }: RegisterProps)
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 px-4 bg-brand-accent text-white font-medium rounded-lg hover:bg-brand-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2 px-4 bg-brand-accent text-white font-medium rounded-lg hover:bg-brand-primary transition-colors shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Creating account...' : 'Create Account'}
           </button>

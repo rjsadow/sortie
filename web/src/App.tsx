@@ -372,10 +372,10 @@ function App() {
   let appIndex = 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-gray-100 via-gray-50 to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950 transition-colors flex flex-col">
       {/* Header */}
-      <header className="bg-brand-primary text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      <header className="bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-primary-light text-white shadow-lg sticky top-0 z-30 border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <img src={sortieIconWhite} alt="Sortie" className="w-10 h-10" />
@@ -388,7 +388,7 @@ function App() {
                   placeholder="Search applications..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full sm:w-80 px-4 py-2 pl-10 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-accent"
+                  className="w-full sm:w-80 px-4 py-2 pl-10 rounded-xl bg-white/90 backdrop-blur-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-accent shadow-sm border border-white/50"
                 />
                 <svg
                   className="absolute left-3 top-2.5 w-5 h-5 text-gray-400"
@@ -409,7 +409,7 @@ function App() {
                 href="/docs/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
                 aria-label="Documentation"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -420,7 +420,7 @@ function App() {
               {/* Templates button */}
               <button
                 onClick={() => setIsTemplateBrowserOpen(true)}
-                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
                 aria-label="Browse templates"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -436,7 +436,7 @@ function App() {
               {/* Sessions button */}
               <button
                 onClick={() => setShowSessionManager(true)}
-                className="relative px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                className="relative px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
                 aria-label="Manage sessions"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -458,7 +458,7 @@ function App() {
               {isAdmin && (
                 <button
                   onClick={() => setShowAuditLog(true)}
-                  className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
                   aria-label="Audit log"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -471,7 +471,7 @@ function App() {
               {isAdmin && (
                 <button
                   onClick={() => setShowAdmin(true)}
-                  className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium flex items-center gap-2"
+                  className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors text-sm font-medium flex items-center gap-2"
                   aria-label="Admin settings"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -489,7 +489,7 @@ function App() {
               {/* Dark mode toggle */}
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors"
                 aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {darkMode ? (
@@ -517,7 +517,7 @@ function App() {
                 <span className="text-sm hidden sm:inline">{user.displayName || user.username}</span>
                 <button
                   onClick={handleLogout}
-                  className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                  className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-colors"
                   aria-label="Sign out"
                   title="Sign out"
                 >
@@ -537,7 +537,7 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 flex-grow w-full">
+      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 flex-grow w-full animate-fade-in-up">
         {/* Keyboard hint - shown after first arrow key press */}
         {showKeyboardHint && (
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 animate-in fade-in">
@@ -553,8 +553,8 @@ function App() {
                 onClick={() => setSelectedCategory(null)}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                   selectedCategory === null
-                    ? 'bg-brand-accent text-white shadow-md'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    ? 'bg-brand-accent text-white shadow-lg'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600'
                 }`}
               >
                 All
@@ -568,8 +568,8 @@ function App() {
                     onClick={() => setSelectedCategory(category)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       selectedCategory === category
-                        ? 'bg-brand-accent text-white shadow-md'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        ? 'bg-brand-accent text-white shadow-lg'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600'
                     }`}
                   >
                     {category}
@@ -612,8 +612,8 @@ function App() {
               const favCategories = new Set(favoriteApps.map(a => a.category));
               return favCategories.size > 1 || [...favCategories].some(c => collapsedCategories.has(c));
             })() && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-yellow-200 dark:border-yellow-700 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20">
+              <div className="bg-white dark:bg-gray-800/80 rounded-xl shadow-md border border-yellow-200/80 dark:border-yellow-700/50 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-yellow-50 to-yellow-50/50 dark:from-yellow-900/20 dark:to-yellow-900/10">
                   <svg className="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
@@ -624,10 +624,10 @@ function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {favoriteApps.map((app) => {
                       const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
-                      const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-accent p-4 hover:shadow-md transition-all duration-200 text-left w-full";
+                      const cardClassName = "group bg-gradient-to-br from-gray-50 to-white dark:from-gray-700 dark:to-gray-700/80 rounded-xl border border-gray-200 dark:border-gray-600 hover:border-brand-accent p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-left w-full";
                       const cardContent = (
                         <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
+                          <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-xl flex items-center justify-center overflow-hidden relative">
                             <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -665,8 +665,8 @@ function App() {
               const recentCategories = new Set(recentAppsList.map(a => a.category));
               return recentCategories.size > 1 || [...recentCategories].some(c => collapsedCategories.has(c));
             })() && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-blue-200 dark:border-blue-700 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20">
+              <div className="bg-white dark:bg-gray-800/80 rounded-xl shadow-md border border-blue-200/80 dark:border-blue-700/50 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-50 to-blue-50/50 dark:from-blue-900/20 dark:to-blue-900/10">
                   <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -678,10 +678,10 @@ function App() {
                     {recentAppsList.map((app) => {
                       const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
                       const isFavorited = favorites.has(app.id);
-                      const cardClassName = "group bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-accent p-4 hover:shadow-md transition-all duration-200 text-left w-full";
+                      const cardClassName = "group bg-gradient-to-br from-gray-50 to-white dark:from-gray-700 dark:to-gray-700/80 rounded-xl border border-gray-200 dark:border-gray-600 hover:border-brand-accent p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-left w-full";
                       const cardContent = (
                         <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
+                          <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-xl flex items-center justify-center overflow-hidden relative">
                             <img src={app.icon} alt={`${app.name} icon`} className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23636A51"><rect width="24" height="24" rx="4"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="12">' + app.name.charAt(0) + '</text></svg>'; }} />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -719,11 +719,11 @@ function App() {
               const isCollapsed = collapsedCategories.has(category);
 
               return (
-                <div key={category} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div key={category} className="bg-white dark:bg-gray-800/80 rounded-xl shadow-md border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
                   {/* Category header - clickable to collapse */}
                   <button
                     onClick={() => toggleCategory(category)}
-                    className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-700 dark:to-gray-700/80 hover:from-gray-100 hover:to-gray-100 dark:hover:from-gray-600 dark:hover:to-gray-600/80 transition-all"
                   >
                     <div className="flex items-center gap-2">
                       <svg
@@ -734,7 +734,7 @@ function App() {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
-                      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{category}</h2>
+                      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">{category}</h2>
                       <span className="text-sm text-gray-500 dark:text-gray-400">({categoryApps.length})</span>
                     </div>
                   </button>
@@ -746,7 +746,7 @@ function App() {
                         {categoryApps.map((app) => {
                           const currentIndex = appIndex++;
                           const isContainerApp = app.launch_type === 'container' || app.launch_type === 'web_proxy';
-                          const cardClassName = `group bg-gray-50 dark:bg-gray-700 rounded-lg border p-4 hover:shadow-md transition-all duration-200 text-left w-full ${
+                          const cardClassName = `group bg-gradient-to-br from-gray-50 to-white dark:from-gray-700 dark:to-gray-700/80 rounded-xl border p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-left w-full ${
                             focusedIndex === currentIndex
                               ? 'ring-2 ring-brand-accent border-brand-accent'
                               : 'border-gray-200 dark:border-gray-600 hover:border-brand-accent'
@@ -755,7 +755,7 @@ function App() {
                           const isFavorited = favorites.has(app.id);
                           const cardContent = (
                             <div className="flex items-start gap-3">
-                              <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-lg flex items-center justify-center overflow-hidden relative">
+                              <div className="flex-shrink-0 w-12 h-12 bg-white dark:bg-gray-600 rounded-xl flex items-center justify-center overflow-hidden relative shadow-sm ring-1 ring-gray-200/50 dark:ring-gray-500/30">
                                 <img
                                   src={app.icon}
                                   alt={`${app.name} icon`}
@@ -855,7 +855,7 @@ function App() {
 
             {/* Getting started prompt for sparse dashboards */}
             {apps.length <= 1 && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center">
+              <div className="bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center">
                 <svg className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
                 </svg>
@@ -865,7 +865,7 @@ function App() {
                 </p>
                 <button
                   onClick={() => setIsTemplateBrowserOpen(true)}
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-accent text-white text-sm font-medium hover:bg-brand-accent/90 transition-colors"
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-accent text-white text-sm font-medium hover:bg-brand-accent/90 transition-colors shadow-md hover:shadow-lg"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
@@ -879,7 +879,7 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto">
+      <footer className="bg-gradient-to-r from-gray-50 via-white to-gray-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-gray-500 dark:text-gray-400">
             Sortie — Your centralized application launcher
