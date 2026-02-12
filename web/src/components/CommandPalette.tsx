@@ -6,6 +6,7 @@ interface CommandPaletteProps {
   onClose: () => void;
   apps: Application[];
   isAdmin: boolean;
+  canAccessAdmin: boolean;
   darkMode: boolean;
   onLaunchApp: (app: Application) => void;
   onOpenTemplates: () => void;
@@ -28,6 +29,7 @@ export function CommandPalette({
   onClose,
   apps,
   isAdmin,
+  canAccessAdmin,
   darkMode,
   onLaunchApp,
   onOpenTemplates,
@@ -127,12 +129,12 @@ export function CommandPalette({
     items.push(...filteredActions);
 
     // Admin section
-    if (isAdmin) {
+    if (canAccessAdmin) {
       const adminItems: PaletteItem[] = [
         {
           id: 'admin-panel',
           label: 'Admin Panel',
-          description: 'Manage users and applications',
+          description: 'Manage categories and applications',
           section: 'Admin',
           icon: (
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,7 +144,10 @@ export function CommandPalette({
           ),
           onSelect: onOpenAdmin,
         },
-        {
+      ];
+
+      if (isAdmin) {
+        adminItems.push({
           id: 'admin-audit',
           label: 'Audit Log',
           description: 'View system audit trail',
@@ -153,8 +158,8 @@ export function CommandPalette({
             </svg>
           ),
           onSelect: onOpenAuditLog,
-        },
-      ];
+        });
+      }
 
       const filteredAdmin = query
         ? adminItems.filter((a) => a.label.toLowerCase().includes(q) || a.description?.toLowerCase().includes(q))
@@ -164,7 +169,7 @@ export function CommandPalette({
     }
 
     return items;
-  }, [query, apps, isAdmin, darkMode, onLaunchApp, onOpenTemplates, onToggleDarkMode, onOpenAdmin, onOpenAuditLog]);
+  }, [query, apps, isAdmin, canAccessAdmin, darkMode, onLaunchApp, onOpenTemplates, onToggleDarkMode, onOpenAdmin, onOpenAuditLog]);
 
   const items = buildItems();
 

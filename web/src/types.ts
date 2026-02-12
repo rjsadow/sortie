@@ -72,6 +72,7 @@ export interface User {
   name?: string;
   displayName?: string;
   roles?: string[];
+  admin_categories?: string[];
 }
 
 export interface AuthResponse {

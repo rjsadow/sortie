@@ -244,6 +244,15 @@ export async function register(
   return data;
 }
 
+// List basic user info (non-admin endpoint, for category admin dropdowns)
+export async function listUsersBasic(): Promise<{ id: string; username: string }[]> {
+  const response = await fetchWithAuth('/api/users');
+  if (!response.ok) {
+    throw new Error('Failed to list users');
+  }
+  return response.json();
+}
+
 // Admin: List all sessions (system-wide)
 export async function listAdminSessions(): Promise<Session[]> {
   const response = await fetchWithAuth('/api/admin/sessions');
