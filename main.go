@@ -61,6 +61,7 @@ func main() {
 	// Initialize Kubernetes configuration (skip when using mock runner)
 	if !*mockRunnerFlag {
 		k8s.Configure(appConfig.Namespace, appConfig.Kubeconfig, appConfig.VNCSidecarImage)
+		k8s.ConfigureBrowserSidecar(appConfig.BrowserSidecarImage)
 		k8s.ConfigureGuacdSidecar(appConfig.GuacdSidecarImage)
 	}
 

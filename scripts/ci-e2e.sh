@@ -70,6 +70,12 @@ setup() {
         kind load docker-image ghcr.io/rjsadow/sortie-browser-sidecar:e2e --name "$CLUSTER_NAME"
     fi
 
+    # Build guacd sidecar
+    if [ -d "${ROOT_DIR}/docker/guacd-sidecar" ]; then
+        docker build -t ghcr.io/rjsadow/sortie-guacd-sidecar:e2e "${ROOT_DIR}/docker/guacd-sidecar"
+        kind load docker-image ghcr.io/rjsadow/sortie-guacd-sidecar:e2e --name "$CLUSTER_NAME"
+    fi
+
     log_info "Deploying Sortie via Helm..."
     helm upgrade --install sortie "${ROOT_DIR}/charts/sortie" \
         --namespace "$NAMESPACE" \
@@ -77,6 +83,9 @@ setup() {
         --set image.repository=ghcr.io/rjsadow/sortie \
         --set image.tag=e2e \
         --set image.pullPolicy=Never \
+        --set vncSidecar.image=ghcr.io/rjsadow/sortie-vnc-sidecar:e2e \
+        --set browserSidecar.image=ghcr.io/rjsadow/sortie-browser-sidecar:e2e \
+        --set guacdSidecar.image=ghcr.io/rjsadow/sortie-guacd-sidecar:e2e \
         --wait --timeout 180s
 
     log_info "Starting port-forward on localhost:${PORT_FORWARD_PORT}..."

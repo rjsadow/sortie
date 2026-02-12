@@ -29,8 +29,9 @@ type Config struct {
 	// Kubernetes configuration
 	Namespace          string
 	Kubeconfig         string
-	VNCSidecarImage    string
-	GuacdSidecarImage  string
+	VNCSidecarImage      string
+	BrowserSidecarImage  string
+	GuacdSidecarImage    string
 
 	// Session configuration
 	SessionTimeout         time.Duration
@@ -117,6 +118,7 @@ const (
 	DefaultTenantName             = "Sortie"
 	DefaultNamespace              = "default"
 	DefaultVNCSidecarImage        = "ghcr.io/rjsadow/sortie-vnc-sidecar:latest"
+	DefaultBrowserSidecarImage    = "ghcr.io/rjsadow/sortie-browser-sidecar:latest"
 	DefaultGuacdSidecarImage      = "guacamole/guacd:1.5.5"
 	DefaultSessionTimeout         = 2 * time.Hour
 	DefaultSessionCleanupInterval = 5 * time.Minute
@@ -156,8 +158,9 @@ func Load() (*Config, error) {
 
 		// Kubernetes defaults
 		Namespace:         DefaultNamespace,
-		VNCSidecarImage:   DefaultVNCSidecarImage,
-		GuacdSidecarImage: DefaultGuacdSidecarImage,
+		VNCSidecarImage:     DefaultVNCSidecarImage,
+		BrowserSidecarImage: DefaultBrowserSidecarImage,
+		GuacdSidecarImage:   DefaultGuacdSidecarImage,
 
 		// Session defaults
 		SessionTimeout:         DefaultSessionTimeout,
@@ -259,6 +262,10 @@ func (c *Config) loadFromEnv() error {
 
 	if v := os.Getenv("SORTIE_VNC_SIDECAR_IMAGE"); v != "" {
 		c.VNCSidecarImage = v
+	}
+
+	if v := os.Getenv("SORTIE_BROWSER_SIDECAR_IMAGE"); v != "" {
+		c.BrowserSidecarImage = v
 	}
 
 	if v := os.Getenv("SORTIE_GUACD_SIDECAR_IMAGE"); v != "" {

@@ -13,4 +13,5 @@ data:
   SORTIE_SESSION_CLEANUP_INTERVAL: {{ .Values.session.cleanupInterval | quote }}
   SORTIE_POD_READY_TIMEOUT: {{ .Values.session.podReadyTimeout | quote }}
   SORTIE_VNC_SIDECAR_IMAGE: {{ .Values.vncSidecar.image | quote }}
+  SORTIE_BROWSER_SIDECAR_IMAGE: {{ .Values.browserSidecar.image | quote }}
   SORTIE_GUACD_SIDECAR_IMAGE: {{ .Values.guacdSidecar.image | quote }}
