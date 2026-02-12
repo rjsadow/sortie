@@ -13,6 +13,10 @@ image:
 vncSidecar:
   image: ghcr.io/rjsadow/sortie-vnc-sidecar:latest
 
+# Browser sidecar image for web_proxy sessions
+browserSidecar:
+  image: ghcr.io/rjsadow/sortie-browser-sidecar:latest
+
 # Guacd sidecar image for Windows RDP sessions
 guacdSidecar:
   image: guacamole/guacd:1.5.5
