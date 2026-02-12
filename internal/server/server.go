@@ -85,6 +85,9 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("/api/admin/tenants", authMiddleware(requireAdmin(http.HandlerFunc(h.handleAdminTenants))))
 	mux.Handle("/api/admin/tenants/", authMiddleware(requireAdmin(http.HandlerFunc(h.handleAdminTenantByID))))
 
+	// User list endpoint (auth-protected, non-admin)
+	mux.Handle("/api/users", authMiddleware(http.HandlerFunc(h.handleUsersList)))
+
 	// Public template endpoints
 	mux.HandleFunc("/api/templates", h.handleTemplates)
 	mux.HandleFunc("/api/templates/", h.handleTemplateByID)

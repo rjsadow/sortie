@@ -258,8 +258,59 @@ func (h *handlers) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up categories this user administers
+	adminCats, _ := h.app.DB.GetCategoriesAdminedByUser(result.User.ID)
+
+	type meResponse struct {
+		ID              string            `json:"id"`
+		Username        string            `json:"username"`
+		Email           string            `json:"email,omitempty"`
+		Name            string            `json:"name,omitempty"`
+		Roles           []string          `json:"roles,omitempty"`
+		Groups          []string          `json:"groups,omitempty"`
+		Metadata        map[string]string `json:"metadata,omitempty"`
+		AdminCategories []string          `json:"admin_categories,omitempty"`
+	}
+
+	resp := meResponse{
+		ID:              result.User.ID,
+		Username:        result.User.Username,
+		Email:           result.User.Email,
+		Name:            result.User.Name,
+		Roles:           result.User.Roles,
+		Groups:          result.User.Groups,
+		Metadata:        result.User.Metadata,
+		AdminCategories: adminCats,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result.User)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *handlers) handleUsersList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	users, err := h.app.DB.ListUsers()
+	if err != nil {
+		http.Error(w, "Failed to list users", http.StatusInternalServerError)
+		return
+	}
+
+	type basicUser struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+	}
+
+	result := make([]basicUser, len(users))
+	for i, u := range users {
+		result[i] = basicUser{ID: u.ID, Username: u.Username}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
 func (h *handlers) isRegistrationAllowed() bool {

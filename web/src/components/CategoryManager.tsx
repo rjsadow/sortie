@@ -11,17 +11,18 @@ import {
   listCategoryApprovedUsers,
   addCategoryApprovedUser,
   removeCategoryApprovedUser,
-  listUsers,
-  type AdminUser,
+  listUsersBasic,
 } from '../services/auth';
 
 interface CategoryManagerProps {
   darkMode: boolean;
+  isSystemAdmin: boolean;
+  adminCategoryIds: string[];
 }
 
-export function CategoryManager({ darkMode }: CategoryManagerProps) {
+export function CategoryManager({ darkMode, isSystemAdmin, adminCategoryIds }: CategoryManagerProps) {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [users, setUsers] = useState<{ id: string; username: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -52,8 +53,9 @@ export function CategoryManager({ darkMode }: CategoryManagerProps) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [catList, userList] = await Promise.all([listCategories(), listUsers()]);
-      setCategories(catList);
+      const [catList, userList] = await Promise.all([listCategories(), listUsersBasic()]);
+      const filtered = isSystemAdmin ? catList : catList.filter((c) => adminCategoryIds.includes(c.id));
+      setCategories(filtered);
       setUsers(userList);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load categories');
@@ -229,12 +231,14 @@ export function CategoryManager({ darkMode }: CategoryManagerProps) {
         <div className={`${cardBg} rounded-lg p-6`}>
           <div className="flex justify-between items-center mb-4">
             <h2 className={`text-lg font-semibold ${textColor}`}>Categories</h2>
-            <button
-              onClick={() => openForm()}
-              className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
-            >
-              Create Category
-            </button>
+            {isSystemAdmin && (
+              <button
+                onClick={() => openForm()}
+                className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
+              >
+                Create Category
+              </button>
+            )}
           </div>
 
           {/* Category Form Modal */}
@@ -318,12 +322,14 @@ export function CategoryManager({ darkMode }: CategoryManagerProps) {
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => handleDelete(cat)}
-                        className="text-red-500 hover:text-red-400 text-sm"
-                      >
-                        Delete
-                      </button>
+                      {isSystemAdmin && (
+                        <button
+                          onClick={() => handleDelete(cat)}
+                          className="text-red-500 hover:text-red-400 text-sm"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

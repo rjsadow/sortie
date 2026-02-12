@@ -302,6 +302,8 @@ function App() {
   };
 
   const isAdmin = user?.roles?.includes('admin') ?? false;
+  const isCategoryAdmin = (user?.admin_categories?.length ?? 0) > 0;
+  const canAccessAdmin = isAdmin || isCategoryAdmin;
 
   const handleLogout = async () => {
     await authLogout();
@@ -421,6 +423,7 @@ function App() {
               <UserMenu
                 user={user}
                 isAdmin={isAdmin}
+                canAccessAdmin={canAccessAdmin}
                 darkMode={darkMode}
                 onToggleDarkMode={() => setDarkMode(!darkMode)}
                 onOpenDocs={() => window.open('/docs/', '_blank', 'noopener,noreferrer')}
@@ -439,6 +442,7 @@ function App() {
         onClose={() => setIsCommandPaletteOpen(false)}
         apps={apps}
         isAdmin={isAdmin}
+        canAccessAdmin={canAccessAdmin}
         darkMode={darkMode}
         onLaunchApp={(app) => {
           trackRecentApp(app.id);
@@ -814,10 +818,12 @@ function App() {
       />
 
       {/* Admin Panel */}
-      {showAdmin && isAdmin && (
+      {showAdmin && canAccessAdmin && (
         <Admin
           darkMode={darkMode}
           onClose={() => setShowAdmin(false)}
+          isSystemAdmin={isAdmin}
+          adminCategoryIds={user?.admin_categories ?? []}
         />
       )}
 

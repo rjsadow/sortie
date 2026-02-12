@@ -26,6 +26,8 @@ import { CategoryManager } from './CategoryManager';
 interface AdminProps {
   darkMode: boolean;
   onClose: () => void;
+  isSystemAdmin: boolean;
+  adminCategoryIds: string[];
 }
 
 const TEMPLATE_CATEGORIES = [
@@ -99,8 +101,10 @@ const emptyApp: Application = {
   },
 };
 
-export function Admin({ darkMode, onClose }: AdminProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'categories' | 'apps' | 'templates' | 'sessions'>('settings');
+export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: AdminProps) {
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'categories' | 'apps' | 'templates' | 'sessions'>(
+    isSystemAdmin ? 'settings' : 'categories'
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -149,20 +153,33 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     setLoading(true);
     setError('');
     try {
-      const [settings, userList, catList, appList, templateList, sessionList] = await Promise.all([
-        getAdminSettings(),
-        listUsers(),
-        listCategories(),
-        listApps(),
-        listTemplates(),
-        listAdminSessions(),
-      ]);
-      setAllowRegistration(settings.allow_registration === true || settings.allow_registration === 'true');
-      setUsers(userList);
-      setCategories(catList);
-      setApps(appList);
-      setTemplates(templateList);
-      setAdminSessions(sessionList);
+      if (isSystemAdmin) {
+        const [settings, userList, catList, appList, templateList, sessionList] = await Promise.all([
+          getAdminSettings(),
+          listUsers(),
+          listCategories(),
+          listApps(),
+          listTemplates(),
+          listAdminSessions(),
+        ]);
+        setAllowRegistration(settings.allow_registration === true || settings.allow_registration === 'true');
+        setUsers(userList);
+        setCategories(catList);
+        setApps(appList);
+        setTemplates(templateList);
+        setAdminSessions(sessionList);
+      } else {
+        // Category admin: only load categories and apps (non-admin endpoints)
+        const [catList, appList] = await Promise.all([
+          listCategories(),
+          listApps(),
+        ]);
+        // Filter to only categories this user administers
+        const myCats = catList.filter((c) => adminCategoryIds.includes(c.id));
+        const myCatNames = new Set(myCats.map((c) => c.name));
+        setCategories(myCats);
+        setApps(appList.filter((a) => myCatNames.has(a.category)));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -452,22 +469,26 @@ export function Admin({ darkMode, onClose }: AdminProps) {
 
         {/* Tabs */}
         <div className="flex space-x-4 mb-6 border-b border-gray-700">
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`pb-2 px-1 ${activeTab === 'settings'
-              ? 'border-b-2 border-brand-accent text-brand-accent'
-              : mutedText}`}
-          >
-            Settings
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`pb-2 px-1 ${activeTab === 'users'
-              ? 'border-b-2 border-brand-accent text-brand-accent'
-              : mutedText}`}
-          >
-            Users
-          </button>
+          {isSystemAdmin && (
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`pb-2 px-1 ${activeTab === 'settings'
+                ? 'border-b-2 border-brand-accent text-brand-accent'
+                : mutedText}`}
+            >
+              Settings
+            </button>
+          )}
+          {isSystemAdmin && (
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`pb-2 px-1 ${activeTab === 'users'
+                ? 'border-b-2 border-brand-accent text-brand-accent'
+                : mutedText}`}
+            >
+              Users
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('categories')}
             className={`pb-2 px-1 ${activeTab === 'categories'
@@ -484,22 +505,26 @@ export function Admin({ darkMode, onClose }: AdminProps) {
           >
             Apps
           </button>
-          <button
-            onClick={() => setActiveTab('templates')}
-            className={`pb-2 px-1 ${activeTab === 'templates'
-              ? 'border-b-2 border-brand-accent text-brand-accent'
-              : mutedText}`}
-          >
-            Templates
-          </button>
-          <button
-            onClick={() => setActiveTab('sessions')}
-            className={`pb-2 px-1 ${activeTab === 'sessions'
-              ? 'border-b-2 border-brand-accent text-brand-accent'
-              : mutedText}`}
-          >
-            Sessions
-          </button>
+          {isSystemAdmin && (
+            <button
+              onClick={() => setActiveTab('templates')}
+              className={`pb-2 px-1 ${activeTab === 'templates'
+                ? 'border-b-2 border-brand-accent text-brand-accent'
+                : mutedText}`}
+            >
+              Templates
+            </button>
+          )}
+          {isSystemAdmin && (
+            <button
+              onClick={() => setActiveTab('sessions')}
+              className={`pb-2 px-1 ${activeTab === 'sessions'
+                ? 'border-b-2 border-brand-accent text-brand-accent'
+                : mutedText}`}
+            >
+              Sessions
+            </button>
+          )}
         </div>
 
         {/* Error/Success messages */}
@@ -682,7 +707,11 @@ export function Admin({ darkMode, onClose }: AdminProps) {
 
             {/* Categories Tab */}
             {activeTab === 'categories' && (
-              <CategoryManager darkMode={darkMode} />
+              <CategoryManager
+                darkMode={darkMode}
+                isSystemAdmin={isSystemAdmin}
+                adminCategoryIds={adminCategoryIds}
+              />
             )}
 
             {/* Apps Tab */}
