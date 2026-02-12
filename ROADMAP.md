@@ -58,7 +58,7 @@ custom applications. Simple, effective, reliable, secure.
 ## Phase 3: Authentication & Personalization
 
 - [ ] SSO integration (SAML/OIDC)
-- [x] Role-based application visibility (per-app visibility with category-scoped access grants)
+- [x] Role-based application visibility
 - [ ] User-specific favorites stored server-side
 - [x] Admin panel for managing applications
 

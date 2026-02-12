@@ -56,9 +56,12 @@ Each application has a `visibility` field that controls who can see it:
 | `approved` | Category admins and approved users for the app's category |
 | `admin_only` | Category admins for the app's category only |
 
-System administrators (`admin` role) can always see all applications regardless of visibility.
+System administrators (`admin` role) can always see all
+applications regardless of visibility.
 
-See the [Access Control guide](/guide/access-control) for details on how visibility interacts with category-scoped access grants.
+See the [Access Control guide](/guide/access-control) for
+details on how visibility interacts with category-scoped
+access grants.
 
 ## Categories
 
