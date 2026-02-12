@@ -287,18 +287,23 @@ function App() {
     setFocusedIndex(-1);
   }, [selectedCategory]);
 
-  const handleLogin = (loggedInUser: User) => {
+  const handleLogin = async (loggedInUser: User) => {
     setStoredUser(loggedInUser);
     setUser(loggedInUser);
     setShowRegister(false);
     setLoading(true); // Trigger app reload
+    // Fetch enriched user from /api/auth/me (includes admin_categories)
+    const enriched = await getCurrentUser();
+    if (enriched) setUser(enriched);
   };
 
-  const handleRegister = (registeredUser: User) => {
+  const handleRegister = async (registeredUser: User) => {
     setStoredUser(registeredUser);
     setUser(registeredUser);
     setShowRegister(false);
     setLoading(true); // Trigger app reload
+    const enriched = await getCurrentUser();
+    if (enriched) setUser(enriched);
   };
 
   const isAdmin = user?.roles?.includes('admin') ?? false;
