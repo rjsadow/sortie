@@ -16,10 +16,12 @@ import {
   updateApp,
   deleteApp,
   type AdminUser,
+  listCategories,
   type AdminTemplate,
 } from '../services/auth';
-import type { Application, Session, SessionStatus } from '../types';
+import type { Application, AppVisibility, Category, Session, SessionStatus } from '../types';
 import { formatDuration } from '../utils/time';
+import { CategoryManager } from './CategoryManager';
 
 interface AdminProps {
   darkMode: boolean;
@@ -38,6 +40,18 @@ const TEMPLATE_CATEGORIES = [
 
 const LAUNCH_TYPES = ['url', 'container', 'web_proxy'] as const;
 const OS_TYPES = ['linux', 'windows'] as const;
+
+const VISIBILITY_OPTIONS: { value: AppVisibility; label: string; description: string }[] = [
+  { value: 'public', label: 'Public', description: 'Visible to all users' },
+  { value: 'approved', label: 'Approved', description: 'Only approved users and category admins' },
+  { value: 'admin_only', label: 'Admin Only', description: 'Only category admins and system admins' },
+];
+
+const VISIBILITY_COLORS: Record<AppVisibility, string> = {
+  public: 'bg-green-500/20 text-green-400',
+  approved: 'bg-yellow-500/20 text-yellow-400',
+  admin_only: 'bg-red-500/20 text-red-400',
+};
 
 const emptyTemplate: Omit<AdminTemplate, 'id' | 'created_at' | 'updated_at'> = {
   template_id: '',
@@ -71,6 +85,7 @@ const emptyApp: Application = {
   url: '',
   icon: '',
   category: '',
+  visibility: 'public',
   launch_type: 'url',
   os_type: 'linux',
   container_image: '',
@@ -85,7 +100,7 @@ const emptyApp: Application = {
 };
 
 export function Admin({ darkMode, onClose }: AdminProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'apps' | 'templates' | 'sessions'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'categories' | 'apps' | 'templates' | 'sessions'>('settings');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -106,6 +121,9 @@ export function Admin({ darkMode, onClose }: AdminProps) {
 
   // Sessions state
   const [adminSessions, setAdminSessions] = useState<Session[]>([]);
+
+  // Categories state (for app form dropdown)
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Apps state
   const [apps, setApps] = useState<Application[]>([]);
@@ -131,15 +149,17 @@ export function Admin({ darkMode, onClose }: AdminProps) {
     setLoading(true);
     setError('');
     try {
-      const [settings, userList, appList, templateList, sessionList] = await Promise.all([
+      const [settings, userList, catList, appList, templateList, sessionList] = await Promise.all([
         getAdminSettings(),
         listUsers(),
+        listCategories(),
         listApps(),
         listTemplates(),
         listAdminSessions(),
       ]);
       setAllowRegistration(settings.allow_registration === true || settings.allow_registration === 'true');
       setUsers(userList);
+      setCategories(catList);
       setApps(appList);
       setTemplates(templateList);
       setAdminSessions(sessionList);
@@ -449,6 +469,14 @@ export function Admin({ darkMode, onClose }: AdminProps) {
             Users
           </button>
           <button
+            onClick={() => setActiveTab('categories')}
+            className={`pb-2 px-1 ${activeTab === 'categories'
+              ? 'border-b-2 border-brand-accent text-brand-accent'
+              : mutedText}`}
+          >
+            Categories
+          </button>
+          <button
             onClick={() => setActiveTab('apps')}
             className={`pb-2 px-1 ${activeTab === 'apps'
               ? 'border-b-2 border-brand-accent text-brand-accent'
@@ -652,6 +680,11 @@ export function Admin({ darkMode, onClose }: AdminProps) {
               </div>
             )}
 
+            {/* Categories Tab */}
+            {activeTab === 'categories' && (
+              <CategoryManager darkMode={darkMode} />
+            )}
+
             {/* Apps Tab */}
             {activeTab === 'apps' && (
               <div className={`${cardBg} rounded-lg p-6`}>
@@ -731,14 +764,32 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                         </div>
 
                         <div>
-                          <label className={`block text-sm mb-1 ${mutedText}`}>Category *</label>
-                          <input
-                            type="text"
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Category</label>
+                          <select
                             value={appForm.category}
                             onChange={(e) => setAppForm({ ...appForm, category: e.target.value })}
-                            placeholder="e.g., Development"
                             className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
-                          />
+                          >
+                            <option value="">No category</option>
+                            {categories.map((cat) => (
+                              <option key={cat.id} value={cat.name}>{cat.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm mb-1 ${mutedText}`}>Visibility</label>
+                          <select
+                            value={appForm.visibility || 'public'}
+                            onChange={(e) => setAppForm({ ...appForm, visibility: e.target.value as AppVisibility })}
+                            className={`w-full px-3 py-2 rounded-lg border ${inputBg} ${inputText}`}
+                          >
+                            {VISIBILITY_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label} - {opt.description}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         <div>
@@ -936,6 +987,7 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                       <tr className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                         <th className={`text-left py-2 ${mutedText}`}>Name</th>
                         <th className={`text-left py-2 ${mutedText}`}>Category</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Visibility</th>
                         <th className={`text-left py-2 ${mutedText}`}>Launch Type</th>
                         <th className={`text-left py-2 ${mutedText}`}>URL / Image</th>
                         <th className={`text-right py-2 ${mutedText}`}>Actions</th>
@@ -966,6 +1018,11 @@ export function Admin({ darkMode, onClose }: AdminProps) {
                           <td className={`py-3 ${mutedText}`}>
                             <span className="inline-block px-2 py-0.5 text-xs rounded bg-blue-500/20 text-blue-400">
                               {app.category}
+                            </span>
+                          </td>
+                          <td className={`py-3 ${mutedText}`}>
+                            <span className={`inline-block px-2 py-0.5 text-xs rounded ${VISIBILITY_COLORS[app.visibility || 'public']}`}>
+                              {app.visibility || 'public'}
                             </span>
                           </td>
                           <td className={`py-3 ${mutedText}`}>

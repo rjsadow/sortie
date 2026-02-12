@@ -40,11 +40,51 @@ Content-Type: application/json
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/apps` | List all applications |
-| POST | `/api/apps` | Create application |
+| GET | `/api/apps` | List visible applications (filtered by user's access) |
+| POST | `/api/apps` | Create application (admin or category admin) |
 | GET | `/api/apps/:id` | Get application by ID |
 | PUT | `/api/apps/:id` | Update application |
 | DELETE | `/api/apps/:id` | Delete application |
+
+### Application Visibility
+
+Each application has a `visibility` field that controls who can see it:
+
+| Value | Who can see |
+|-------|-------------|
+| `public` | All authenticated users |
+| `approved` | Category admins and approved users for the app's category |
+| `admin_only` | Category admins for the app's category only |
+
+System administrators (`admin` role) can always see all applications regardless of visibility.
+
+See the [Access Control guide](/guide/access-control) for details on how visibility interacts with category-scoped access grants.
+
+## Categories
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/categories` | List categories |
+| POST | `/api/categories` | Create category (admin only) |
+| GET | `/api/categories/:id` | Get category by ID |
+| PUT | `/api/categories/:id` | Update category (admin or category admin) |
+| DELETE | `/api/categories/:id` | Delete category (admin only) |
+
+### Category Admin Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/categories/:id/admins` | List category admins |
+| POST | `/api/categories/:id/admins` | Add category admin (`{"user_id": "..."}`) |
+| DELETE | `/api/categories/:id/admins/:userId` | Remove category admin |
+
+### Approved User Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/categories/:id/approved-users` | List approved users |
+| POST | `/api/categories/:id/approved-users` | Add approved user (`{"user_id": "..."}`) |
+| DELETE | `/api/categories/:id/approved-users/:userId` | Remove approved user |
 
 ## Sessions
 

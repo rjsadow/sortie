@@ -69,6 +69,7 @@ curl -X POST /api/apps \
     "id": "secure-browser",
     "name": "Secure Browser",
     "category": "Tools",
+    "visibility": "approved",
     "launch_type": "container",
     "container_image": "ghcr.io/example/browser:latest",
     "egress_policy": {
@@ -91,6 +92,7 @@ curl -X POST /api/apps \
     "id": "dev-workstation",
     "name": "Dev Workstation",
     "category": "Development",
+    "visibility": "admin_only",
     "launch_type": "container",
     "container_image": "ghcr.io/example/devbox:latest",
     "egress_policy": {
@@ -113,6 +115,7 @@ curl -X POST /api/apps \
     "id": "basic-app",
     "name": "Basic App",
     "category": "General",
+    "visibility": "public",
     "launch_type": "container",
     "container_image": "ghcr.io/example/app:latest"
   }'

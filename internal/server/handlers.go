@@ -511,7 +511,16 @@ func (h *handlers) handleConfig(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) handleApps(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		apps, err := h.app.DB.ListApps()
+		user := middleware.GetUserFromContext(r.Context())
+		userID := ""
+		var userRoles []string
+		if user != nil {
+			userID = user.ID
+			userRoles = user.Roles
+		}
+		tenantID := middleware.GetTenantIDFromContext(r.Context())
+
+		apps, err := h.app.DB.ListAppsForUser(userID, userRoles, tenantID)
 		if err != nil {
 			slog.Error("error listing apps", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -527,11 +536,9 @@ func (h *handlers) handleApps(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		user := middleware.GetUserFromContext(r.Context())
-		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
-			http.Error(w, "Insufficient permissions", http.StatusForbidden)
-			return
-		}
-
+		// Check category admin permission for the app's category
+		isCatAdmin := false
+		// We'll check after parsing the body so we know the category
 		var app db.Application
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -541,6 +548,21 @@ func (h *handlers) handleApps(w http.ResponseWriter, r *http.Request) {
 
 		if err := json.Unmarshal(body, &app); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if app.Visibility == "" {
+			app.Visibility = db.CategoryVisibilityPublic
+		}
+
+		if app.Category != "" {
+			if cat, _ := h.app.DB.GetCategoryByName(app.Category); cat != nil {
+				isCatAdmin, _ = h.app.DB.IsCategoryAdmin(user.ID, cat.ID)
+			}
+		}
+
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) && !isCatAdmin {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
 			return
 		}
 
@@ -557,6 +579,12 @@ func (h *handlers) handleApps(w http.ResponseWriter, r *http.Request) {
 		} else if app.URL == "" {
 			http.Error(w, "Missing required field: url", http.StatusBadRequest)
 			return
+		}
+
+		// Auto-create category if it doesn't exist (backwards compat)
+		if app.Category != "" {
+			tenantID := middleware.GetTenantIDFromContext(r.Context())
+			h.app.DB.EnsureCategoryExists(app.Category, tenantID)
 		}
 
 		if err := h.app.DB.CreateApp(app); err != nil {
@@ -606,10 +634,6 @@ func (h *handlers) handleAppByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		user := middleware.GetUserFromContext(r.Context())
-		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
-			http.Error(w, "Insufficient permissions", http.StatusForbidden)
-			return
-		}
 
 		var app db.Application
 		body, err := io.ReadAll(r.Body)
@@ -624,6 +648,29 @@ func (h *handlers) handleAppByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		app.ID = id
+		if app.Visibility == "" {
+			app.Visibility = db.CategoryVisibilityPublic
+		}
+
+		// Check category admin for the app's category
+		isCatAdmin := false
+		catName := app.Category
+		if catName == "" {
+			// Check existing app's category
+			if existing, _ := h.app.DB.GetApp(id); existing != nil {
+				catName = existing.Category
+			}
+		}
+		if catName != "" {
+			if cat, _ := h.app.DB.GetCategoryByName(catName); cat != nil {
+				isCatAdmin, _ = h.app.DB.IsCategoryAdmin(user.ID, cat.ID)
+			}
+		}
+
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) && !isCatAdmin {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
 
 		if app.Name == "" {
 			http.Error(w, "Missing required field: name", http.StatusBadRequest)
@@ -638,6 +685,12 @@ func (h *handlers) handleAppByID(w http.ResponseWriter, r *http.Request) {
 		} else if app.URL == "" {
 			http.Error(w, "Missing required field: url", http.StatusBadRequest)
 			return
+		}
+
+		// Auto-create category if it doesn't exist
+		if app.Category != "" {
+			tenantID := middleware.GetTenantIDFromContext(r.Context())
+			h.app.DB.EnsureCategoryExists(app.Category, tenantID)
 		}
 
 		if err := h.app.DB.UpdateApp(app); err != nil {
@@ -658,10 +711,6 @@ func (h *handlers) handleAppByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodDelete:
 		user := middleware.GetUserFromContext(r.Context())
-		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) {
-			http.Error(w, "Insufficient permissions", http.StatusForbidden)
-			return
-		}
 
 		app, err := h.app.DB.GetApp(id)
 		if err != nil {
@@ -671,6 +720,19 @@ func (h *handlers) handleAppByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if app == nil {
 			http.Error(w, "Application not found", http.StatusNotFound)
+			return
+		}
+
+		// Check category admin for the app's category
+		isCatAdmin := false
+		if app.Category != "" {
+			if cat, _ := h.app.DB.GetCategoryByName(app.Category); cat != nil {
+				isCatAdmin, _ = h.app.DB.IsCategoryAdmin(user.ID, cat.ID)
+			}
+		}
+
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin, middleware.RoleAppAuthor) && !isCatAdmin {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
 			return
 		}
 
@@ -2132,6 +2194,364 @@ func (h *handlers) handleAdminTenantByID(w http.ResponseWriter, r *http.Request)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// --- Category endpoints ---
+
+func (h *handlers) handleCategories(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		user := middleware.GetUserFromContext(r.Context())
+		userID := ""
+		var userRoles []string
+		if user != nil {
+			userID = user.ID
+			userRoles = user.Roles
+		}
+		tenantID := middleware.GetTenantIDFromContext(r.Context())
+
+		cats, err := h.app.DB.ListVisibleCategoriesForUser(userID, userRoles, tenantID)
+		if err != nil {
+			slog.Error("error listing categories", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if cats == nil {
+			cats = []db.Category{}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cats)
+
+	case http.MethodPost:
+		user := middleware.GetUserFromContext(r.Context())
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
+		var cat db.Category
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+		if err := json.Unmarshal(body, &cat); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if cat.Name == "" {
+			http.Error(w, "Missing required field: name", http.StatusBadRequest)
+			return
+		}
+		if cat.ID == "" {
+			cat.ID = fmt.Sprintf("cat-%s-%d", cat.Name, time.Now().UnixNano())
+		}
+		tenantID := middleware.GetTenantIDFromContext(r.Context())
+		if cat.TenantID == "" {
+			cat.TenantID = tenantID
+		}
+
+		if err := h.app.DB.CreateCategory(cat); err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+				http.Error(w, "Category with this name already exists", http.StatusConflict)
+				return
+			}
+			slog.Error("error creating category", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		h.app.DB.LogAudit(user.Username, "CREATE_CATEGORY", fmt.Sprintf("Created category: %s (%s)", cat.Name, cat.ID))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(cat)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *handlers) handleCategoryByID(w http.ResponseWriter, r *http.Request) {
+	// Parse: /api/categories/{id} or /api/categories/{id}/admins or /api/categories/{id}/approved-users
+	remainder := strings.TrimPrefix(r.URL.Path, "/api/categories/")
+	if remainder == "" {
+		http.Error(w, "Missing category ID", http.StatusBadRequest)
+		return
+	}
+
+	parts := strings.SplitN(remainder, "/", 2)
+	catID := parts[0]
+	subResource := ""
+	if len(parts) > 1 {
+		subResource = parts[1]
+	}
+
+	switch subResource {
+	case "admins":
+		h.handleCategoryAdmins(w, r, catID)
+		return
+	case "approved-users":
+		h.handleCategoryApprovedUsers(w, r, catID)
+		return
+	case "":
+		// fall through to category CRUD
+	default:
+		// Check for /admins/{userID} or /approved-users/{userID}
+		subParts := strings.SplitN(subResource, "/", 2)
+		if len(subParts) == 2 {
+			switch subParts[0] {
+			case "admins":
+				h.handleCategoryAdminByUserID(w, r, catID, subParts[1])
+				return
+			case "approved-users":
+				h.handleCategoryApprovedUserByUserID(w, r, catID, subParts[1])
+				return
+			}
+		}
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	user := middleware.GetUserFromContext(r.Context())
+
+	switch r.Method {
+	case http.MethodGet:
+		cat, err := h.app.DB.GetCategory(catID)
+		if err != nil {
+			slog.Error("error getting category", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if cat == nil {
+			http.Error(w, "Category not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cat)
+
+	case http.MethodPut:
+		isCatAdmin, _ := h.app.DB.IsCategoryAdmin(user.ID, catID)
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin) && !isCatAdmin {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
+		var cat db.Category
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+		if err := json.Unmarshal(body, &cat); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		cat.ID = catID
+
+		if cat.Name == "" {
+			http.Error(w, "Missing required field: name", http.StatusBadRequest)
+			return
+		}
+
+		if err := h.app.DB.UpdateCategory(cat); err != nil {
+			if err.Error() == "sql: no rows in result set" {
+				http.Error(w, "Category not found", http.StatusNotFound)
+				return
+			}
+			slog.Error("error updating category", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		h.app.DB.LogAudit(user.Username, "UPDATE_CATEGORY", fmt.Sprintf("Updated category: %s (%s)", cat.Name, catID))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cat)
+
+	case http.MethodDelete:
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin) {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
+		cat, err := h.app.DB.GetCategory(catID)
+		if err != nil {
+			slog.Error("error getting category", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if cat == nil {
+			http.Error(w, "Category not found", http.StatusNotFound)
+			return
+		}
+
+		if err := h.app.DB.DeleteCategory(catID); err != nil {
+			slog.Error("error deleting category", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		h.app.DB.LogAudit(user.Username, "DELETE_CATEGORY", fmt.Sprintf("Deleted category: %s (%s)", cat.Name, catID))
+
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *handlers) handleCategoryAdmins(w http.ResponseWriter, r *http.Request, catID string) {
+	user := middleware.GetUserFromContext(r.Context())
+
+	switch r.Method {
+	case http.MethodGet:
+		admins, err := h.app.DB.ListCategoryAdmins(catID)
+		if err != nil {
+			slog.Error("error listing category admins", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if admins == nil {
+			admins = []string{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(admins)
+
+	case http.MethodPost:
+		isCatAdmin, _ := h.app.DB.IsCategoryAdmin(user.ID, catID)
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin) && !isCatAdmin {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
+		var req struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if req.UserID == "" {
+			http.Error(w, "Missing required field: user_id", http.StatusBadRequest)
+			return
+		}
+
+		if err := h.app.DB.AddCategoryAdmin(catID, req.UserID); err != nil {
+			slog.Error("error adding category admin", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		h.app.DB.LogAudit(user.Username, "ADD_CATEGORY_ADMIN", fmt.Sprintf("Added admin %s to category %s", req.UserID, catID))
+
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"status": "added"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *handlers) handleCategoryAdminByUserID(w http.ResponseWriter, r *http.Request, catID, userID string) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	currentUser := middleware.GetUserFromContext(r.Context())
+	isCatAdmin, _ := h.app.DB.IsCategoryAdmin(currentUser.ID, catID)
+	if !middleware.HasRole(currentUser.Roles, middleware.RoleAdmin) && !isCatAdmin {
+		http.Error(w, "Insufficient permissions", http.StatusForbidden)
+		return
+	}
+
+	if err := h.app.DB.RemoveCategoryAdmin(catID, userID); err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	h.app.DB.LogAudit(currentUser.Username, "REMOVE_CATEGORY_ADMIN", fmt.Sprintf("Removed admin %s from category %s", userID, catID))
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *handlers) handleCategoryApprovedUsers(w http.ResponseWriter, r *http.Request, catID string) {
+	user := middleware.GetUserFromContext(r.Context())
+
+	switch r.Method {
+	case http.MethodGet:
+		users, err := h.app.DB.ListCategoryApprovedUsers(catID)
+		if err != nil {
+			slog.Error("error listing category approved users", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if users == nil {
+			users = []string{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(users)
+
+	case http.MethodPost:
+		isCatAdmin, _ := h.app.DB.IsCategoryAdmin(user.ID, catID)
+		if !middleware.HasRole(user.Roles, middleware.RoleAdmin) && !isCatAdmin {
+			http.Error(w, "Insufficient permissions", http.StatusForbidden)
+			return
+		}
+
+		var req struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if req.UserID == "" {
+			http.Error(w, "Missing required field: user_id", http.StatusBadRequest)
+			return
+		}
+
+		if err := h.app.DB.AddCategoryApprovedUser(catID, req.UserID); err != nil {
+			slog.Error("error adding category approved user", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		h.app.DB.LogAudit(user.Username, "ADD_CATEGORY_APPROVED_USER", fmt.Sprintf("Added approved user %s to category %s", req.UserID, catID))
+
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"status": "added"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *handlers) handleCategoryApprovedUserByUserID(w http.ResponseWriter, r *http.Request, catID, userID string) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	currentUser := middleware.GetUserFromContext(r.Context())
+	isCatAdmin, _ := h.app.DB.IsCategoryAdmin(currentUser.ID, catID)
+	if !middleware.HasRole(currentUser.Roles, middleware.RoleAdmin) && !isCatAdmin {
+		http.Error(w, "Insufficient permissions", http.StatusForbidden)
+		return
+	}
+
+	if err := h.app.DB.RemoveCategoryApprovedUser(catID, userID); err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	h.app.DB.LogAudit(currentUser.Username, "REMOVE_CATEGORY_APPROVED_USER", fmt.Sprintf("Removed approved user %s from category %s", userID, catID))
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Legacy apps.json ---

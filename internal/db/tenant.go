@@ -185,7 +185,7 @@ func (db *DB) DeleteTenant(id string) error {
 // ListAppsByTenant returns all applications belonging to a tenant
 func (db *DB) ListAppsByTenant(tenantID string) ([]Application, error) {
 	rows, err := db.conn.Query(
-		"SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications WHERE tenant_id = ? ORDER BY category, name",
+		"SELECT id, name, description, url, icon, category, visibility, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications WHERE tenant_id = ? ORDER BY category, name",
 		tenantID,
 	)
 	if err != nil {
@@ -319,13 +319,18 @@ func scanApps(rows *sql.Rows) ([]Application, error) {
 	var apps []Application
 	for rows.Next() {
 		var app Application
+		var visibility string
 		var launchType, osType, containerImage string
 		var containerPort int
 		var containerArgsJSON string
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 		var egressPolicyJSON string
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON); err != nil {
+		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &visibility, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON); err != nil {
 			return nil, err
+		}
+		app.Visibility = CategoryVisibility(visibility)
+		if app.Visibility == "" {
+			app.Visibility = CategoryVisibilityPublic
 		}
 		app.LaunchType = LaunchType(launchType)
 		if app.LaunchType == "" {

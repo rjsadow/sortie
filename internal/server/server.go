@@ -89,6 +89,10 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("/api/templates", h.handleTemplates)
 	mux.HandleFunc("/api/templates/", h.handleTemplateByID)
 
+	// Category routes: tenant-scoped
+	mux.Handle("/api/categories", withTenant(http.HandlerFunc(h.handleCategories)))
+	mux.Handle("/api/categories/", withTenant(http.HandlerFunc(h.handleCategoryByID)))
+
 	// App and AppSpec routes: tenant-scoped
 	mux.Handle("/api/appspecs", withTenant(http.HandlerFunc(h.handleAppSpecs)))
 	mux.Handle("/api/appspecs/", withTenant(http.HandlerFunc(h.handleAppSpecByID)))

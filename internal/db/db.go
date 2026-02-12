@@ -10,6 +10,25 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// CategoryVisibility controls who can see apps in a category
+type CategoryVisibility string
+
+const (
+	CategoryVisibilityPublic    CategoryVisibility = "public"
+	CategoryVisibilityApproved  CategoryVisibility = "approved"
+	CategoryVisibilityAdminOnly CategoryVisibility = "admin_only"
+)
+
+// Category represents a first-class category with access controls
+type Category struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	TenantID    string    `json:"tenant_id,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // LaunchType represents how an application is launched
 type LaunchType string
 
@@ -29,13 +48,14 @@ type ResourceLimits struct {
 
 // Application represents an app in the sortie
 type Application struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name"`
-	Description    string          `json:"description"`
-	URL            string          `json:"url"`
-	Icon           string          `json:"icon"`
-	Category       string          `json:"category"`
-	LaunchType     LaunchType      `json:"launch_type"`
+	ID             string             `json:"id"`
+	Name           string             `json:"name"`
+	Description    string             `json:"description"`
+	URL            string             `json:"url"`
+	Icon           string             `json:"icon"`
+	Category       string             `json:"category"`
+	Visibility     CategoryVisibility `json:"visibility"`
+	LaunchType     LaunchType         `json:"launch_type"`
 	OsType         string          `json:"os_type,omitempty"`         // "linux" (default) or "windows"
 	ContainerImage string          `json:"container_image,omitempty"`
 	ContainerPort  int             `json:"container_port,omitempty"`  // Port web app listens on (default: 8080)
@@ -244,6 +264,7 @@ func (db *DB) migrate() error {
 		url TEXT NOT NULL,
 		icon TEXT NOT NULL,
 		category TEXT NOT NULL,
+		visibility TEXT NOT NULL DEFAULT 'public',
 		launch_type TEXT NOT NULL DEFAULT 'url',
 		os_type TEXT DEFAULT 'linux',
 		container_image TEXT DEFAULT '',
@@ -371,6 +392,28 @@ func (db *DB) migrate() error {
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
+
+	CREATE TABLE IF NOT EXISTS categories (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL UNIQUE,
+		description TEXT DEFAULT '',
+		tenant_id TEXT DEFAULT 'default',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id);
+
+	CREATE TABLE IF NOT EXISTS category_admins (
+		category_id TEXT NOT NULL,
+		user_id TEXT NOT NULL,
+		PRIMARY KEY (category_id, user_id)
+	);
+
+	CREATE TABLE IF NOT EXISTS category_approved_users (
+		category_id TEXT NOT NULL,
+		user_id TEXT NOT NULL,
+		PRIMARY KEY (category_id, user_id)
+	);
 	`
 	_, err := db.conn.Exec(schema)
 	if err != nil {
@@ -402,6 +445,7 @@ func (db *DB) migrate() error {
 		"ALTER TABLE audit_log ADD COLUMN tenant_id TEXT DEFAULT 'default'",
 		"ALTER TABLE analytics ADD COLUMN tenant_id TEXT DEFAULT 'default'",
 		"ALTER TABLE app_specs ADD COLUMN tenant_id TEXT DEFAULT 'default'",
+		"ALTER TABLE applications ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'",
 	}
 
 	for _, migration := range migrations {
@@ -414,7 +458,62 @@ func (db *DB) migrate() error {
 		"INSERT OR IGNORE INTO tenants (id, name, slug, settings, quotas) VALUES ('default', 'Default', 'default', '{}', '{}')",
 	)
 
+	// Migrate existing app categories into the categories table as public
+	db.migrateExistingCategories()
+
+	// Migrate visibility from categories to applications (one-time)
+	db.migrateAppVisibilityFromCategories()
+
 	return nil
+}
+
+// migrateExistingCategories creates category records for any distinct
+// application.category values that don't yet have a categories row.
+func (db *DB) migrateExistingCategories() {
+	rows, err := db.conn.Query("SELECT DISTINCT category FROM applications WHERE category != ''")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	now := time.Now()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			continue
+		}
+		id := fmt.Sprintf("cat-%s-%d", name, now.UnixNano())
+		db.conn.Exec(
+			"INSERT OR IGNORE INTO categories (id, name, description, tenant_id, created_at, updated_at) VALUES (?, ?, '', 'default', ?, ?)",
+			id, name, now, now,
+		)
+	}
+}
+
+// migrateAppVisibilityFromCategories copies visibility from category rows
+// to application rows for databases that had visibility on categories.
+// Safe to run multiple times — only updates apps still at the default 'public'.
+func (db *DB) migrateAppVisibilityFromCategories() {
+	// Check if categories table still has a visibility column
+	var colCount int
+	err := db.conn.QueryRow(
+		"SELECT COUNT(*) FROM pragma_table_info('categories') WHERE name = 'visibility'",
+	).Scan(&colCount)
+	if err != nil || colCount == 0 {
+		return
+	}
+
+	db.conn.Exec(`
+		UPDATE applications SET visibility = (
+			SELECT c.visibility FROM categories c
+			WHERE c.name = applications.category
+		)
+		WHERE EXISTS (
+			SELECT 1 FROM categories c
+			WHERE c.name = applications.category AND c.visibility != 'public'
+		)
+		AND applications.visibility = 'public'
+	`)
 }
 
 // SeedFromJSON loads initial apps from a JSON file if the database is empty
@@ -453,7 +552,7 @@ func (db *DB) SeedFromJSON(jsonPath string) error {
 
 // ListApps returns all applications
 func (db *DB) ListApps() ([]Application, error) {
-	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications ORDER BY category, name")
+	rows, err := db.conn.Query("SELECT id, name, description, url, icon, category, visibility, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications ORDER BY category, name")
 	if err != nil {
 		return nil, err
 	}
@@ -462,13 +561,18 @@ func (db *DB) ListApps() ([]Application, error) {
 	var apps []Application
 	for rows.Next() {
 		var app Application
+		var visibility string
 		var launchType, osType, containerImage string
 		var containerPort int
 		var containerArgsJSON string
 		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 		var egressPolicyJSON string
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON); err != nil {
+		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &visibility, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON); err != nil {
 			return nil, err
+		}
+		app.Visibility = CategoryVisibility(visibility)
+		if app.Visibility == "" {
+			app.Visibility = CategoryVisibilityPublic
 		}
 		app.LaunchType = LaunchType(launchType)
 		if app.LaunchType == "" {
@@ -509,21 +613,26 @@ func (db *DB) ListApps() ([]Application, error) {
 // GetApp returns a single application by ID
 func (db *DB) GetApp(id string) (*Application, error) {
 	var app Application
+	var visibility string
 	var launchType, osType, containerImage string
 	var containerPort int
 	var containerArgsJSON string
 	var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
 	var egressPolicyJSON string
 	err := db.conn.QueryRow(
-		"SELECT id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications WHERE id = ?",
+		"SELECT id, name, description, url, icon, category, visibility, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications WHERE id = ?",
 		id,
-	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON)
+	).Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &visibility, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	app.Visibility = CategoryVisibility(visibility)
+	if app.Visibility == "" {
+		app.Visibility = CategoryVisibilityPublic
 	}
 	app.LaunchType = LaunchType(launchType)
 	if app.LaunchType == "" {
@@ -560,6 +669,10 @@ func (db *DB) GetApp(id string) (*Application, error) {
 
 // CreateApp inserts a new application
 func (db *DB) CreateApp(app Application) error {
+	visibility := string(app.Visibility)
+	if visibility == "" {
+		visibility = string(CategoryVisibilityPublic)
+	}
 	launchType := string(app.LaunchType)
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
@@ -591,14 +704,18 @@ func (db *DB) CreateApp(app Application) error {
 		}
 	}
 	_, err := db.conn.Exec(
-		"INSERT INTO applications (id, name, description, url, icon, category, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, egressPolicyJSON,
+		"INSERT INTO applications (id, name, description, url, icon, category, visibility, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		app.ID, app.Name, app.Description, app.URL, app.Icon, app.Category, visibility, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, egressPolicyJSON,
 	)
 	return err
 }
 
 // UpdateApp updates an existing application
 func (db *DB) UpdateApp(app Application) error {
+	visibility := string(app.Visibility)
+	if visibility == "" {
+		visibility = string(CategoryVisibilityPublic)
+	}
 	launchType := string(app.LaunchType)
 	if launchType == "" {
 		launchType = string(LaunchTypeURL)
@@ -630,8 +747,8 @@ func (db *DB) UpdateApp(app Application) error {
 		}
 	}
 	result, err := db.conn.Exec(
-		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, launch_type = ?, os_type = ?, container_image = ?, container_port = ?, container_args = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ?, egress_policy = ? WHERE id = ?",
-		app.Name, app.Description, app.URL, app.Icon, app.Category, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, egressPolicyJSON, app.ID,
+		"UPDATE applications SET name = ?, description = ?, url = ?, icon = ?, category = ?, visibility = ?, launch_type = ?, os_type = ?, container_image = ?, container_port = ?, container_args = ?, cpu_request = ?, cpu_limit = ?, memory_request = ?, memory_limit = ?, egress_policy = ? WHERE id = ?",
+		app.Name, app.Description, app.URL, app.Icon, app.Category, visibility, launchType, osType, app.ContainerImage, app.ContainerPort, containerArgsJSON, cpuRequest, cpuLimit, memoryRequest, memoryLimit, egressPolicyJSON, app.ID,
 	)
 	if err != nil {
 		return err
