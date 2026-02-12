@@ -20,7 +20,7 @@ test.describe('Admin Panel', () => {
     await openAdminPanel(page);
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
 
-    for (const tab of ['Settings', 'Users', 'Apps', 'Templates', 'Sessions']) {
+    for (const tab of ['Settings', 'Users', 'Categories', 'Apps', 'Templates', 'Sessions']) {
       await expect(page.getByRole('button', { name: tab, exact: true })).toBeVisible();
     }
   });
@@ -90,7 +90,8 @@ test.describe('Admin Panel', () => {
     await page.getByPlaceholder('e.g., my-app').fill(appId);
     await page.getByPlaceholder('e.g., My Application').fill('E2E Test App');
     await page.getByPlaceholder('Brief description of the application').fill('Created by E2E test');
-    await page.getByPlaceholder('e.g., Development').fill('Testing');
+
+    // Category and Visibility are dropdowns; leave defaults (No category, Public)
 
     // URL launch type is default, fill the URL field (exact match avoids icon URL field)
     await page.getByPlaceholder('https://example.com', { exact: true }).fill('https://example.com');
