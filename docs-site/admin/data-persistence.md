@@ -69,8 +69,9 @@ CREATE TABLE applications (
     url TEXT,
     icon TEXT,
     category TEXT,
-    launch_type TEXT DEFAULT 'url',      -- 'url' or 'container'
-    container_image TEXT                  -- Docker image for container apps
+    visibility TEXT NOT NULL DEFAULT 'public',  -- 'public', 'approved', or 'admin_only'
+    launch_type TEXT DEFAULT 'url',             -- 'url' or 'container'
+    container_image TEXT                        -- Docker image for container apps
 );
 ```
 
@@ -79,16 +80,20 @@ CREATE TABLE applications (
 ```go
 // internal/db/db.go
 type Application struct {
-    ID             string `json:"id"`
-    Name           string `json:"name"`
-    Description    string `json:"description"`
-    URL            string `json:"url"`
-    Icon           string `json:"icon"`
-    Category       string `json:"category"`
-    LaunchType     string `json:"launch_type"`
-    ContainerImage string `json:"container_image,omitempty"`
+    ID             string             `json:"id"`
+    Name           string             `json:"name"`
+    Description    string             `json:"description"`
+    URL            string             `json:"url"`
+    Icon           string             `json:"icon"`
+    Category       string             `json:"category"`
+    Visibility     CategoryVisibility `json:"visibility"`
+    LaunchType     string             `json:"launch_type"`
+    ContainerImage string             `json:"container_image,omitempty"`
 }
 ```
+
+The `visibility` field controls who can see the application. See the
+[Access Control guide](/guide/access-control) for details.
 
 ### Seeding
 
@@ -112,6 +117,7 @@ Example seed file (`examples/apps-with-containers.json`):
       "name": "Web Browser",
       "description": "Chromium browser in container",
       "category": "Tools",
+      "visibility": "public",
       "launch_type": "container",
       "container_image": "ghcr.io/example/chromium:latest"
     }

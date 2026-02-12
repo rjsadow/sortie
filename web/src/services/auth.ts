@@ -1,4 +1,4 @@
-import type { User, Session, Application } from '../types';
+import type { User, Session, Application, Category } from '../types';
 
 // Auth response types
 export interface AuthResponse {
@@ -486,6 +486,112 @@ export async function deleteApp(id: string): Promise<void> {
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || 'Failed to delete app');
+  }
+}
+
+// --- Category API ---
+
+export async function listCategories(): Promise<Category[]> {
+  const response = await fetchWithAuth('/api/categories');
+  if (!response.ok) {
+    throw new Error('Failed to list categories');
+  }
+  return response.json();
+}
+
+export async function createCategory(cat: Partial<Category>): Promise<Category> {
+  const response = await fetchWithAuth('/api/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cat),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to create category');
+  }
+  return response.json();
+}
+
+export async function updateCategory(id: string, cat: Partial<Category>): Promise<Category> {
+  const response = await fetchWithAuth(`/api/categories/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cat),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to update category');
+  }
+  return response.json();
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/categories/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to delete category');
+  }
+}
+
+export async function listCategoryAdmins(categoryId: string): Promise<string[]> {
+  const response = await fetchWithAuth(`/api/categories/${categoryId}/admins`);
+  if (!response.ok) {
+    throw new Error('Failed to list category admins');
+  }
+  return response.json();
+}
+
+export async function addCategoryAdmin(categoryId: string, userId: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/categories/${categoryId}/admins`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to add category admin');
+  }
+}
+
+export async function removeCategoryAdmin(categoryId: string, userId: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/categories/${categoryId}/admins/${userId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to remove category admin');
+  }
+}
+
+export async function listCategoryApprovedUsers(categoryId: string): Promise<string[]> {
+  const response = await fetchWithAuth(`/api/categories/${categoryId}/approved-users`);
+  if (!response.ok) {
+    throw new Error('Failed to list approved users');
+  }
+  return response.json();
+}
+
+export async function addCategoryApprovedUser(categoryId: string, userId: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/categories/${categoryId}/approved-users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to add approved user');
+  }
+}
+
+export async function removeCategoryApprovedUser(categoryId: string, userId: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/categories/${categoryId}/approved-users/${userId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to remove approved user');
   }
 }
 

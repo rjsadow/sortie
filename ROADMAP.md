@@ -36,7 +36,8 @@ custom applications. Simple, effective, reliable, secure.
       "description": "Brief description",
       "url": "https://app.example.com",
       "icon": "path/to/icon.png",
-      "category": "Development"
+      "category": "Development",
+      "visibility": "public"
     }
   ]
 }
@@ -57,18 +58,18 @@ custom applications. Simple, effective, reliable, secure.
 ## Phase 3: Authentication & Personalization
 
 - [ ] SSO integration (SAML/OIDC)
-- [ ] Role-based application visibility
+- [x] Role-based application visibility
 - [ ] User-specific favorites stored server-side
-- [ ] Admin panel for managing applications
+- [x] Admin panel for managing applications
 
 ---
 
 ## Phase 4: Enterprise Features
 
-- [ ] Application usage analytics
+- [x] Application usage analytics
 - [ ] Custom branding per tenant/department
-- [ ] API for programmatic app management
-- [ ] Audit logging
+- [x] API for programmatic app management
+- [x] Audit logging
 - [ ] High availability deployment guide
 
 ---

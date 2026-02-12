@@ -23,6 +23,7 @@ export interface Application {
   url: string;
   icon: string;
   category: string;
+  visibility?: AppVisibility;
   launch_type: LaunchType;
   os_type?: OsType;
   container_image?: string;
@@ -104,6 +105,20 @@ export interface ApplicationTemplate extends Omit<Application, 'id'> {
 export interface TemplateCatalog {
   version: string;
   templates: ApplicationTemplate[];
+}
+
+// App-level visibility controls who can see each application
+export type AppVisibility = 'admin_only' | 'approved' | 'public';
+// Keep alias for backwards compatibility
+export type CategoryVisibility = AppVisibility;
+
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  tenant_id?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // Audit log types

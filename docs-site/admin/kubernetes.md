@@ -87,6 +87,7 @@ Add applications with `launch_type: "container"` to your apps.json:
       "url": "",
       "icon": "https://example.com/firefox.png",
       "category": "Browsers",
+      "visibility": "public",
       "launch_type": "container",
       "container_image": "ghcr.io/yourorg/firefox-desktop:latest"
     },
@@ -97,6 +98,7 @@ Add applications with `launch_type: "container"` to your apps.json:
       "url": "",
       "icon": "https://example.com/vscode.png",
       "category": "Development",
+      "visibility": "approved",
       "launch_type": "container",
       "container_image": "codercom/code-server:latest"
     }
@@ -118,6 +120,7 @@ Memory: 512Mi request / 2Gi limit).
   "url": "",
   "icon": "https://example.com/libreoffice.png",
   "category": "Productivity",
+  "visibility": "public",
   "launch_type": "container",
   "container_image": "jlesage/libreoffice:latest",
   "resource_limits": {
