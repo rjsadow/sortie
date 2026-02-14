@@ -1112,6 +1112,9 @@ func (h *handlers) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	case action == "files" || strings.HasPrefix(action, "files/"):
 		h.app.FileHandler.ServeHTTP(w, r)
 		return
+	case action == "shares" || strings.HasPrefix(action, "shares/"):
+		h.handleSessionShares(w, r, id, strings.TrimPrefix(action, "shares"))
+		return
 	case action == "":
 		// Fall through
 	default:
@@ -1268,6 +1271,312 @@ func (h *handlers) handleSessionRestart(w http.ResponseWriter, r *http.Request, 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// --- Session sharing endpoints ---
+
+func (h *handlers) handleSessionShares(w http.ResponseWriter, r *http.Request, sessionID string, subPath string) {
+	user := middleware.GetUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Check that the session exists
+	session, err := h.app.SessionManager.GetSession(r.Context(), sessionID)
+	if err != nil {
+		slog.Error("error getting session for shares", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if session == nil {
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	// Only the session owner can manage shares
+	isOwner := session.UserID == user.ID
+
+	// Handle DELETE /api/sessions/{id}/shares/{shareId}
+	shareID := strings.TrimPrefix(subPath, "/")
+	if shareID != "" {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isOwner && !middleware.HasRole(user.Roles, middleware.RoleAdmin) {
+			http.Error(w, "Forbidden: only session owner can revoke shares", http.StatusForbidden)
+			return
+		}
+		if err := h.app.DB.DeleteSessionShare(shareID); err != nil {
+			http.Error(w, "Share not found", http.StatusNotFound)
+			return
+		}
+		h.app.DB.LogAudit(user.Username, "REVOKE_SESSION_SHARE", fmt.Sprintf("Revoked share %s for session %s", shareID, sessionID))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		if !isOwner && !middleware.HasRole(user.Roles, middleware.RoleAdmin) {
+			http.Error(w, "Forbidden: only session owner can list shares", http.StatusForbidden)
+			return
+		}
+		shares, err := h.app.DB.ListSessionShares(sessionID)
+		if err != nil {
+			slog.Error("error listing session shares", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if shares == nil {
+			shares = []db.SessionShare{}
+		}
+
+		responses := make([]sessions.ShareResponse, len(shares))
+		for i, s := range shares {
+			resp := sessions.ShareResponse{
+				ID:         s.ID,
+				SessionID:  s.SessionID,
+				UserID:     s.UserID,
+				Permission: string(s.Permission),
+				CreatedAt:  s.CreatedAt.Format(time.RFC3339),
+			}
+			if s.UserID != "" {
+				u, _ := h.app.DB.GetUserByID(s.UserID)
+				if u != nil {
+					resp.Username = u.Username
+				}
+			}
+			if s.ShareToken != "" {
+				resp.ShareURL = fmt.Sprintf("/session/%s?share_token=%s", sessionID, s.ShareToken)
+			}
+			responses[i] = resp
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(responses)
+
+	case http.MethodPost:
+		if !isOwner && !middleware.HasRole(user.Roles, middleware.RoleAdmin) {
+			http.Error(w, "Forbidden: only session owner can create shares", http.StatusForbidden)
+			return
+		}
+
+		// Only container sessions can be shared
+		app, _ := h.app.DB.GetApp(session.AppID)
+		if app != nil && app.LaunchType != db.LaunchTypeContainer {
+			http.Error(w, "Only container sessions can be shared", http.StatusBadRequest)
+			return
+		}
+
+		var req sessions.CreateShareRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		perm := db.SharePermissionReadOnly
+		if req.Permission == "read_write" {
+			perm = db.SharePermissionReadWrite
+		}
+
+		share := db.SessionShare{
+			ID:         fmt.Sprintf("share-%d", time.Now().UnixNano()),
+			SessionID:  sessionID,
+			Permission: perm,
+			CreatedBy:  user.ID,
+			CreatedAt:  time.Now(),
+		}
+
+		resp := sessions.ShareResponse{
+			SessionID:  sessionID,
+			Permission: string(perm),
+		}
+
+		if req.LinkShare {
+			token := fmt.Sprintf("%d", time.Now().UnixNano())
+			share.ShareToken = token
+			resp.ShareURL = fmt.Sprintf("/session/%s?share_token=%s", sessionID, token)
+		} else {
+			// Resolve user by username or ID
+			targetUserID := req.UserID
+			if targetUserID == "" && req.Username != "" {
+				u, err := h.app.DB.GetUserByUsername(req.Username)
+				if err != nil || u == nil {
+					http.Error(w, "User not found", http.StatusNotFound)
+					return
+				}
+				targetUserID = u.ID
+				resp.Username = u.Username
+			}
+			if targetUserID == "" {
+				http.Error(w, "Either user_id, username, or link_share is required", http.StatusBadRequest)
+				return
+			}
+			if targetUserID == user.ID {
+				http.Error(w, "Cannot share a session with yourself", http.StatusBadRequest)
+				return
+			}
+			share.UserID = targetUserID
+		}
+
+		if err := h.app.DB.CreateSessionShare(share); err != nil {
+			slog.Error("error creating session share", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		resp.ID = share.ID
+		resp.UserID = share.UserID
+		resp.CreatedAt = share.CreatedAt.Format(time.RFC3339)
+
+		h.app.DB.LogAudit(user.Username, "CREATE_SESSION_SHARE", fmt.Sprintf("Shared session %s (permission=%s)", sessionID, perm))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(resp)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *handlers) handleSharedSessions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := middleware.GetUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	rows, err := h.app.DB.ListSharedSessionsForUser(user.ID)
+	if err != nil {
+		slog.Error("error listing shared sessions", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	responses := make([]sessions.SessionResponse, 0, len(rows))
+	for _, r := range rows {
+		app, _ := h.app.DB.GetApp(r.Session.AppID)
+		wsURL := ""
+		guacURL := ""
+		if app != nil {
+			if app.LaunchType == db.LaunchTypeContainer {
+				if app.OsType == "windows" {
+					guacURL = h.app.SessionManager.GetSessionGuacWebSocketURL(&r.Session)
+				} else {
+					wsURL = h.app.SessionManager.GetSessionWebSocketURL(&r.Session)
+				}
+			}
+		}
+
+		resp := *sessions.SessionFromDB(&r.Session, r.AppName, wsURL, guacURL, "")
+		resp.IsShared = true
+		resp.OwnerUsername = r.OwnerUsername
+		resp.SharePermission = string(r.Permission)
+		resp.ShareID = r.ShareID
+		responses = append(responses, resp)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responses)
+}
+
+func (h *handlers) handleJoinShare(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := middleware.GetUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req sessions.JoinShareRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Token == "" {
+		http.Error(w, "Token is required", http.StatusBadRequest)
+		return
+	}
+
+	share, err := h.app.DB.GetSessionShareByToken(req.Token)
+	if err != nil {
+		slog.Error("error looking up share token", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if share == nil {
+		http.Error(w, "Invalid or expired share token", http.StatusNotFound)
+		return
+	}
+
+	// If this is a link-share with no user assigned, assign this user
+	if share.UserID == "" {
+		h.app.DB.UpdateSessionShareUserID(share.ID, user.ID)
+	} else if share.UserID != user.ID {
+		// Link was already claimed by someone else; create a new share for this user
+		newShare := db.SessionShare{
+			ID:         fmt.Sprintf("share-%d", time.Now().UnixNano()),
+			SessionID:  share.SessionID,
+			UserID:     user.ID,
+			Permission: share.Permission,
+			CreatedBy:  share.CreatedBy,
+			CreatedAt:  time.Now(),
+		}
+		if err := h.app.DB.CreateSessionShare(newShare); err != nil {
+			slog.Error("error creating share for joining user", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Return the session info
+	session, err := h.app.SessionManager.GetSession(r.Context(), share.SessionID)
+	if err != nil || session == nil {
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	app, _ := h.app.DB.GetApp(session.AppID)
+	appName := ""
+	wsURL := ""
+	guacURL := ""
+	if app != nil {
+		appName = app.Name
+		if app.LaunchType == db.LaunchTypeContainer {
+			if app.OsType == "windows" {
+				guacURL = h.app.SessionManager.GetSessionGuacWebSocketURL(session)
+			} else {
+				wsURL = h.app.SessionManager.GetSessionWebSocketURL(session)
+			}
+		}
+	}
+
+	resp := *sessions.SessionFromDB(session, appName, wsURL, guacURL, "")
+	resp.IsShared = true
+	resp.SharePermission = string(share.Permission)
+
+	// Get owner username
+	owner, _ := h.app.DB.GetUserByID(session.UserID)
+	if owner != nil {
+		resp.OwnerUsername = owner.Username
+	}
+
+	h.app.DB.LogAudit(user.Username, "JOIN_SESSION_SHARE", fmt.Sprintf("Joined session %s via share token", share.SessionID))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 // --- Quota endpoint ---

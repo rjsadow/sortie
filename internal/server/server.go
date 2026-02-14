@@ -112,6 +112,8 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("/api/analytics/stats", withTenant(requireAdmin(http.HandlerFunc(h.handleAnalyticsStats))))
 
 	// Session API routes
+	mux.Handle("/api/sessions/shared", withTenant(http.HandlerFunc(h.handleSharedSessions)))
+	mux.Handle("/api/sessions/shares/join", withTenant(http.HandlerFunc(h.handleJoinShare)))
 	mux.Handle("/api/sessions", withTenant(http.HandlerFunc(h.handleSessions)))
 	mux.Handle("/api/sessions/", withTenant(http.HandlerFunc(h.handleSessionByID)))
 

@@ -20,12 +20,22 @@ export function useSessions(autoRefresh = false): UseSessionsReturn {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const response = await fetchWithAuth('/api/sessions');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch sessions: ${response.statusText}`);
+      const [ownRes, sharedRes] = await Promise.all([
+        fetchWithAuth('/api/sessions'),
+        fetchWithAuth('/api/sessions/shared'),
+      ]);
+      if (!ownRes.ok) {
+        throw new Error(`Failed to fetch sessions: ${ownRes.statusText}`);
       }
-      const data: Session[] = await response.json();
-      setSessions(data);
+      const ownData: Session[] = await ownRes.json();
+      let sharedData: Session[] = [];
+      if (sharedRes.ok) {
+        sharedData = await sharedRes.json();
+      }
+      // Merge, deduplicating by ID (own sessions take priority)
+      const ownIds = new Set(ownData.map((s) => s.id));
+      const merged = [...ownData, ...sharedData.filter((s) => !ownIds.has(s.id))];
+      setSessions(merged);
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch sessions';

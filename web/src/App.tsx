@@ -50,6 +50,7 @@ function App() {
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [selectedContainerApp, setSelectedContainerApp] = useState<Application | null>(null);
   const [reconnectSessionId, setReconnectSessionId] = useState<string | null>(null);
+  const [sessionShareInfo, setSessionShareInfo] = useState<{ viewOnly: boolean; ownerUsername?: string; sharePermission?: string } | null>(null);
   const [isTemplateBrowserOpen, setIsTemplateBrowserOpen] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -369,9 +370,13 @@ function App() {
         onClose={() => {
           setSelectedContainerApp(null);
           setReconnectSessionId(null);
+          setSessionShareInfo(null);
         }}
         darkMode={darkMode}
         sessionId={reconnectSessionId || undefined}
+        viewOnly={sessionShareInfo?.viewOnly}
+        ownerUsername={sessionShareInfo?.ownerUsername}
+        sharePermission={sessionShareInfo?.sharePermission}
       />
     );
   }
@@ -848,6 +853,17 @@ function App() {
           const app = apps.find((a) => a.id === appId);
           if (app) {
             setReconnectSessionId(sessionId);
+            // Check if this is a shared session
+            const sess = sessions.find((s) => s.id === sessionId);
+            if (sess?.is_shared) {
+              setSessionShareInfo({
+                viewOnly: sess.share_permission === 'read_only',
+                ownerUsername: sess.owner_username,
+                sharePermission: sess.share_permission,
+              });
+            } else {
+              setSessionShareInfo(null);
+            }
             setSelectedContainerApp(app);
             setShowSessionManager(false);
           }

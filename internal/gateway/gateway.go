@@ -89,10 +89,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enforce ownership: non-admin users can only access their own sessions
+	// Enforce ownership: non-admin users can only access their own sessions or shared sessions
 	if !middleware.HasRole(user.Roles, middleware.RoleAdmin) && session.UserID != user.ID {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
+		share, err := h.database.CheckSessionAccess(sessionID, user.ID)
+		if err != nil || share == nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		// For read-only shares, add view_only query param so the frontend can enforce it
+		if share.Permission == db.SharePermissionReadOnly {
+			q := r.URL.Query()
+			q.Set("view_only", "true")
+			r.URL.RawQuery = q.Encode()
+		}
 	}
 
 	// --- Audit ---

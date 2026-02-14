@@ -41,18 +41,46 @@ type CreateSessionRequest struct {
 
 // SessionResponse represents a session in API responses
 type SessionResponse struct {
-	ID           string           `json:"id"`
-	UserID       string           `json:"user_id"`
-	AppID        string           `json:"app_id"`
-	AppName      string           `json:"app_name,omitempty"`
-	PodName      string           `json:"pod_name"`
-	Status       db.SessionStatus `json:"status"`
-	IdleTimeout  int64            `json:"idle_timeout,omitempty"` // Per-session idle timeout in seconds (0 = global default)
-	WebSocketURL string           `json:"websocket_url,omitempty"`  // For Linux container apps (VNC)
-	GuacamoleURL string           `json:"guacamole_url,omitempty"`  // For Windows container apps (RDP via Guacamole)
-	ProxyURL     string           `json:"proxy_url,omitempty"`      // For web_proxy apps
-	CreatedAt    time.Time        `json:"created_at"`
-	UpdatedAt    time.Time        `json:"updated_at"`
+	ID              string           `json:"id"`
+	UserID          string           `json:"user_id"`
+	AppID           string           `json:"app_id"`
+	AppName         string           `json:"app_name,omitempty"`
+	PodName         string           `json:"pod_name"`
+	Status          db.SessionStatus `json:"status"`
+	IdleTimeout     int64            `json:"idle_timeout,omitempty"` // Per-session idle timeout in seconds (0 = global default)
+	WebSocketURL    string           `json:"websocket_url,omitempty"`  // For Linux container apps (VNC)
+	GuacamoleURL    string           `json:"guacamole_url,omitempty"`  // For Windows container apps (RDP via Guacamole)
+	ProxyURL        string           `json:"proxy_url,omitempty"`      // For web_proxy apps
+	IsShared        bool             `json:"is_shared,omitempty"`        // true if this is a shared session (viewer is not owner)
+	OwnerUsername   string           `json:"owner_username,omitempty"`   // set for shared sessions
+	SharePermission string           `json:"share_permission,omitempty"` // "read_only" or "read_write" for shared sessions
+	ShareID         string           `json:"share_id,omitempty"`         // share record ID for shared sessions
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+// CreateShareRequest represents a request to share a session.
+type CreateShareRequest struct {
+	UserID     string `json:"user_id,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Permission string `json:"permission"`
+	LinkShare  bool   `json:"link_share,omitempty"`
+}
+
+// ShareResponse represents a session share in API responses.
+type ShareResponse struct {
+	ID         string `json:"id"`
+	SessionID  string `json:"session_id"`
+	UserID     string `json:"user_id,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Permission string `json:"permission"`
+	ShareURL   string `json:"share_url,omitempty"`
+	CreatedAt  string `json:"created_at"`
+}
+
+// JoinShareRequest represents a request to join a session via share token.
+type JoinShareRequest struct {
+	Token string `json:"token"`
 }
 
 // SessionFromDB converts a database session to an API response

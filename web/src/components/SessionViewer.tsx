@@ -10,6 +10,7 @@ interface SessionViewerProps {
   app: Application;
   darkMode: boolean;
   clipboardPolicy?: ClipboardPolicy;
+  viewOnly?: boolean;
   showStats?: boolean;
   onConnect?: () => void;
   onDisconnect?: (clean: boolean) => void;
@@ -28,6 +29,7 @@ export function SessionViewer({
   app,
   darkMode,
   clipboardPolicy = 'bidirectional',
+  viewOnly = false,
   showStats: showStatsProp = false,
   onConnect,
   onDisconnect,
@@ -113,25 +115,27 @@ export function SessionViewer({
       {isVNC && (
         <VNCViewer
           wsUrl={session.websocket_url!}
+          viewOnly={viewOnly}
           onConnect={handleViewerConnect}
           onDisconnect={handleViewerDisconnect}
           onError={handleViewerError}
           onReconnecting={handleReconnecting}
           onReconnected={handleReconnected}
           showStats={showStats}
-          clipboardPolicy={clipboardPolicy}
+          clipboardPolicy={viewOnly ? 'none' : clipboardPolicy}
         />
       )}
 
       {isGuacamole && (
         <GuacamoleViewer
           wsUrl={session.guacamole_url!}
+          viewOnly={viewOnly}
           onConnect={handleViewerConnect}
           onDisconnect={handleViewerDisconnect}
           onError={handleViewerError}
           onReconnecting={handleReconnecting}
           onReconnected={handleReconnected}
-          clipboardPolicy={clipboardPolicy}
+          clipboardPolicy={viewOnly ? 'none' : clipboardPolicy}
         />
       )}
 
