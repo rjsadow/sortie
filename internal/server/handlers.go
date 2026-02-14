@@ -1037,7 +1037,12 @@ func (h *handlers) handleSessions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if req.UserID == "" {
-			req.UserID = "anonymous"
+			user := middleware.GetUserFromContext(r.Context())
+			if user != nil {
+				req.UserID = user.ID
+			} else {
+				req.UserID = "anonymous"
+			}
 		}
 
 		session, err := h.app.SessionManager.CreateSession(r.Context(), &req)
