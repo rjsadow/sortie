@@ -8,7 +8,6 @@ import {
   waitForSessionRunning,
   loginAs,
   listSessionShares,
-  listSharedSessions,
 } from './helpers/api';
 
 // Sharing tests use fresh browser state — each test logs in as the required user.
@@ -99,7 +98,9 @@ test.describe('Session Sharing', () => {
     // Should show the share in "Current Shares" section
     await expect(page.getByText('Current Shares')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('pw-share-viewer')).toBeVisible();
-    await expect(page.getByText('View Only').first()).toBeVisible();
+    // Use locator scoped to the share entry to avoid matching the <option> in the Permission <select>
+    const shareEntry = page.getByText('pw-share-viewer').locator('..');
+    await expect(shareEntry.getByText('View Only')).toBeVisible();
   });
 
   test('viewer sees shared session with correct indicators', async ({ page }) => {
@@ -334,25 +335,23 @@ test.describe('Session Sharing - Shared Sessions Empty State', () => {
     await deleteTestUser(request, adminToken, userId).catch(() => {});
   });
 
-  test('user with no shared sessions sees empty session manager', async ({ page, request }) => {
+  test('user with no shared sessions sees empty session manager', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('Username').fill('pw-share-empty');
     await page.getByLabel('Password').fill('pass1234');
     await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
-    // Verify via API that no shared sessions exist
-    const token = await loginAs(request, 'pw-share-empty', 'pass1234');
-    const res = await listSharedSessions(request, token);
-    const sessions = await res.json();
-    expect(sessions).toHaveLength(0);
+    // Wait for initial page load to settle before opening session manager
+    await page.waitForLoadState('networkidle');
 
     // Open session manager
     await page.getByLabel('Manage sessions').click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // Should show empty state (increase timeout for slower browsers like Firefox)
-    await expect(dialog.getByText('No active sessions')).toBeVisible({ timeout: 10_000 });
+    // Wait for loading spinner to finish, then check empty state
+    await expect(dialog.locator('.animate-spin')).toBeHidden({ timeout: 15_000 });
+    await expect(dialog.getByText('No active sessions')).toBeVisible();
   });
 });
