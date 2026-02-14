@@ -976,7 +976,13 @@ func (h *handlers) handleSessions(w http.ResponseWriter, r *http.Request) {
 		if userID != "" {
 			sessionList, err = h.app.SessionManager.ListSessionsByUser(r.Context(), userID)
 		} else {
-			sessionList, err = h.app.SessionManager.ListSessions(r.Context())
+			// Default to the authenticated user's sessions (admins use /api/admin/sessions for all)
+			user := middleware.GetUserFromContext(r.Context())
+			if user != nil {
+				sessionList, err = h.app.SessionManager.ListSessionsByUser(r.Context(), user.ID)
+			} else {
+				sessionList, err = h.app.SessionManager.ListSessions(r.Context())
+			}
 		}
 
 		if err != nil {
