@@ -7,7 +7,6 @@ import {
   terminateTestSession,
   waitForSessionRunning,
   loginAs,
-  createSessionShare,
   listSessionShares,
   listSharedSessions,
 } from './helpers/api';
@@ -22,7 +21,6 @@ test.describe('Session Sharing', () => {
   let ownerUserId: string;
   let viewerUserId: string;
   let ownerToken: string;
-  let viewerToken: string;
   let sessionId: string;
 
   test.beforeAll(async ({ request }) => {
@@ -42,7 +40,6 @@ test.describe('Session Sharing', () => {
     viewerUserId = (await viewerRes.json()).id;
 
     ownerToken = await loginAs(request, 'pw-share-owner', 'pass1234');
-    viewerToken = await loginAs(request, 'pw-share-viewer', 'pass1234');
 
     // Create a running session owned by the owner
     const sessRes = await createTestSession(request, ownerToken, 'test-container', ownerUserId);
