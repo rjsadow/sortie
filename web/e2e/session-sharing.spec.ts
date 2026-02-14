@@ -352,7 +352,7 @@ test.describe('Session Sharing - Shared Sessions Empty State', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // Should show empty state
-    await expect(dialog.getByText('No active sessions')).toBeVisible();
+    // Should show empty state (increase timeout for slower browsers like Firefox)
+    await expect(dialog.getByText('No active sessions')).toBeVisible({ timeout: 10_000 });
   });
 });

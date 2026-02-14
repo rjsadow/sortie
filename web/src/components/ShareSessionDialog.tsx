@@ -142,8 +142,9 @@ export function ShareSessionDialog({ sessionId, isOpen, onClose, darkMode }: Sha
 
           {/* Permission selector */}
           <div>
-            <label className={`block text-sm font-medium mb-1 ${mutedText}`}>Permission</label>
+            <label htmlFor="share-permission" className={`block text-sm font-medium mb-1 ${mutedText}`}>Permission</label>
             <select
+              id="share-permission"
               value={permission}
               onChange={(e) => setPermission(e.target.value as 'read_only' | 'read_write')}
               className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${inputBg}`}
@@ -155,9 +156,10 @@ export function ShareSessionDialog({ sessionId, isOpen, onClose, darkMode }: Sha
 
           {/* Invite by username */}
           <div>
-            <label className={`block text-sm font-medium mb-1 ${mutedText}`}>Invite by Username</label>
+            <label htmlFor="share-username" className={`block text-sm font-medium mb-1 ${mutedText}`}>Invite by Username</label>
             <div className="flex gap-2">
               <input
+                id="share-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
