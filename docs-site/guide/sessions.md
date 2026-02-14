@@ -31,6 +31,7 @@ From the session manager you can:
 
 - See which sessions are currently running
 - Reconnect to a running session
+- [Share a session](/guide/session-sharing) with other users
 - Terminate sessions you no longer need
 
 ## Session Timeout

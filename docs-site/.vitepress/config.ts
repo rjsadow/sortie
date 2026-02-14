@@ -21,6 +21,7 @@ export default defineConfig({
           { text: 'Access Control', link: '/guide/access-control' },
           { text: 'Templates', link: '/guide/templates' },
           { text: 'Sessions', link: '/guide/sessions' },
+          { text: 'Session Sharing', link: '/guide/session-sharing' },
         ],
       },
       {

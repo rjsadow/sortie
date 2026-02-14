@@ -97,6 +97,19 @@ access grants.
 | POST | `/api/sessions` | Create session |
 | GET | `/api/sessions/:id` | Get session by ID |
 | DELETE | `/api/sessions/:id` | Terminate session |
+| GET | `/api/sessions/shared` | List sessions shared with the current user |
+| POST | `/api/sessions/:id/shares` | Create a share (by username or link) |
+| GET | `/api/sessions/:id/shares` | List shares for a session (owner only) |
+| DELETE | `/api/sessions/:id/shares/:shareId` | Revoke a share (owner only) |
+| POST | `/api/sessions/shares/join` | Join a session via share token |
+
+### Session Sharing
+
+Session owners can share running container sessions with other users.
+See the [Session Sharing guide](/guide/session-sharing) for details.
+
+Shared sessions returned from `/api/sessions/shared` include extra
+fields: `is_shared`, `owner_username`, `share_permission`, and `share_id`.
 
 ## Templates
 
