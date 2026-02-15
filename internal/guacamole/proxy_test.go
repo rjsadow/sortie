@@ -159,3 +159,20 @@ func TestBuildConnectArgs_SecurityParams(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildRDPConnectArgs(t *testing.T) {
+	argNames := []string{"hostname", "port", "username", "password", "width", "height", "dpi", "unknown-param"}
+	result := buildRDPConnectArgs(argNames, "127.0.0.1", "3389", "testuser", "testpass", "1920", "1080")
+
+	expected := []string{"127.0.0.1", "3389", "testuser", "testpass", "1920", "1080", "96", ""}
+
+	if len(result) != len(expected) {
+		t.Fatalf("buildRDPConnectArgs returned %d args, want %d", len(result), len(expected))
+	}
+
+	for i, v := range result {
+		if v != expected[i] {
+			t.Errorf("buildRDPConnectArgs()[%d] = %q, want %q (param: %s)", i, v, expected[i], argNames[i])
+		}
+	}
+}

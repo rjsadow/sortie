@@ -99,7 +99,17 @@ func (p *GuacdProxy) Serve(clientConn *websocket.Conn) error {
 	return nil
 }
 
-// handshake performs the Guacamole protocol handshake with guacd.
+// handshake delegates to the package-level performHandshake function.
+func (p *GuacdProxy) handshake(conn net.Conn) ([]byte, error) {
+	return performHandshake(conn, p.hostname, p.port, p.username, p.password, p.width, p.height)
+}
+
+// buildConnectArgs delegates to the package-level buildRDPConnectArgs function.
+func (p *GuacdProxy) buildConnectArgs(argNames []string) []string {
+	return buildRDPConnectArgs(argNames, p.hostname, p.port, p.username, p.password, p.width, p.height)
+}
+
+// performHandshake performs the Guacamole protocol handshake with guacd.
 // The handshake flow is:
 // 1. Send "select" instruction to choose protocol (rdp)
 // 2. Read guacd's "args" response listing required parameters
@@ -109,7 +119,7 @@ func (p *GuacdProxy) Serve(clientConn *websocket.Conn) error {
 //
 // Returns any excess data read beyond the "ready" instruction, which contains
 // initial display updates that must be forwarded to the client.
-func (p *GuacdProxy) handshake(conn net.Conn) ([]byte, error) {
+func performHandshake(conn net.Conn, hostname, port, username, password, width, height string) ([]byte, error) {
 	// Step 1: Send select instruction
 	selectInstr := encodeInstruction("select", "rdp")
 	if _, err := conn.Write([]byte(selectInstr)); err != nil {
@@ -129,7 +139,7 @@ func (p *GuacdProxy) handshake(conn net.Conn) ([]byte, error) {
 	// In the Guacamole protocol, clients must declare their display size and
 	// supported media types BEFORE the connect instruction. guacd uses these
 	// to set the user's optimal resolution for the RDP session.
-	clientInstrs := encodeInstruction("size", p.width, p.height, "96") +
+	clientInstrs := encodeInstruction("size", width, height, "96") +
 		encodeInstruction("audio") +
 		encodeInstruction("video") +
 		encodeInstruction("image", "image/png", "image/jpeg", "image/webp") +
@@ -140,7 +150,7 @@ func (p *GuacdProxy) handshake(conn net.Conn) ([]byte, error) {
 
 	// Step 4: Send connect instruction with RDP parameters
 	args := parseInstruction(argsResponse)
-	connectArgs := p.buildConnectArgs(args)
+	connectArgs := buildRDPConnectArgs(args, hostname, port, username, password, width, height)
 	connectInstr := encodeInstruction("connect", connectArgs...)
 	if _, err := conn.Write([]byte(connectInstr)); err != nil {
 		return nil, fmt.Errorf("failed to send connect: %w", err)
@@ -169,16 +179,16 @@ func (p *GuacdProxy) handshake(conn net.Conn) ([]byte, error) {
 	return nil, nil
 }
 
-// buildConnectArgs maps guacd's requested parameter names to values.
-func (p *GuacdProxy) buildConnectArgs(argNames []string) []string {
+// buildRDPConnectArgs maps guacd's requested parameter names to RDP connection values.
+func buildRDPConnectArgs(argNames []string, hostname, port, username, password, width, height string) []string {
 	paramMap := map[string]string{
 		"VERSION_1_5_0": "VERSION_1_5_0",
-		"hostname":      p.hostname,
-		"port":          p.port,
-		"username":      p.username,
-		"password":      p.password,
-		"width":         p.width,
-		"height":        p.height,
+		"hostname":      hostname,
+		"port":          port,
+		"username":      username,
+		"password":      password,
+		"width":         width,
+		"height":        height,
 		"dpi":           "96",
 		"color-depth":   "24",
 		"security":      "rdp",

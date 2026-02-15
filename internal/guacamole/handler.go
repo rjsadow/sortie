@@ -22,12 +22,14 @@ var upgrader = websocket.Upgrader{
 // Handler handles Guacamole WebSocket connections for Windows RDP sessions
 type Handler struct {
 	sessionManager *sessions.Manager
+	registry       *SessionRegistry
 }
 
 // NewHandler creates a new Guacamole WebSocket handler
 func NewHandler(sessionManager *sessions.Manager) *Handler {
 	return &Handler{
 		sessionManager: sessionManager,
+		registry:       NewSessionRegistry(),
 	}
 }
 
@@ -83,17 +85,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		height = "1080"
 	}
 
-	// Create guacd proxy
-	// guacd runs as a sidecar in the same pod, accessible via pod IP on port 4822
-	// The RDP server runs in the app container, accessible via localhost:3389 from guacd's perspective
+	// Check if this is a read-only share (set by gateway for shared sessions)
+	viewOnly := r.URL.Query().Get("view_only") == "true"
+
+	// Get or create a shared session — ensures exactly one guacd/RDP connection per session ID.
+	// guacd runs as a sidecar in the same pod, accessible via pod IP on port 4822.
+	// The RDP server runs in the app container, accessible via localhost:3389 from guacd's perspective.
 	guacdAddr := session.PodIP + ":4822"
-	proxy := NewGuacdProxy(guacdAddr, "127.0.0.1", "3389", "testuser", "testpass", width, height)
 
-	log.Printf("Starting Guacamole proxy for session %s to guacd at %s", sessionID, guacdAddr)
-
-	if err := proxy.Serve(clientConn); err != nil {
-		if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
-			log.Printf("Guacamole proxy error for session %s: %v", sessionID, err)
-		}
+	shared, err := h.registry.GetOrCreate(sessionID, guacdAddr, "127.0.0.1", "3389", "testuser", "testpass", width, height)
+	if err != nil {
+		log.Printf("Failed to create shared session for %s: %v", sessionID, err)
+		return
 	}
+
+	log.Printf("Client joining shared Guacamole session %s (viewOnly=%v)", sessionID, viewOnly)
+
+	// AddClient blocks until this client disconnects
+	shared.AddClient(clientConn, viewOnly)
 }
