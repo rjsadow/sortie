@@ -107,6 +107,7 @@ internal/
   config/            Configuration loading
   db/                SQLite database layer
   sessions/          Session lifecycle management
+  recordings/        Session video recording
   k8s/               Kubernetes pod orchestration
   websocket/         VNC WebSocket proxy
   guacamole/         Guacamole WebSocket proxy

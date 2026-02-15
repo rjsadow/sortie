@@ -14,6 +14,7 @@ Sortie uses a layered persistence strategy:
 | Session Metadata | SQLite + in-memory cache | Server-side | Partial          |
 | Workspace Volume | Kubernetes emptyDir      | Pod-local   | No               |
 | Audit/Analytics  | SQLite database          | Server-side | Yes (with PVC)   |
+| Recordings       | Local filesystem or S3   | Server-side | Yes (with PVC or S3) |
 
 ## User Settings
 
@@ -498,6 +499,7 @@ Mounted via ConfigMap in Kubernetes deployments.
 | Audit logs       | SQLite `audit_log` table      | Database backup     |
 | Analytics        | SQLite `analytics` table      | Database backup     |
 | Branding config  | ConfigMap / JSON file         | GitOps              |
+| Recordings       | Local filesystem or S3        | PVC / S3 replication |
 | K8s manifests    | Git repository                | GitOps              |
 
 For production deployments:
