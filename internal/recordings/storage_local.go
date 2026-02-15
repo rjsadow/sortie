@@ -23,56 +23,59 @@ func NewLocalStore(baseDir string) *LocalStore {
 // Save writes a recording file to disk and returns the relative storage path.
 func (s *LocalStore) Save(id string, r io.Reader) (string, error) {
 	now := time.Now()
-	relPath := filepath.Join(fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()), filepath.Base(id)+".webm")
+	cleanID := filepath.Base(id) // strip any directory components
+	relPath := filepath.Join(fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()), cleanID+".webm")
 
-	fullPath, err := s.safePath(relPath)
+	// Validate path stays within baseDir
+	fullPath := filepath.Clean(filepath.Join(s.baseDir, relPath))
+	absBase, err := filepath.Abs(s.baseDir)
 	if err != nil {
-		return "", fmt.Errorf("invalid recording id: %w", err)
+		return "", fmt.Errorf("invalid base dir: %w", err)
+	}
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid recording id: path traversal detected")
 	}
 
-	dir := filepath.Dir(fullPath)
+	dir := filepath.Dir(absPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	f, err := os.Create(fullPath) // #nosec G304 -- path validated by safePath
+	f, err := os.Create(absPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create file %s: %w", fullPath, err)
+		return "", fmt.Errorf("failed to create file %s: %w", absPath, err)
 	}
 	defer f.Close()
 
 	if _, err := io.Copy(f, r); err != nil {
-		os.Remove(fullPath)
+		os.Remove(absPath)
 		return "", fmt.Errorf("failed to write recording: %w", err)
 	}
 
 	return relPath, nil
 }
 
-// safePath resolves the storage path and ensures it stays within baseDir.
-func (s *LocalStore) safePath(storagePath string) (string, error) {
-	fullPath := filepath.Join(s.baseDir, storagePath)
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
-	}
-	absBase, err := filepath.Abs(s.baseDir)
-	if err != nil {
-		return "", fmt.Errorf("invalid base dir: %w", err)
-	}
-	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
-		return "", fmt.Errorf("path traversal detected: %s", storagePath)
-	}
-	return absPath, nil
-}
-
 // Get opens the recording file at the given storage path for reading.
 func (s *LocalStore) Get(storagePath string) (io.ReadCloser, error) {
-	fullPath, err := s.safePath(storagePath)
+	// Validate path stays within baseDir
+	fullPath := filepath.Clean(filepath.Join(s.baseDir, storagePath))
+	absBase, err := filepath.Abs(s.baseDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid base dir: %w", err)
 	}
-	f, err := os.Open(fullPath) // #nosec G304 -- path validated by safePath
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+		return nil, fmt.Errorf("path traversal detected: %s", storagePath)
+	}
+
+	f, err := os.Open(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open recording: %w", err)
 	}
@@ -81,11 +84,21 @@ func (s *LocalStore) Get(storagePath string) (io.ReadCloser, error) {
 
 // Delete removes the recording file at the given storage path.
 func (s *LocalStore) Delete(storagePath string) error {
-	fullPath, err := s.safePath(storagePath)
+	// Validate path stays within baseDir
+	fullPath := filepath.Clean(filepath.Join(s.baseDir, storagePath))
+	absBase, err := filepath.Abs(s.baseDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid base dir: %w", err)
 	}
-	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+		return fmt.Errorf("path traversal detected: %s", storagePath)
+	}
+
+	if err := os.Remove(absPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete recording: %w", err)
 	}
 	return nil
