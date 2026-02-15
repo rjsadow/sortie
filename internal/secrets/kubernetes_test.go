@@ -19,7 +19,7 @@ func TestKubernetesProvider_Name(t *testing.T) {
 }
 
 func newFakeK8sProvider(namespace, secretName string, secretData map[string][]byte, labels map[string]string) *KubernetesProvider {
-	client := fake.NewSimpleClientset(&corev1.Secret{
+	client := fake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: namespace,
@@ -36,7 +36,7 @@ func newFakeK8sProvider(namespace, secretName string, secretData map[string][]by
 }
 
 func newFakeK8sProviderEmpty(namespace, secretName string) *KubernetesProvider {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	return &KubernetesProvider{
 		client:     client,
 		namespace:  namespace,

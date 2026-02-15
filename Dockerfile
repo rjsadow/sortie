@@ -21,7 +21,7 @@ COPY docs-site/ ./
 RUN npm run build
 
 # Build stage: Go binary
-FROM golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191 AS backend
+FROM golang:1.25-alpine@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced AS backend
 
 WORKDIR /app
 

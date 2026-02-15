@@ -561,7 +561,7 @@ func setFakeClient(t *testing.T) *fake.Clientset {
 	ResetClient()
 	Configure("test-ns", "", "")
 
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 	client = fakeClient
 	clientErr = nil
 	clientOnce.Do(func() {}) // prevent re-initialization
