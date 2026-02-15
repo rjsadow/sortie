@@ -187,7 +187,7 @@ export function GuacamoleViewer({
             client.sendMouseState(mouseState);
           };
 
-          const keyboard = new Guacamole.Keyboard(document);
+          const keyboard = new Guacamole.Keyboard(containerRef.current);
           keyboard.onkeydown = (keysym: number) => {
             client.sendKeyEvent(1, keysym);
           };
