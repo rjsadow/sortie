@@ -148,7 +148,15 @@ test.describe('recording lifecycle', () => {
   });
 
   test.afterEach(async ({ request }) => {
-    // Clean up all sessions after each test
+    // Clean up all recordings to avoid polluting other test blocks
+    const recRes = await listAdminRecordings(request, token);
+    if (recRes.ok()) {
+      const recs = await recRes.json();
+      for (const r of recs) {
+        await deleteRecording(request, token, r.id);
+      }
+    }
+    // Clean up all sessions
     const res = await listSessions(request, token);
     if (res.ok()) {
       const sessions = await res.json();
@@ -213,8 +221,7 @@ test.describe('recording lifecycle', () => {
     const gone = recs2.find((r: { id: string }) => r.id === recordingId);
     expect(gone).toBeUndefined();
 
-    // Terminate session
-    await terminateTestSession(request, token, session.id);
+    // Session cleanup handled by afterEach
   });
 
   test('recordings modal shows recording after API upload', async ({ page, request }) => {
@@ -247,10 +254,7 @@ test.describe('recording lifecycle', () => {
     // Assert "ready" status is visible
     await expect(page.getByText('ready').first()).toBeVisible();
 
-    // Cleanup
-    await page.getByLabel('Close').click();
-    await deleteRecording(request, token, recordingId);
-    await terminateTestSession(request, token, session.id);
+    // Cleanup via API (afterEach handles recordings and sessions)
   });
 
   test('admin recordings tab shows all users recordings', async ({ page, request }) => {
@@ -284,10 +288,7 @@ test.describe('recording lifecycle', () => {
     // Assert recording visible in admin table
     await expect(page.getByText('.webm').first()).toBeVisible();
 
-    // Cleanup
-    await page.getByLabel('Close').click();
-    await deleteRecording(request, token, recordingId);
-    await terminateTestSession(request, token, session.id);
+    // Cleanup via API (afterEach handles recordings and sessions)
   });
 
   test('delete recording from recordings modal', async ({ page, request }) => {
@@ -324,8 +325,7 @@ test.describe('recording lifecycle', () => {
     // Assert recording disappears
     await expect(page.getByText('No recordings')).toBeVisible({ timeout: 5000 });
 
-    // Cleanup session
-    await terminateTestSession(request, token, session.id);
+    // Cleanup via API (afterEach handles recordings and sessions)
   });
 
   test('download recording from recordings modal', async ({ page, request }) => {
@@ -361,9 +361,6 @@ test.describe('recording lifecycle', () => {
     // Assert download filename contains .webm
     expect(download.suggestedFilename()).toContain('.webm');
 
-    // Cleanup
-    await page.getByLabel('Close').click();
-    await deleteRecording(request, token, recordingId);
-    await terminateTestSession(request, token, session.id);
+    // Cleanup via API (afterEach handles recordings and sessions)
   });
 });
