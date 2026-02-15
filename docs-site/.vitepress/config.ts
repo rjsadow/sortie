@@ -22,6 +22,7 @@ export default defineConfig({
           { text: 'Templates', link: '/guide/templates' },
           { text: 'Sessions', link: '/guide/sessions' },
           { text: 'Session Sharing', link: '/guide/session-sharing' },
+          { text: 'Session Recording', link: '/guide/recording' },
         ],
       },
       {
@@ -32,6 +33,7 @@ export default defineConfig({
           { text: 'Kubernetes', link: '/admin/kubernetes' },
           { text: 'Reverse Proxy', link: '/admin/reverse-proxy' },
           { text: 'Data Persistence', link: '/admin/data-persistence' },
+          { text: 'Session Recording', link: '/admin/recording' },
           { text: 'Disaster Recovery', link: '/admin/disaster-recovery' },
           { text: 'Network Egress', link: '/admin/network-egress' },
         ],

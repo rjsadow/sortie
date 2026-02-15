@@ -111,6 +111,27 @@ See the [Session Sharing guide](/guide/session-sharing) for details.
 Shared sessions returned from `/api/sessions/shared` include extra
 fields: `is_shared`, `owner_username`, `share_permission`, and `share_id`.
 
+## Recordings
+
+These endpoints require `SORTIE_VIDEO_RECORDING_ENABLED=true`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/sessions/:id/recording/start` | Start recording a session |
+| POST | `/api/sessions/:id/recording/stop` | Stop recording a session |
+| POST | `/api/sessions/:id/recording/upload` | Upload recorded video (multipart form) |
+| GET | `/api/recordings` | List current user's recordings |
+| GET | `/api/admin/recordings` | List all recordings (admin only) |
+| GET | `/api/recordings/:id/download` | Download a recording file |
+| DELETE | `/api/recordings/:id` | Delete a recording |
+
+The upload endpoint accepts a `multipart/form-data` request with fields
+`recording_id`, `duration` (optional), and `file` (the `.webm` video).
+
+Users can download and delete their own recordings. Administrators can
+access any user's recordings via the admin endpoint and can download or
+delete any recording.
+
 ## Templates
 
 | Method | Endpoint | Description |
