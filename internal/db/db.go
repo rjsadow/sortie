@@ -414,6 +414,20 @@ func (db *DB) migrate() error {
 		user_id TEXT NOT NULL,
 		PRIMARY KEY (category_id, user_id)
 	);
+
+	CREATE TABLE IF NOT EXISTS session_shares (
+		id TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL,
+		user_id TEXT NOT NULL DEFAULT '',
+		permission TEXT NOT NULL DEFAULT 'read_only',
+		share_token TEXT UNIQUE,
+		created_by TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id);
+	CREATE INDEX IF NOT EXISTS idx_session_shares_user ON session_shares(user_id);
+	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
 	`
 	_, err := db.conn.Exec(schema)
 	if err != nil {
@@ -2072,4 +2086,202 @@ func (db *DB) SeedTemplatesFromData(data []byte) error {
 	}
 
 	return nil
+}
+
+// SharePermission controls the access level of a session share.
+type SharePermission string
+
+const (
+	SharePermissionReadOnly  SharePermission = "read_only"
+	SharePermissionReadWrite SharePermission = "read_write"
+)
+
+// SessionShare represents a share record granting access to a session.
+type SessionShare struct {
+	ID         string          `json:"id"`
+	SessionID  string          `json:"session_id"`
+	UserID     string          `json:"user_id"`
+	Permission SharePermission `json:"permission"`
+	ShareToken string          `json:"share_token,omitempty"`
+	CreatedBy  string          `json:"created_by"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+// CreateSessionShare inserts a new session share record.
+func (db *DB) CreateSessionShare(share SessionShare) error {
+	var token *string
+	if share.ShareToken != "" {
+		token = &share.ShareToken
+	}
+	_, err := db.conn.Exec(
+		"INSERT INTO session_shares (id, session_id, user_id, permission, share_token, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		share.ID, share.SessionID, share.UserID, string(share.Permission), token, share.CreatedBy, share.CreatedAt,
+	)
+	return err
+}
+
+// GetSessionShare returns a session share by ID.
+func (db *DB) GetSessionShare(id string) (*SessionShare, error) {
+	var share SessionShare
+	var perm string
+	var token sql.NullString
+	err := db.conn.QueryRow(
+		"SELECT id, session_id, user_id, permission, share_token, created_by, created_at FROM session_shares WHERE id = ?", id,
+	).Scan(&share.ID, &share.SessionID, &share.UserID, &perm, &token, &share.CreatedBy, &share.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	share.Permission = SharePermission(perm)
+	if token.Valid {
+		share.ShareToken = token.String
+	}
+	return &share, nil
+}
+
+// GetSessionShareByToken returns a session share by its token.
+func (db *DB) GetSessionShareByToken(token string) (*SessionShare, error) {
+	var share SessionShare
+	var perm string
+	var tok sql.NullString
+	err := db.conn.QueryRow(
+		"SELECT id, session_id, user_id, permission, share_token, created_by, created_at FROM session_shares WHERE share_token = ?", token,
+	).Scan(&share.ID, &share.SessionID, &share.UserID, &perm, &tok, &share.CreatedBy, &share.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	share.Permission = SharePermission(perm)
+	if tok.Valid {
+		share.ShareToken = tok.String
+	}
+	return &share, nil
+}
+
+// ListSessionShares returns all shares for a given session.
+func (db *DB) ListSessionShares(sessionID string) ([]SessionShare, error) {
+	rows, err := db.conn.Query(
+		"SELECT id, session_id, user_id, permission, share_token, created_by, created_at FROM session_shares WHERE session_id = ? ORDER BY created_at DESC",
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var shares []SessionShare
+	for rows.Next() {
+		var share SessionShare
+		var perm string
+		var token sql.NullString
+		if err := rows.Scan(&share.ID, &share.SessionID, &share.UserID, &perm, &token, &share.CreatedBy, &share.CreatedAt); err != nil {
+			return nil, err
+		}
+		share.Permission = SharePermission(perm)
+		if token.Valid {
+			share.ShareToken = token.String
+		}
+		shares = append(shares, share)
+	}
+	return shares, rows.Err()
+}
+
+// SharedSessionRow holds join data for sessions shared with a user.
+type SharedSessionRow struct {
+	Session       Session
+	AppName       string
+	OwnerUsername string
+	Permission    SharePermission
+	ShareID       string
+}
+
+// ListSharedSessionsForUser returns sessions shared with the given user.
+func (db *DB) ListSharedSessionsForUser(userID string) ([]SharedSessionRow, error) {
+	rows, err := db.conn.Query(
+		`SELECT s.id, s.user_id, s.app_id, s.pod_name, s.pod_ip, s.status, s.idle_timeout, s.created_at, s.updated_at,
+		        COALESCE(a.name, s.app_id), COALESCE(u.username, s.user_id),
+		        ss.permission, ss.id
+		 FROM session_shares ss
+		 JOIN sessions s ON ss.session_id = s.id
+		 LEFT JOIN applications a ON s.app_id = a.id
+		 LEFT JOIN users u ON s.user_id = u.id
+		 WHERE ss.user_id = ? AND s.status NOT IN ('terminated', 'failed', 'stopped', 'expired')
+		 ORDER BY s.created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []SharedSessionRow
+	for rows.Next() {
+		var r SharedSessionRow
+		var status, perm string
+		if err := rows.Scan(
+			&r.Session.ID, &r.Session.UserID, &r.Session.AppID, &r.Session.PodName,
+			&r.Session.PodIP, &status, &r.Session.IdleTimeout, &r.Session.CreatedAt, &r.Session.UpdatedAt,
+			&r.AppName, &r.OwnerUsername, &perm, &r.ShareID,
+		); err != nil {
+			return nil, err
+		}
+		r.Session.Status = SessionStatus(status)
+		r.Permission = SharePermission(perm)
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+// CheckSessionAccess checks whether a user has share access to a session.
+func (db *DB) CheckSessionAccess(sessionID, userID string) (*SessionShare, error) {
+	var share SessionShare
+	var perm string
+	var token sql.NullString
+	err := db.conn.QueryRow(
+		"SELECT id, session_id, user_id, permission, share_token, created_by, created_at FROM session_shares WHERE session_id = ? AND user_id = ? LIMIT 1",
+		sessionID, userID,
+	).Scan(&share.ID, &share.SessionID, &share.UserID, &perm, &token, &share.CreatedBy, &share.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	share.Permission = SharePermission(perm)
+	if token.Valid {
+		share.ShareToken = token.String
+	}
+	return &share, nil
+}
+
+// DeleteSessionShare removes a session share by ID.
+func (db *DB) DeleteSessionShare(id string) error {
+	result, err := db.conn.Exec("DELETE FROM session_shares WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// DeleteSessionSharesBySession removes all shares for a session.
+func (db *DB) DeleteSessionSharesBySession(sessionID string) error {
+	_, err := db.conn.Exec("DELETE FROM session_shares WHERE session_id = ?", sessionID)
+	return err
+}
+
+// UpdateSessionShareUserID sets the user_id on a share (used when joining via link).
+func (db *DB) UpdateSessionShareUserID(id, userID string) error {
+	_, err := db.conn.Exec("UPDATE session_shares SET user_id = ? WHERE id = ?", userID, id)
+	return err
 }

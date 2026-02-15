@@ -241,12 +241,12 @@ func TestSession_ListUserSessions(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	createContainerApp(t, ts, "list-app")
 
-	// Create a session
-	body := []byte(`{"app_id":"list-app","user_id":"testuser"}`)
+	// Create a session owned by the admin user
+	body := []byte(`{"app_id":"list-app","user_id":"admin-admin"}`)
 	resp := testutil.AuthPost(t, ts.URL+"/api/sessions", ts.AdminToken, body)
 	resp.Body.Close()
 
-	// List sessions
+	// List sessions (returns only the authenticated user's sessions)
 	resp = testutil.AuthGet(t, ts.URL+"/api/sessions", ts.AdminToken)
 	defer resp.Body.Close()
 

@@ -54,8 +54,22 @@ export interface Session {
   websocket_url?: string;    // For Linux container apps (VNC)
   guacamole_url?: string;    // For Windows container apps (RDP via Guacamole)
   proxy_url?: string;        // For web_proxy apps
+  is_shared?: boolean;
+  owner_username?: string;
+  share_permission?: 'read_only' | 'read_write';
+  share_id?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface SessionShare {
+  id: string;
+  session_id: string;
+  user_id?: string;
+  username?: string;
+  permission: 'read_only' | 'read_write';
+  share_url?: string;
+  created_at: string;
 }
 
 export interface CreateSessionRequest {

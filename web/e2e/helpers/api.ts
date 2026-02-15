@@ -78,10 +78,13 @@ export async function createTestSession(
   request: APIRequestContext,
   token: string,
   appId: string,
+  userId?: string,
 ) {
+  const data: Record<string, string> = { app_id: appId };
+  if (userId) data.user_id = userId;
   const res = await request.post(`${BASE}/api/sessions`, {
     headers: { Authorization: `Bearer ${token}` },
-    data: { app_id: appId },
+    data,
   });
   return res;
 }
@@ -142,4 +145,73 @@ export async function waitForSessionRunning(
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`Session ${id} did not reach running within ${timeoutMs}ms`);
+}
+
+// --- Auth helpers ---
+
+export async function loginAs(
+  request: APIRequestContext,
+  username: string,
+  password: string,
+): Promise<string> {
+  const res = await request.post(`${BASE}/api/auth/login`, {
+    data: { username, password },
+  });
+  const body = await res.json();
+  return body.access_token;
+}
+
+// --- Session sharing helpers ---
+
+export async function createSessionShare(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  data: { username?: string; permission?: string; link_share?: boolean },
+) {
+  return request.post(`${BASE}/api/sessions/${sessionId}/shares`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data,
+  });
+}
+
+export async function listSessionShares(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+) {
+  return request.get(`${BASE}/api/sessions/${sessionId}/shares`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function deleteSessionShare(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  shareId: string,
+) {
+  return request.delete(`${BASE}/api/sessions/${sessionId}/shares/${shareId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function listSharedSessions(
+  request: APIRequestContext,
+  token: string,
+) {
+  return request.get(`${BASE}/api/sessions/shared`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function joinSessionShare(
+  request: APIRequestContext,
+  token: string,
+  shareToken: string,
+) {
+  return request.post(`${BASE}/api/sessions/shares/join`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { token: shareToken },
+  });
 }

@@ -1,5 +1,6 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useSessions } from '../hooks/useSessions';
+import { ShareSessionDialog } from './ShareSessionDialog';
 import { formatDuration } from '../utils/time';
 import type { Session, SessionStatus } from '../types';
 
@@ -30,17 +31,20 @@ function SessionCard({
   session,
   onReconnect,
   onTerminate,
+  onShare,
   darkMode,
 }: {
   session: Session;
   onReconnect: () => void;
   onTerminate: () => void;
+  onShare?: () => void;
   darkMode: boolean;
 }) {
   const statusConfig = STATUS_COLORS[session.status];
   const isRunning = session.status === 'running';
   const isCreating = session.status === 'creating';
   const canReconnect = isRunning;
+  const isShared = session.is_shared;
 
   const cardBg = darkMode ? 'bg-gray-800' : 'bg-white';
   const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
@@ -61,7 +65,7 @@ function SessionCard({
 
         {/* Session info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className={`font-medium ${textColor} truncate`}>
               {session.app_name || session.app_id}
             </h3>
@@ -72,6 +76,20 @@ function SessionCard({
             >
               {STATUS_LABELS[session.status]}
             </span>
+            {isShared && (
+              <>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-500">
+                  Shared by {session.owner_username}
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  session.share_permission === 'read_write'
+                    ? 'bg-green-500/20 text-green-500'
+                    : 'bg-blue-500/20 text-blue-500'
+                }`}>
+                  {session.share_permission === 'read_write' ? 'Full Access' : 'View Only'}
+                </span>
+              </>
+            )}
           </div>
           <p className={`text-sm ${mutedText} mt-1`}>
             Started {formatDuration(session.created_at)}
@@ -86,7 +104,7 @@ function SessionCard({
             onClick={onReconnect}
             className="flex-1 px-3 py-2 text-sm font-medium text-white bg-brand-accent hover:bg-brand-primary rounded-xl transition-colors"
           >
-            Reconnect
+            {isShared ? 'Connect' : 'Reconnect'}
           </button>
         ) : isCreating ? (
           <button
@@ -98,16 +116,30 @@ function SessionCard({
             Waiting...
           </button>
         ) : null}
-        <button
-          onClick={onTerminate}
-          className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
-            darkMode
-              ? 'bg-gray-700 text-red-400 hover:bg-red-900/30'
-              : 'bg-gray-100 text-red-600 hover:bg-red-50'
-          }`}
-        >
-          Terminate
-        </button>
+        {!isShared && onShare && (
+          <button
+            onClick={onShare}
+            className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
+              darkMode
+                ? 'bg-gray-700 text-blue-400 hover:bg-blue-900/30'
+                : 'bg-gray-100 text-blue-600 hover:bg-blue-50'
+            }`}
+          >
+            Share
+          </button>
+        )}
+        {!isShared && (
+          <button
+            onClick={onTerminate}
+            className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
+              darkMode
+                ? 'bg-gray-700 text-red-400 hover:bg-red-900/30'
+                : 'bg-gray-100 text-red-600 hover:bg-red-50'
+            }`}
+          >
+            Terminate
+          </button>
+        )}
       </div>
     </div>
   );
@@ -120,6 +152,7 @@ export function SessionManager({
   darkMode,
 }: SessionManagerProps) {
   const { sessions, isLoading, error, refresh, terminateSession } = useSessions(isOpen);
+  const [shareSessionId, setShareSessionId] = useState<string | null>(null);
 
   // Handle escape key
   const handleKeyDown = useCallback(
@@ -257,6 +290,7 @@ export function SessionManager({
                   session={session}
                   onReconnect={() => onReconnect(session.app_id, session.id)}
                   onTerminate={() => handleTerminate(session)}
+                  onShare={() => setShareSessionId(session.id)}
                   darkMode={darkMode}
                 />
               ))}
@@ -273,6 +307,16 @@ export function SessionManager({
           </div>
         )}
       </div>
+
+      {/* Share dialog */}
+      {shareSessionId && (
+        <ShareSessionDialog
+          sessionId={shareSessionId}
+          isOpen={true}
+          onClose={() => setShareSessionId(null)}
+          darkMode={darkMode}
+        />
+      )}
     </>
   );
 }

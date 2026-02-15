@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../hooks/useSession';
 import { SessionViewer } from './SessionViewer';
+import { ShareSessionDialog } from './ShareSessionDialog';
 import type { Application, ClipboardPolicy } from '../types';
 
 interface SessionPageProps {
@@ -9,28 +10,33 @@ interface SessionPageProps {
   darkMode: boolean;
   sessionId?: string; // If provided, reconnect to this existing session instead of creating a new one
   clipboardPolicy?: ClipboardPolicy;
+  viewOnly?: boolean;         // Force read-only mode (for shared sessions)
+  ownerUsername?: string;      // Owner's username (for shared sessions)
+  sharePermission?: string;   // "read_only" or "read_write" (for shared sessions)
 }
 
 type ConnectionState = 'idle' | 'creating' | 'waiting' | 'connecting' | 'connected' | 'error';
 
-export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy = 'bidirectional' }: SessionPageProps) {
+export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy = 'bidirectional', viewOnly = false, ownerUsername, sharePermission }: SessionPageProps) {
   const { session, isLoading, error, createSession, reconnectToSession, terminateSession } = useSession();
   const [viewerConnectionState, setViewerConnectionState] = useState<'idle' | 'connected' | 'error'>('idle');
   const [viewerErrorMessage, setViewerErrorMessage] = useState('');
   const [sessionCreationStarted, setSessionCreationStarted] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const isShared = viewOnly || !!ownerUsername;
 
   // Handle close - defined early so it can be used in effects below
   const handleClose = useCallback(async () => {
-    // Only terminate if not already in a terminal state AND this is not a reconnection
+    // Only terminate if not already in a terminal state AND this is not a reconnection AND not a shared session
     const terminalStates = ['stopped', 'expired', 'failed'];
-    if (session && !terminalStates.includes(session.status) && !sessionId) {
+    if (session && !terminalStates.includes(session.status) && !sessionId && !isShared) {
       await terminateSession();
     }
     if (window.history.state?.sessionPage) {
       window.history.back();
     }
     onClose();
-  }, [session, sessionId, terminateSession, onClose]);
+  }, [session, sessionId, isShared, terminateSession, onClose]);
 
   // Create or reconnect to session when page mounts
   useEffect(() => {
@@ -164,6 +170,20 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
               />
             )}
             <span className={`font-medium ${textColor}`}>{app.name}</span>
+            {isShared && ownerUsername && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-500">
+                Shared by {ownerUsername}
+              </span>
+            )}
+            {isShared && (
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                sharePermission === 'read_write'
+                  ? 'bg-green-500/20 text-green-500'
+                  : 'bg-blue-500/20 text-blue-500'
+              }`}>
+                {sharePermission === 'read_write' ? 'Full Access' : 'View Only'}
+              </span>
+            )}
           </div>
         </div>
 
@@ -192,8 +212,20 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
         </div>
         </div>
 
-        {/* Right side - Close button */}
+        {/* Right side - Share + Close buttons */}
         <div className="flex items-center gap-1 z-10">
+          {!isShared && session && (
+            <button
+              onClick={() => setShowShareDialog(true)}
+              className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
+              aria-label="Share session"
+              title="Share session"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={handleClose}
             className={`p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${textColor}`}
@@ -253,12 +285,23 @@ export function SessionPage({ app, onClose, darkMode, sessionId, clipboardPolicy
             app={app}
             darkMode={darkMode}
             clipboardPolicy={clipboardPolicy}
+            viewOnly={viewOnly}
             onConnect={handleViewerConnect}
             onDisconnect={handleViewerDisconnect}
             onError={handleViewerError}
           />
         )}
       </div>
+
+      {/* Share dialog */}
+      {showShareDialog && session && (
+        <ShareSessionDialog
+          sessionId={session.id}
+          isOpen={true}
+          onClose={() => setShowShareDialog(false)}
+          darkMode={darkMode}
+        />
+      )}
     </div>
   );
 }
