@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -22,16 +23,19 @@ func NewLocalStore(baseDir string) *LocalStore {
 // Save writes a recording file to disk and returns the relative storage path.
 func (s *LocalStore) Save(id string, r io.Reader) (string, error) {
 	now := time.Now()
-	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()))
+	relPath := filepath.Join(fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()), filepath.Base(id)+".webm")
 
+	fullPath, err := s.safePath(relPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid recording id: %w", err)
+	}
+
+	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	relPath := filepath.Join(fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()), id+".webm")
-	fullPath := filepath.Join(s.baseDir, relPath)
-
-	f, err := os.Create(fullPath)
+	f, err := os.Create(fullPath) // #nosec G304 -- path validated by safePath
 	if err != nil {
 		return "", fmt.Errorf("failed to create file %s: %w", fullPath, err)
 	}
@@ -45,10 +49,30 @@ func (s *LocalStore) Save(id string, r io.Reader) (string, error) {
 	return relPath, nil
 }
 
+// safePath resolves the storage path and ensures it stays within baseDir.
+func (s *LocalStore) safePath(storagePath string) (string, error) {
+	fullPath := filepath.Join(s.baseDir, storagePath)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+	absBase, err := filepath.Abs(s.baseDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid base dir: %w", err)
+	}
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+		return "", fmt.Errorf("path traversal detected: %s", storagePath)
+	}
+	return absPath, nil
+}
+
 // Get opens the recording file at the given storage path for reading.
 func (s *LocalStore) Get(storagePath string) (io.ReadCloser, error) {
-	fullPath := filepath.Join(s.baseDir, storagePath)
-	f, err := os.Open(fullPath)
+	fullPath, err := s.safePath(storagePath)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(fullPath) // #nosec G304 -- path validated by safePath
 	if err != nil {
 		return nil, fmt.Errorf("failed to open recording: %w", err)
 	}
@@ -57,7 +81,10 @@ func (s *LocalStore) Get(storagePath string) (io.ReadCloser, error) {
 
 // Delete removes the recording file at the given storage path.
 func (s *LocalStore) Delete(storagePath string) error {
-	fullPath := filepath.Join(s.baseDir, storagePath)
+	fullPath, err := s.safePath(storagePath)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete recording: %w", err)
 	}

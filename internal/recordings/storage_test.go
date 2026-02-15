@@ -138,6 +138,43 @@ func TestLocalStore_SaveLargeFile(t *testing.T) {
 	}
 }
 
+func TestLocalStore_PathTraversal(t *testing.T) {
+	baseDir := t.TempDir()
+	store := NewLocalStore(baseDir)
+	content := []byte("test data")
+
+	t.Run("save sanitizes path traversal in id", func(t *testing.T) {
+		// filepath.Base strips traversal, so "../../etc/passwd" becomes "passwd"
+		path, err := store.Save("../../etc/passwd", bytes.NewReader(content))
+		if err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+		if !strings.HasSuffix(path, "passwd.webm") {
+			t.Errorf("path = %s, want suffix passwd.webm", path)
+		}
+		// Verify file is within baseDir
+		fullPath, _ := filepath.Abs(filepath.Join(baseDir, path))
+		absBase, _ := filepath.Abs(baseDir)
+		if !strings.HasPrefix(fullPath, absBase) {
+			t.Errorf("file %s escaped baseDir %s", fullPath, absBase)
+		}
+	})
+
+	t.Run("get rejects path traversal", func(t *testing.T) {
+		_, err := store.Get("../../etc/passwd")
+		if err == nil {
+			t.Fatal("Get() should reject path traversal")
+		}
+	})
+
+	t.Run("delete rejects path traversal", func(t *testing.T) {
+		err := store.Delete("../../../etc/important")
+		if err == nil {
+			t.Fatal("Delete() should reject path traversal")
+		}
+	})
+}
+
 func TestNewLocalStore(t *testing.T) {
 	store := NewLocalStore("/tmp/test-recordings")
 	if store == nil {
