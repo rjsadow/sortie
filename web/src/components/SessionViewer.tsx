@@ -44,10 +44,12 @@ export function SessionViewer({
   const [showStats, setShowStats] = useState(showStatsProp);
   const [showClipboardToast, setShowClipboardToast] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [hasCanvas, setHasCanvas] = useState(false);
   const { isRecording, duration: recordingDuration, startRecording, stopRecording, error: recordingError } = useRecording();
 
   const handleCanvasReady = useCallback((canvas: HTMLCanvasElement) => {
     canvasRef.current = canvas;
+    setHasCanvas(true);
   }, []);
 
   const toggleRecording = useCallback(async () => {
@@ -217,7 +219,7 @@ export function SessionViewer({
           </button>
 
           {/* Record toggle */}
-          {(isVNC || isGuacamole) && canvasRef.current && (
+          {(isVNC || isGuacamole) && hasCanvas && (
             <button
               onClick={toggleRecording}
               className={`p-1.5 rounded transition-colors ${isRecording ? 'bg-red-600 text-white' : `${btnBg} text-white`}`}
