@@ -96,9 +96,9 @@ load_windows_images() {
     fi
 
     # Also load the official guacd image (used as default sidecar if not overridden)
-    log_info "Pulling and loading guacamole/guacd:1.5.5..."
-    docker pull guacamole/guacd:1.5.5 2>/dev/null || true
-    kind load docker-image guacamole/guacd:1.5.5 --name "$CLUSTER_NAME"
+    log_info "Pulling and loading guacamole/guacd:1.6.0..."
+    docker pull guacamole/guacd:1.6.0 2>/dev/null || true
+    kind load docker-image guacamole/guacd:1.6.0 --name "$CLUSTER_NAME"
 }
 
 deploy_helm() {

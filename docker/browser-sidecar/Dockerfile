@@ -1,7 +1,7 @@
 # Browser Sidecar Container for Sortie
 # Provides X11 display and VNC server via TigerVNC Xvnc, WebSocket, and Firefox browser
 # Used for web_proxy apps - browser connects to localhost web service
-FROM ubuntu:22.04@sha256:34577a83cd7a8f1e55f6eb173fd9bb70c16127a83d6bf06f56f6b1fff9e406b9
+FROM ubuntu:22.04@sha256:c7eb020043d8fc2ae0793fb35a37bff1cf33f156d4d4b12ccc7f3ef8706c38b1
 
 LABEL org.opencontainers.image.source="https://github.com/rjsadow/sortie"
 LABEL org.opencontainers.image.description="Browser sidecar for viewing web applications via VNC"

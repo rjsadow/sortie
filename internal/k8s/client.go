@@ -65,7 +65,7 @@ func GetGuacdSidecarImage() string {
 	if configuredGuacdSidecarImage != "" {
 		return configuredGuacdSidecarImage
 	}
-	return "guacamole/guacd:1.5.5"
+	return "guacamole/guacd:1.6.0"
 }
 
 // GetNamespace returns the Kubernetes namespace to use for sessions.

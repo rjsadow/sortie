@@ -37,7 +37,7 @@ We adopt a **dual-protocol architecture**:
 | Use Case | Protocol | Client Library | Server Sidecar |
 |---|---|---|---|
 | Linux desktop apps | **VNC over WebSocket (noVNC)** | `@novnc/novnc` 1.4.0 | TigerVNC Xvfb + websockify |
-| Windows desktop apps | **RDP via Apache Guacamole** | `guacamole-common-js` 1.5.0 | `guacamole/guacd` 1.5.5 |
+| Windows desktop apps | **RDP via Apache Guacamole** | `guacamole-common-js` 1.5.0 | `guacamole/guacd` 1.6.0 |
 | Web applications | **HTTP reverse proxy** | iframe | Go `httputil.ReverseProxy` |
 
 All streaming connections are tunneled over **WebSocket**
@@ -201,7 +201,7 @@ Key features implemented:
 1. **Pod creation:** Kubernetes pod spawns with app
    container + guacd sidecar
 2. **Sidecar:** Apache Guacamole daemon
-   (`guacamole/guacd:1.5.5`) on port 4822
+   (`guacamole/guacd:1.6.0`) on port 4822
 3. **RDP server:** App container runs xrdp/Windows RDP
    on localhost:3389
 4. **Handshake:** Server-side Go code performs full
