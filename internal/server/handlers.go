@@ -1126,6 +1126,13 @@ func (h *handlers) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	case action == "shares" || strings.HasPrefix(action, "shares/"):
 		h.handleSessionShares(w, r, id, strings.TrimPrefix(action, "shares"))
 		return
+	case strings.HasPrefix(action, "recording/"):
+		if h.app.RecordingHandler != nil {
+			h.app.RecordingHandler.ServeHTTP(w, r)
+		} else {
+			http.Error(w, "Video recording not enabled", http.StatusNotFound)
+		}
+		return
 	case action == "":
 		// Fall through
 	default:

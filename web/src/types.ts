@@ -136,6 +136,22 @@ export interface Category {
   updated_at: string;
 }
 
+// Video recording types
+export type RecordingStatus = 'recording' | 'uploading' | 'ready' | 'failed';
+
+export interface Recording {
+  id: string;
+  session_id: string;
+  user_id: string;
+  filename: string;
+  size_bytes: number;
+  duration_seconds: number;
+  format: string;
+  status: RecordingStatus;
+  created_at: string;
+  completed_at?: string;
+}
+
 // Audit log types
 export interface AuditLogEntry {
   id: number;

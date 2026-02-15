@@ -13,6 +13,7 @@ import (
 	"github.com/rjsadow/sortie/internal/files"
 	"github.com/rjsadow/sortie/internal/gateway"
 	"github.com/rjsadow/sortie/internal/middleware"
+	"github.com/rjsadow/sortie/internal/recordings"
 	"github.com/rjsadow/sortie/internal/plugins/auth"
 	"github.com/rjsadow/sortie/internal/sessions"
 )
@@ -26,6 +27,7 @@ type App struct {
 	GatewayHandler      *gateway.Handler
 	BackpressureHandler *sessions.BackpressureHandler
 	FileHandler         *files.Handler
+	RecordingHandler    *recordings.Handler
 	DiagCollector       *diagnostics.Collector
 	Config              *config.Config
 	StaticFS            fs.FS // web/dist content (nil disables static serving)
@@ -116,6 +118,13 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("/api/sessions/shares/join", withTenant(http.HandlerFunc(h.handleJoinShare)))
 	mux.Handle("/api/sessions", withTenant(http.HandlerFunc(h.handleSessions)))
 	mux.Handle("/api/sessions/", withTenant(http.HandlerFunc(h.handleSessionByID)))
+
+	// Recording API routes
+	if a.RecordingHandler != nil {
+		mux.Handle("/api/recordings", withTenant(a.RecordingHandler))
+		mux.Handle("/api/recordings/", withTenant(a.RecordingHandler))
+		mux.Handle("/api/admin/recordings", authMiddleware(requireAdmin(a.RecordingHandler)))
+	}
 
 	// Quota API route
 	mux.Handle("/api/quotas", withTenant(http.HandlerFunc(h.handleQuotas)))

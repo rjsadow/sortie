@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { VNCViewer } from './VNCViewer';
 import { GuacamoleViewer } from './GuacamoleViewer';
+import { useRecording } from '../hooks/useRecording';
 import type { Session, Application, ClipboardPolicy } from '../types';
 
 type ViewerState = 'connecting' | 'connected' | 'reconnecting' | 'error';
@@ -36,12 +37,34 @@ export function SessionViewer({
   onError,
 }: SessionViewerProps) {
   const viewerContainerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState>('connecting');
   const [reconnectInfo, setReconnectInfo] = useState<{ attempt: number; max: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStats, setShowStats] = useState(showStatsProp);
   const [showClipboardToast, setShowClipboardToast] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [hasCanvas, setHasCanvas] = useState(false);
+  const { isRecording, duration: recordingDuration, startRecording, stopRecording, error: recordingError } = useRecording();
+
+  const handleCanvasReady = useCallback((canvas: HTMLCanvasElement) => {
+    canvasRef.current = canvas;
+    setHasCanvas(true);
+  }, []);
+
+  const toggleRecording = useCallback(async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else if (canvasRef.current) {
+      await startRecording(canvasRef.current, session.id);
+    }
+  }, [isRecording, startRecording, stopRecording, session.id]);
+
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   // Detect fullscreen changes (user might exit via Escape)
   useEffect(() => {
@@ -121,6 +144,7 @@ export function SessionViewer({
           onError={handleViewerError}
           onReconnecting={handleReconnecting}
           onReconnected={handleReconnected}
+          onCanvasReady={handleCanvasReady}
           showStats={showStats}
           clipboardPolicy={viewOnly ? 'none' : clipboardPolicy}
         />
@@ -194,6 +218,27 @@ export function SessionViewer({
             )}
           </button>
 
+          {/* Record toggle */}
+          {(isVNC || isGuacamole) && hasCanvas && (
+            <button
+              onClick={toggleRecording}
+              className={`p-1.5 rounded transition-colors ${isRecording ? 'bg-red-600 text-white' : `${btnBg} text-white`}`}
+              title={isRecording ? `Stop recording (${formatDuration(recordingDuration)})` : 'Start recording'}
+              aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+            >
+              {isRecording ? (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  <span className="text-xs font-mono">{formatDuration(recordingDuration)}</span>
+                </span>
+              ) : (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="8" />
+                </svg>
+              )}
+            </button>
+          )}
+
           {/* Stats toggle (VNC only) */}
           {isVNC && (
             <button
@@ -223,6 +268,13 @@ export function SessionViewer({
               )}
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* Recording error toast */}
+      {recordingError && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-2 rounded-lg bg-red-600/90 text-white text-sm whitespace-nowrap">
+          Recording error: {recordingError}
         </div>
       )}
 

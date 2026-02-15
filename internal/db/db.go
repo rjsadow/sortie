@@ -415,6 +415,26 @@ func (db *DB) migrate() error {
 		PRIMARY KEY (category_id, user_id)
 	);
 
+	CREATE TABLE IF NOT EXISTS recordings (
+		id TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL,
+		user_id TEXT NOT NULL,
+		filename TEXT NOT NULL,
+		size_bytes INTEGER DEFAULT 0,
+		duration_seconds REAL DEFAULT 0,
+		format TEXT NOT NULL DEFAULT 'webm',
+		storage_backend TEXT NOT NULL DEFAULT 'local',
+		storage_path TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'recording',
+		tenant_id TEXT DEFAULT 'default',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		completed_at DATETIME,
+		FOREIGN KEY (session_id) REFERENCES sessions(id)
+	);
+	CREATE INDEX IF NOT EXISTS idx_recordings_session ON recordings(session_id);
+	CREATE INDEX IF NOT EXISTS idx_recordings_user ON recordings(user_id);
+	CREATE INDEX IF NOT EXISTS idx_recordings_status ON recordings(status);
+
 	CREATE TABLE IF NOT EXISTS session_shares (
 		id TEXT PRIMARY KEY,
 		session_id TEXT NOT NULL,
@@ -2284,4 +2304,179 @@ func (db *DB) DeleteSessionSharesBySession(sessionID string) error {
 func (db *DB) UpdateSessionShareUserID(id, userID string) error {
 	_, err := db.conn.Exec("UPDATE session_shares SET user_id = ? WHERE id = ?", userID, id)
 	return err
+}
+
+// RecordingStatus represents the status of a video recording.
+type RecordingStatus string
+
+const (
+	RecordingStatusRecording RecordingStatus = "recording"
+	RecordingStatusUploading RecordingStatus = "uploading"
+	RecordingStatusReady     RecordingStatus = "ready"
+	RecordingStatusFailed    RecordingStatus = "failed"
+)
+
+// Recording represents a video recording of a session.
+type Recording struct {
+	ID              string         `json:"id"`
+	SessionID       string         `json:"session_id"`
+	UserID          string         `json:"user_id"`
+	Filename        string         `json:"filename"`
+	SizeBytes       int64          `json:"size_bytes"`
+	DurationSeconds float64        `json:"duration_seconds"`
+	Format          string         `json:"format"`
+	StorageBackend  string         `json:"storage_backend"`
+	StoragePath     string         `json:"storage_path"`
+	Status          RecordingStatus `json:"status"`
+	TenantID        string         `json:"tenant_id,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
+}
+
+// CreateRecording inserts a new recording record.
+func (db *DB) CreateRecording(rec Recording) error {
+	tenantID := rec.TenantID
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+	_, err := db.conn.Exec(
+		`INSERT INTO recordings (id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.ID, rec.SessionID, rec.UserID, rec.Filename, rec.SizeBytes, rec.DurationSeconds,
+		rec.Format, rec.StorageBackend, rec.StoragePath, string(rec.Status), tenantID, rec.CreatedAt,
+	)
+	return err
+}
+
+// GetRecording returns a recording by ID.
+func (db *DB) GetRecording(id string) (*Recording, error) {
+	var rec Recording
+	var status string
+	var completedAt sql.NullTime
+	err := db.conn.QueryRow(
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		 FROM recordings WHERE id = ?`, id,
+	).Scan(&rec.ID, &rec.SessionID, &rec.UserID, &rec.Filename, &rec.SizeBytes, &rec.DurationSeconds,
+		&rec.Format, &rec.StorageBackend, &rec.StoragePath, &status, &rec.TenantID, &rec.CreatedAt, &completedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	rec.Status = RecordingStatus(status)
+	if completedAt.Valid {
+		rec.CompletedAt = &completedAt.Time
+	}
+	return &rec, nil
+}
+
+// UpdateRecordingStatus updates the status of a recording.
+func (db *DB) UpdateRecordingStatus(id string, status RecordingStatus) error {
+	result, err := db.conn.Exec("UPDATE recordings SET status = ? WHERE id = ?", string(status), id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// UpdateRecordingComplete marks a recording as ready with final metadata.
+func (db *DB) UpdateRecordingComplete(id string, storagePath string, sizeBytes int64, durationSeconds float64) error {
+	now := time.Now()
+	result, err := db.conn.Exec(
+		"UPDATE recordings SET status = ?, storage_path = ?, size_bytes = ?, duration_seconds = ?, completed_at = ? WHERE id = ?",
+		string(RecordingStatusReady), storagePath, sizeBytes, durationSeconds, now, id,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// ListRecordingsByUser returns all recordings for a given user.
+func (db *DB) ListRecordingsByUser(userID string) ([]Recording, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		 FROM recordings WHERE user_id = ? ORDER BY created_at DESC`, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRecordings(rows)
+}
+
+// ListRecordingsBySession returns all recordings for a given session.
+func (db *DB) ListRecordingsBySession(sessionID string) ([]Recording, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		 FROM recordings WHERE session_id = ? ORDER BY created_at DESC`, sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRecordings(rows)
+}
+
+// ListAllRecordings returns all recordings (admin use).
+func (db *DB) ListAllRecordings() ([]Recording, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		 FROM recordings ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRecordings(rows)
+}
+
+// DeleteRecording removes a recording by ID.
+func (db *DB) DeleteRecording(id string) error {
+	result, err := db.conn.Exec("DELETE FROM recordings WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func scanRecordings(rows *sql.Rows) ([]Recording, error) {
+	var recs []Recording
+	for rows.Next() {
+		var rec Recording
+		var status string
+		var completedAt sql.NullTime
+		if err := rows.Scan(&rec.ID, &rec.SessionID, &rec.UserID, &rec.Filename, &rec.SizeBytes, &rec.DurationSeconds,
+			&rec.Format, &rec.StorageBackend, &rec.StoragePath, &status, &rec.TenantID, &rec.CreatedAt, &completedAt); err != nil {
+			return nil, err
+		}
+		rec.Status = RecordingStatus(status)
+		if completedAt.Valid {
+			rec.CompletedAt = &completedAt.Time
+		}
+		recs = append(recs, rec)
+	}
+	return recs, rows.Err()
 }
