@@ -8,6 +8,7 @@ interface GuacamoleViewerProps {
   onError?: (message: string) => void;
   onReconnecting?: (attempt: number, maxAttempts: number) => void;
   onReconnected?: () => void;
+  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   viewOnly?: boolean;
   scaleViewport?: boolean;
   clipboardPolicy?: ClipboardPolicy;
@@ -22,6 +23,7 @@ export function GuacamoleViewer({
   onError,
   onReconnecting,
   onReconnected,
+  onCanvasReady,
   viewOnly = false,
   scaleViewport = true,
   clipboardPolicy = 'bidirectional',
@@ -44,11 +46,13 @@ export function GuacamoleViewer({
   const onErrorRef = useRef(onError);
   const onReconnectingRef = useRef(onReconnecting);
   const onReconnectedRef = useRef(onReconnected);
+  const onCanvasReadyRef = useRef(onCanvasReady);
   onConnectRef.current = onConnect;
   onDisconnectRef.current = onDisconnect;
   onErrorRef.current = onError;
   onReconnectingRef.current = onReconnecting;
   onReconnectedRef.current = onReconnected;
+  onCanvasReadyRef.current = onCanvasReady;
 
   const canReadRemote = clipboardPolicy === 'read' || clipboardPolicy === 'bidirectional';
   const canWriteRemote = clipboardPolicy === 'write' || clipboardPolicy === 'bidirectional';
@@ -79,6 +83,18 @@ export function GuacamoleViewer({
         onReconnectedRef.current?.();
       }
       onConnectRef.current?.();
+
+      // Extract the Guacamole canvas for recording
+      if (onCanvasReadyRef.current && clientRef.current) {
+        try {
+          const canvas = clientRef.current.getDisplay().getDefaultLayer().getCanvas();
+          if (canvas) {
+            onCanvasReadyRef.current(canvas);
+          }
+        } catch {
+          // Canvas extraction may fail if display isn't ready yet
+        }
+      }
     };
 
     const handleDisconnect = (clean: boolean) => {

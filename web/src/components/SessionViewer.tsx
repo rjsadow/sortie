@@ -159,6 +159,7 @@ export function SessionViewer({
           onError={handleViewerError}
           onReconnecting={handleReconnecting}
           onReconnected={handleReconnected}
+          onCanvasReady={handleCanvasReady}
           clipboardPolicy={viewOnly ? 'none' : clipboardPolicy}
         />
       )}

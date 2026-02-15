@@ -3,6 +3,9 @@ declare module 'guacamole-common-js' {
     Client: new (tunnel: unknown) => {
       getDisplay: () => {
         getElement: () => HTMLElement;
+        getDefaultLayer: () => {
+          getCanvas: () => HTMLCanvasElement;
+        };
         getWidth: () => number;
         getHeight: () => number;
         scale: (scale: number) => void;
