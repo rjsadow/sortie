@@ -236,6 +236,70 @@ export async function listAdminRecordings(
   });
 }
 
+export async function startRecording(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+) {
+  return request.post(`${BASE}/api/sessions/${sessionId}/recording/start`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function stopRecording(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  recordingId: string,
+) {
+  return request.post(`${BASE}/api/sessions/${sessionId}/recording/stop`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { recording_id: recordingId },
+  });
+}
+
+export async function uploadRecording(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  recordingId: string,
+  fileContent: Buffer,
+  duration?: number,
+) {
+  return request.post(`${BASE}/api/sessions/${sessionId}/recording/upload`, {
+    headers: { Authorization: `Bearer ${token}` },
+    multipart: {
+      recording_id: recordingId,
+      duration: String(duration ?? 5.0),
+      file: {
+        name: 'recording.webm',
+        mimeType: 'video/webm',
+        buffer: fileContent,
+      },
+    },
+  });
+}
+
+export async function downloadRecording(
+  request: APIRequestContext,
+  token: string,
+  recordingId: string,
+) {
+  return request.get(`${BASE}/api/recordings/${recordingId}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function deleteRecording(
+  request: APIRequestContext,
+  token: string,
+  recordingId: string,
+) {
+  return request.delete(`${BASE}/api/recordings/${recordingId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 // --- Settings helpers ---
 
 export async function getAdminSettings(

@@ -581,6 +581,233 @@ func TestHandler_SessionNotRunning(t *testing.T) {
 	}
 }
 
+func TestHandler_UploadExceedingSizeLimit(t *testing.T) {
+	handler, database, _ := setupTestHandler(t)
+
+	now := time.Now()
+	rec := db.Recording{
+		ID: "oversize-rec", SessionID: "test-sess", UserID: "user-1",
+		Filename: "oversize.webm", Format: "webm", StorageBackend: "local",
+		Status: db.RecordingStatusUploading, CreatedAt: now,
+	}
+	if err := database.CreateRecording(rec); err != nil {
+		t.Fatalf("CreateRecording() error = %v", err)
+	}
+
+	// Build multipart body exceeding 10 MB limit
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writer.WriteField("recording_id", "oversize-rec")
+	part, err := writer.CreateFormFile("file", "oversize.webm")
+	if err != nil {
+		t.Fatalf("CreateFormFile() error = %v", err)
+	}
+	bigData := make([]byte, 11*1024*1024) // 11 MB
+	part.Write(bigData)
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sessions/test-sess/recording/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req = reqWithUser(req, ownerUser())
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d (body: %s)", rr.Code, http.StatusRequestEntityTooLarge, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "too large") {
+		t.Errorf("body should contain 'too large', got: %s", rr.Body.String())
+	}
+}
+
+func TestHandler_UploadWithWrongFieldName(t *testing.T) {
+	handler, database, _ := setupTestHandler(t)
+
+	now := time.Now()
+	rec := db.Recording{
+		ID: "wrongfield-rec", SessionID: "test-sess", UserID: "user-1",
+		Filename: "wrong.webm", Format: "webm", StorageBackend: "local",
+		Status: db.RecordingStatusUploading, CreatedAt: now,
+	}
+	if err := database.CreateRecording(rec); err != nil {
+		t.Fatalf("CreateRecording() error = %v", err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writer.WriteField("recording_id", "wrongfield-rec")
+	part, err := writer.CreateFormFile("wrong_name", "test.webm")
+	if err != nil {
+		t.Fatalf("CreateFormFile() error = %v", err)
+	}
+	part.Write([]byte("video data"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sessions/test-sess/recording/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req = reqWithUser(req, ownerUser())
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rr.Body.String()), "file") {
+		t.Errorf("body should mention 'file', got: %s", rr.Body.String())
+	}
+}
+
+func TestHandler_StopRecordingMalformedJSON(t *testing.T) {
+	handler, _, _ := setupTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sessions/test-sess/recording/stop", strings.NewReader("not valid json{{"))
+	req.Header.Set("Content-Type", "application/json")
+	req = reqWithUser(req, ownerUser())
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rr.Body.String()), "recording_id") {
+		t.Errorf("body should mention 'recording_id', got: %s", rr.Body.String())
+	}
+}
+
+func TestHandler_DoubleStartOnSameSession(t *testing.T) {
+	handler, _, _ := setupTestHandler(t)
+
+	// First start
+	req1 := httptest.NewRequest(http.MethodPost, "/api/sessions/test-sess/recording/start", nil)
+	req1 = reqWithUser(req1, ownerUser())
+	rr1 := httptest.NewRecorder()
+	handler.ServeHTTP(rr1, req1)
+
+	if rr1.Code != http.StatusCreated {
+		t.Fatalf("first start: status = %d, want %d (body: %s)", rr1.Code, http.StatusCreated, rr1.Body.String())
+	}
+	var resp1 map[string]string
+	json.NewDecoder(rr1.Body).Decode(&resp1)
+	id1 := resp1["recording_id"]
+
+	// Second start on same session
+	req2 := httptest.NewRequest(http.MethodPost, "/api/sessions/test-sess/recording/start", nil)
+	req2 = reqWithUser(req2, ownerUser())
+	rr2 := httptest.NewRecorder()
+	handler.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusCreated {
+		t.Fatalf("second start: status = %d, want %d (body: %s)", rr2.Code, http.StatusCreated, rr2.Body.String())
+	}
+	var resp2 map[string]string
+	json.NewDecoder(rr2.Body).Decode(&resp2)
+	id2 := resp2["recording_id"]
+
+	if id1 == id2 {
+		t.Errorf("double start should produce distinct recording IDs, both got %s", id1)
+	}
+}
+
+func TestHandler_AdminCanDeleteAnyRecording(t *testing.T) {
+	handler, database, store := setupTestHandler(t)
+
+	// Create a recording owned by user-1
+	content := []byte("user-owned video")
+	storagePath, err := store.Save("admin-del-rec", bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	now := time.Now()
+	rec := db.Recording{
+		ID: "admin-del-rec", SessionID: "test-sess", UserID: "user-1",
+		Filename: "admin-del.webm", Format: "webm", StorageBackend: "local",
+		StoragePath: storagePath, Status: db.RecordingStatusReady,
+		CreatedAt: now,
+	}
+	if err := database.CreateRecording(rec); err != nil {
+		t.Fatalf("CreateRecording() error = %v", err)
+	}
+
+	// Admin deletes it
+	req := httptest.NewRequest(http.MethodDelete, "/api/recordings/admin-del-rec", nil)
+	req = reqWithUser(req, adminUser())
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d (body: %s)", rr.Code, http.StatusNoContent, rr.Body.String())
+	}
+
+	// Verify DB record is gone
+	got, _ := database.GetRecording("admin-del-rec")
+	if got != nil {
+		t.Error("recording should be deleted from database")
+	}
+
+	// Verify storage file is gone
+	_, err = store.Get(storagePath)
+	if err == nil {
+		t.Error("storage file should be deleted")
+	}
+}
+
+func TestHandler_UploadZeroLengthFile(t *testing.T) {
+	handler, database, _ := setupTestHandler(t)
+
+	now := time.Now()
+	rec := db.Recording{
+		ID: "zero-rec", SessionID: "test-sess", UserID: "user-1",
+		Filename: "zero.webm", Format: "webm", StorageBackend: "local",
+		Status: db.RecordingStatusUploading, CreatedAt: now,
+	}
+	if err := database.CreateRecording(rec); err != nil {
+		t.Fatalf("CreateRecording() error = %v", err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writer.WriteField("recording_id", "zero-rec")
+	writer.WriteField("duration", "0")
+	// Create a file part with zero bytes
+	_, err := writer.CreateFormFile("file", "zero.webm")
+	if err != nil {
+		t.Fatalf("CreateFormFile() error = %v", err)
+	}
+	// Don't write any data to the file part
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sessions/test-sess/recording/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req = reqWithUser(req, ownerUser())
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %s)", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	// Verify DB: status=ready, SizeBytes=0, StoragePath non-empty
+	got, _ := database.GetRecording("zero-rec")
+	if got == nil {
+		t.Fatal("recording should exist")
+	}
+	if got.Status != db.RecordingStatusReady {
+		t.Errorf("status = %s, want ready", got.Status)
+	}
+	if got.SizeBytes != 0 {
+		t.Errorf("SizeBytes = %d, want 0", got.SizeBytes)
+	}
+	if got.StoragePath == "" {
+		t.Error("StoragePath should not be empty")
+	}
+}
+
 func TestHandler_UnknownPaths(t *testing.T) {
 	handler, _, _ := setupTestHandler(t)
 

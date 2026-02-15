@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/rjsadow/sortie/tests/integration/testutil"
@@ -219,6 +220,190 @@ func TestRecording_StartOnNonRunningSession(t *testing.T) {
 
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("start on non-running session: expected 409, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestRecording_UploadSizeLimitEnforced(t *testing.T) {
+	ts := testutil.NewTestServer(t, testutil.WithRecordingEnabled())
+	sessionID := createRunningSession(t, ts, "rec-sizelimit-app", ts.AdminToken, "admin-admin")
+
+	// Start recording
+	resp := testutil.AuthPost(t, ts.URL+"/api/sessions/"+sessionID+"/recording/start", ts.AdminToken, nil)
+	var startResult map[string]string
+	json.NewDecoder(resp.Body).Decode(&startResult)
+	resp.Body.Close()
+	recordingID := startResult["recording_id"]
+
+	// Stop recording
+	stopBody, _ := json.Marshal(map[string]string{"recording_id": recordingID})
+	resp = testutil.AuthPost(t, ts.URL+"/api/sessions/"+sessionID+"/recording/stop", ts.AdminToken, stopBody)
+	resp.Body.Close()
+
+	// Upload oversized file (11 MB, limit is 10 MB)
+	bigData := make([]byte, 11*1024*1024)
+	fields := map[string]string{
+		"recording_id": recordingID,
+		"duration":     "1.0",
+	}
+	resp = testutil.AuthPostMultipart(t, ts.URL+"/api/sessions/"+sessionID+"/recording/upload", ts.AdminToken, fields, "big.webm", bigData)
+	body := testutil.ReadBody(t, resp)
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(strings.ToLower(body), "too large") {
+		t.Errorf("body should contain 'too large', got: %s", body)
+	}
+}
+
+func TestRecording_DoubleStartOnSameSession(t *testing.T) {
+	ts := testutil.NewTestServer(t, testutil.WithRecordingEnabled())
+	sessionID := createRunningSession(t, ts, "rec-doublestart-app", ts.AdminToken, "admin-admin")
+
+	// First start
+	resp := testutil.AuthPost(t, ts.URL+"/api/sessions/"+sessionID+"/recording/start", ts.AdminToken, nil)
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("first start: expected 201, got %d: %s", resp.StatusCode, string(b))
+	}
+	var start1 map[string]string
+	json.NewDecoder(resp.Body).Decode(&start1)
+	resp.Body.Close()
+	id1 := start1["recording_id"]
+
+	// Second start on same session
+	resp = testutil.AuthPost(t, ts.URL+"/api/sessions/"+sessionID+"/recording/start", ts.AdminToken, nil)
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("second start: expected 201, got %d: %s", resp.StatusCode, string(b))
+	}
+	var start2 map[string]string
+	json.NewDecoder(resp.Body).Decode(&start2)
+	resp.Body.Close()
+	id2 := start2["recording_id"]
+
+	if id1 == id2 {
+		t.Errorf("double start should produce distinct recording IDs, both got %s", id1)
+	}
+
+	// Verify both recordings appear in admin list
+	resp = testutil.AuthGet(t, ts.URL+"/api/admin/recordings", ts.AdminToken)
+	var recs []map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&recs)
+	resp.Body.Close()
+
+	found1, found2 := false, false
+	for _, rec := range recs {
+		if rec["id"] == id1 {
+			found1 = true
+		}
+		if rec["id"] == id2 {
+			found2 = true
+		}
+	}
+	if !found1 || !found2 {
+		t.Errorf("both recordings should appear in list: found1=%v found2=%v", found1, found2)
+	}
+}
+
+func TestRecording_StopAlreadyCompletedRecording(t *testing.T) {
+	ts := testutil.NewTestServer(t, testutil.WithRecordingEnabled())
+	sessionID := createRunningSession(t, ts, "rec-doublestop-app", ts.AdminToken, "admin-admin")
+
+	// Start, stop, upload → "ready" recording
+	resp := testutil.AuthPost(t, ts.URL+"/api/sessions/"+sessionID+"/recording/start", ts.AdminToken, nil)
+	var startResult map[string]string
+	json.NewDecoder(resp.Body).Decode(&startResult)
+	resp.Body.Close()
+	recordingID := startResult["recording_id"]
+
+	stopBody, _ := json.Marshal(map[string]string{"recording_id": recordingID})
+	resp = testutil.AuthPost(t, ts.URL+"/api/sessions/"+sessionID+"/recording/stop", ts.AdminToken, stopBody)
+	resp.Body.Close()
+
+	fields := map[string]string{"recording_id": recordingID, "duration": "5.0"}
+	resp = testutil.AuthPostMultipart(t, ts.URL+"/api/sessions/"+sessionID+"/recording/upload", ts.AdminToken, fields, "test.webm", []byte("video"))
+	resp.Body.Close()
+
+	// Stop again on the already-completed recording — handler overwrites status to "uploading"
+	resp = testutil.AuthPost(t, ts.URL+"/api/sessions/"+sessionID+"/recording/stop", ts.AdminToken, stopBody)
+	body := testutil.ReadBody(t, resp)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("second stop: expected 200, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestRecording_AdminCanDeleteAnyRecording(t *testing.T) {
+	ts := testutil.NewTestServer(t, testutil.WithRecordingEnabled())
+
+	// Create a regular user
+	ownerID := testutil.CreateUser(t, ts.URL, ts.AdminToken, "rec-del-owner", "pass123", []string{"user"})
+	ownerToken := testutil.LoginAs(t, ts.URL, "rec-del-owner", "pass123")
+
+	// Owner creates and uploads a recording
+	recID := recStartAndUpload(t, ts, "rec-admindel-app", ownerToken, ownerID)
+
+	// Admin deletes it
+	resp := testutil.AuthDelete(t, ts.URL+"/api/recordings/"+recID, ts.AdminToken)
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("admin delete: expected 204, got %d", resp.StatusCode)
+	}
+
+	// Verify recording is gone via owner's list
+	resp = testutil.AuthGet(t, ts.URL+"/api/recordings", ownerToken)
+	var recs []map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&recs)
+	resp.Body.Close()
+
+	for _, rec := range recs {
+		if rec["id"] == recID {
+			t.Fatalf("recording %s should have been deleted by admin", recID)
+		}
+	}
+}
+
+func TestRecording_DownloadAccessControl(t *testing.T) {
+	ts := testutil.NewTestServer(t, testutil.WithRecordingEnabled())
+
+	// Create two regular users
+	ownerID := testutil.CreateUser(t, ts.URL, ts.AdminToken, "dl-owner", "pass123", []string{"user"})
+	testutil.CreateUser(t, ts.URL, ts.AdminToken, "dl-other", "pass123", []string{"user"})
+	ownerToken := testutil.LoginAs(t, ts.URL, "dl-owner", "pass123")
+	otherToken := testutil.LoginAs(t, ts.URL, "dl-other", "pass123")
+
+	// Owner uploads a recording
+	recID := recStartAndUpload(t, ts, "dl-acl-app", ownerToken, ownerID)
+
+	// Other user tries to download → 403
+	resp := testutil.AuthGet(t, ts.URL+"/api/recordings/"+recID+"/download", otherToken)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("other user download: expected 403, got %d", resp.StatusCode)
+	}
+
+	// Admin downloads → 200
+	resp = testutil.AuthGet(t, ts.URL+"/api/recordings/"+recID+"/download", ts.AdminToken)
+	adminContent, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin download: expected 200, got %d", resp.StatusCode)
+	}
+
+	// Owner downloads → 200, content matches admin's download
+	resp = testutil.AuthGet(t, ts.URL+"/api/recordings/"+recID+"/download", ownerToken)
+	ownerContent, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("owner download: expected 200, got %d", resp.StatusCode)
+	}
+
+	if string(ownerContent) != string(adminContent) {
+		t.Errorf("owner and admin download content mismatch: owner=%d bytes, admin=%d bytes", len(ownerContent), len(adminContent))
 	}
 }
 
