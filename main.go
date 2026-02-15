@@ -18,6 +18,7 @@ import (
 	"github.com/rjsadow/sortie/internal/diagnostics"
 	"github.com/rjsadow/sortie/internal/files"
 	"github.com/rjsadow/sortie/internal/gateway"
+	"github.com/rjsadow/sortie/internal/recordings"
 	"github.com/rjsadow/sortie/internal/k8s"
 	"github.com/rjsadow/sortie/internal/plugins"
 	"github.com/rjsadow/sortie/internal/plugins/auth"
@@ -240,6 +241,17 @@ func main() {
 	// Initialize file transfer handler
 	fileHandler := files.NewHandler(sessionManager, database, appConfig.MaxUploadSize)
 
+	// Initialize video recording handler
+	var recordingHandler *recordings.Handler
+	if appConfig.VideoRecordingEnabled {
+		recordingStore := recordings.NewLocalStore(appConfig.RecordingStoragePath)
+		recordingHandler = recordings.NewHandler(database, recordingStore, appConfig)
+		slog.Info("Video recording enabled",
+			"storage_backend", appConfig.RecordingStorageBackend,
+			"storage_path", appConfig.RecordingStoragePath,
+			"max_size_mb", appConfig.RecordingMaxSizeMB)
+	}
+
 	// Get the subdirectory from the embedded filesystem
 	distFS, err := fs.Sub(embeddedFiles, "web/dist")
 	if err != nil {
@@ -284,6 +296,7 @@ func main() {
 		GatewayHandler:      gwHandler,
 		BackpressureHandler: backpressureHandler,
 		FileHandler:         fileHandler,
+		RecordingHandler:    recordingHandler,
 		DiagCollector:       diagCollector,
 		Config:              appConfig,
 		StaticFS:            distFS,

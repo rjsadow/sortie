@@ -15,6 +15,7 @@ interface VNCViewerProps {
   onError?: (message: string) => void;
   onReconnecting?: (attempt: number, maxAttempts: number) => void;
   onReconnected?: () => void;
+  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   viewOnly?: boolean;
   scaleViewport?: boolean;
   showStats?: boolean;
@@ -30,6 +31,7 @@ export function VNCViewer({
   onError,
   onReconnecting,
   onReconnected,
+  onCanvasReady,
   viewOnly = false,
   scaleViewport = true,
   showStats = false,
@@ -150,6 +152,40 @@ export function VNCViewer({
       rfbRef.current.clipboardPasteFrom(text);
     }
   }, [viewOnly, canWriteRemote]);
+
+  // Notify parent when canvas element becomes available (for recording, etc.)
+  useEffect(() => {
+    if (!onCanvasReady || !containerRef.current) return;
+
+    const existing = containerRef.current.querySelector('canvas');
+    if (existing) {
+      onCanvasReady(existing);
+      return;
+    }
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (node instanceof HTMLCanvasElement) {
+            observer.disconnect();
+            onCanvasReady(node);
+            return;
+          }
+          if (node instanceof HTMLElement) {
+            const c = node.querySelector('canvas');
+            if (c) {
+              observer.disconnect();
+              onCanvasReady(c);
+              return;
+            }
+          }
+        }
+      }
+    });
+    observer.observe(containerRef.current, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [onCanvasReady]);
 
   // FPS instrumentation: intercept canvas drawImage to count visible VNC frame updates
   useEffect(() => {

@@ -73,6 +73,13 @@ type Config struct {
 	RecordingEndpoint   string // Optional endpoint for recording events
 	RecordingBufferSize int    // Buffer size for async event processing
 
+	// Video recording configuration
+	VideoRecordingEnabled  bool   // Enable client-side video recording of sessions
+	RecordingStorageBackend string // Storage backend: "local" or "s3"
+	RecordingStoragePath   string // Local storage path for recordings
+	RecordingMaxSizeMB     int    // Maximum recording upload size in MB
+	RecordingRetentionDays int    // Days to retain recordings (0 = keep forever)
+
 	// Billing/metering configuration
 	BillingEnabled        bool          // Enable metering event collection
 	BillingExporter       string        // Exporter type: "log" or "webhook"
@@ -139,6 +146,9 @@ const (
 	DefaultDefaultMemLimit       = "2Gi"
 	DefaultQueueMaxSize          = 0                       // disabled by default
 	DefaultQueueTimeout          = 30 * time.Second
+	DefaultRecordingStorageBackend = "local"
+	DefaultRecordingStoragePath    = "/data/recordings"
+	DefaultRecordingMaxSizeMB      = 500
 )
 
 // Load reads configuration from environment variables and returns a Config.
@@ -186,6 +196,11 @@ func Load() (*Config, error) {
 		DefaultCPULimit:    DefaultDefaultCPULimit,
 		DefaultMemRequest:  DefaultDefaultMemRequest,
 		DefaultMemLimit:    DefaultDefaultMemLimit,
+
+		// Video recording defaults
+		RecordingStorageBackend: DefaultRecordingStorageBackend,
+		RecordingStoragePath:    DefaultRecordingStoragePath,
+		RecordingMaxSizeMB:      DefaultRecordingMaxSizeMB,
 
 		// Queue defaults
 		QueueMaxSize: DefaultQueueMaxSize,
@@ -554,6 +569,53 @@ func (c *Config) loadFromEnv() error {
 		}
 	} else if c.BillingExportInterval == 0 {
 		c.BillingExportInterval = DefaultBillingExportInterval
+	}
+
+	// Video recording configuration
+	if v := os.Getenv("SORTIE_VIDEO_RECORDING_ENABLED"); v != "" {
+		c.VideoRecordingEnabled = strings.EqualFold(v, "true") || v == "1"
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_STORAGE_BACKEND"); v != "" {
+		c.RecordingStorageBackend = v
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_STORAGE_PATH"); v != "" {
+		c.RecordingStoragePath = v
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_MAX_SIZE_MB"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "SORTIE_RECORDING_MAX_SIZE_MB",
+				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
+			})
+		} else if n <= 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "SORTIE_RECORDING_MAX_SIZE_MB",
+				Message: fmt.Sprintf("value must be positive: %d", n),
+			})
+		} else {
+			c.RecordingMaxSizeMB = n
+		}
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_RETENTION_DAYS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "SORTIE_RECORDING_RETENTION_DAYS",
+				Message: fmt.Sprintf("invalid value: %q (must be an integer)", v),
+			})
+		} else if n < 0 {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "SORTIE_RECORDING_RETENTION_DAYS",
+				Message: fmt.Sprintf("value must be non-negative: %d", n),
+			})
+		} else {
+			c.RecordingRetentionDays = n
+		}
 	}
 
 	// Session queueing configuration

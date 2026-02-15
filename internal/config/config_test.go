@@ -149,6 +149,11 @@ func TestLoad_AllEnvVars(t *testing.T) {
 	t.Setenv("SORTIE_ADMIN_USERNAME", "superadmin")
 	t.Setenv("SORTIE_ADMIN_PASSWORD", "s3cret")
 	t.Setenv("SORTIE_ALLOW_REGISTRATION", "true")
+	t.Setenv("SORTIE_VIDEO_RECORDING_ENABLED", "true")
+	t.Setenv("SORTIE_RECORDING_STORAGE_BACKEND", "s3")
+	t.Setenv("SORTIE_RECORDING_STORAGE_PATH", "/mnt/recordings")
+	t.Setenv("SORTIE_RECORDING_MAX_SIZE_MB", "2048")
+	t.Setenv("SORTIE_RECORDING_RETENTION_DAYS", "30")
 
 	cfg, err := Load()
 	if err != nil {
@@ -217,6 +222,21 @@ func TestLoad_AllEnvVars(t *testing.T) {
 	}
 	if cfg.AllowRegistration != true {
 		t.Errorf("AllowRegistration = %v, want true", cfg.AllowRegistration)
+	}
+	if cfg.VideoRecordingEnabled != true {
+		t.Errorf("VideoRecordingEnabled = %v, want true", cfg.VideoRecordingEnabled)
+	}
+	if cfg.RecordingStorageBackend != "s3" {
+		t.Errorf("RecordingStorageBackend = %v, want s3", cfg.RecordingStorageBackend)
+	}
+	if cfg.RecordingStoragePath != "/mnt/recordings" {
+		t.Errorf("RecordingStoragePath = %v, want /mnt/recordings", cfg.RecordingStoragePath)
+	}
+	if cfg.RecordingMaxSizeMB != 2048 {
+		t.Errorf("RecordingMaxSizeMB = %v, want 2048", cfg.RecordingMaxSizeMB)
+	}
+	if cfg.RecordingRetentionDays != 30 {
+		t.Errorf("RecordingRetentionDays = %v, want 30", cfg.RecordingRetentionDays)
 	}
 }
 
@@ -818,6 +838,87 @@ func TestLoad_QuotaInvalidValues(t *testing.T) {
 	}
 }
 
+func TestLoad_VideoRecordingDefaults(t *testing.T) {
+	clearEnvVars(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.VideoRecordingEnabled != false {
+		t.Errorf("VideoRecordingEnabled = %v, want false", cfg.VideoRecordingEnabled)
+	}
+	if cfg.RecordingStorageBackend != DefaultRecordingStorageBackend {
+		t.Errorf("RecordingStorageBackend = %v, want %v", cfg.RecordingStorageBackend, DefaultRecordingStorageBackend)
+	}
+	if cfg.RecordingStoragePath != DefaultRecordingStoragePath {
+		t.Errorf("RecordingStoragePath = %v, want %v", cfg.RecordingStoragePath, DefaultRecordingStoragePath)
+	}
+	if cfg.RecordingMaxSizeMB != DefaultRecordingMaxSizeMB {
+		t.Errorf("RecordingMaxSizeMB = %v, want %v", cfg.RecordingMaxSizeMB, DefaultRecordingMaxSizeMB)
+	}
+	if cfg.RecordingRetentionDays != 0 {
+		t.Errorf("RecordingRetentionDays = %v, want 0", cfg.RecordingRetentionDays)
+	}
+}
+
+func TestLoad_VideoRecordingFromEnv(t *testing.T) {
+	clearEnvVars(t)
+
+	t.Setenv("SORTIE_VIDEO_RECORDING_ENABLED", "true")
+	t.Setenv("SORTIE_RECORDING_STORAGE_BACKEND", "s3")
+	t.Setenv("SORTIE_RECORDING_STORAGE_PATH", "/custom/recordings")
+	t.Setenv("SORTIE_RECORDING_MAX_SIZE_MB", "1024")
+	t.Setenv("SORTIE_RECORDING_RETENTION_DAYS", "90")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.VideoRecordingEnabled != true {
+		t.Errorf("VideoRecordingEnabled = %v, want true", cfg.VideoRecordingEnabled)
+	}
+	if cfg.RecordingStorageBackend != "s3" {
+		t.Errorf("RecordingStorageBackend = %v, want s3", cfg.RecordingStorageBackend)
+	}
+	if cfg.RecordingStoragePath != "/custom/recordings" {
+		t.Errorf("RecordingStoragePath = %v, want /custom/recordings", cfg.RecordingStoragePath)
+	}
+	if cfg.RecordingMaxSizeMB != 1024 {
+		t.Errorf("RecordingMaxSizeMB = %v, want 1024", cfg.RecordingMaxSizeMB)
+	}
+	if cfg.RecordingRetentionDays != 90 {
+		t.Errorf("RecordingRetentionDays = %v, want 90", cfg.RecordingRetentionDays)
+	}
+}
+
+func TestLoad_VideoRecordingInvalidValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{"negative max size", "SORTIE_RECORDING_MAX_SIZE_MB", "-1"},
+		{"non-numeric max size", "SORTIE_RECORDING_MAX_SIZE_MB", "abc"},
+		{"negative retention", "SORTIE_RECORDING_RETENTION_DAYS", "-5"},
+		{"non-numeric retention", "SORTIE_RECORDING_RETENTION_DAYS", "xyz"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearEnvVars(t)
+			t.Setenv(tt.key, tt.value)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("Load() expected error for %s=%s", tt.key, tt.value)
+			}
+		})
+	}
+}
+
 func clearEnvVars(t *testing.T) {
 	t.Helper()
 	envVars := []string{
@@ -848,6 +949,11 @@ func clearEnvVars(t *testing.T) {
 		"SORTIE_DEFAULT_CPU_LIMIT",
 		"SORTIE_DEFAULT_MEM_REQUEST",
 		"SORTIE_DEFAULT_MEM_LIMIT",
+		"SORTIE_VIDEO_RECORDING_ENABLED",
+		"SORTIE_RECORDING_STORAGE_BACKEND",
+		"SORTIE_RECORDING_STORAGE_PATH",
+		"SORTIE_RECORDING_MAX_SIZE_MB",
+		"SORTIE_RECORDING_RETENTION_DAYS",
 	}
 	for _, env := range envVars {
 		os.Unsetenv(env)
