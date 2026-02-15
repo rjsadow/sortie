@@ -119,7 +119,7 @@ const (
 	DefaultNamespace              = "default"
 	DefaultVNCSidecarImage        = "ghcr.io/rjsadow/sortie-vnc-sidecar:latest"
 	DefaultBrowserSidecarImage    = "ghcr.io/rjsadow/sortie-browser-sidecar:latest"
-	DefaultGuacdSidecarImage      = "guacamole/guacd:1.5.5"
+	DefaultGuacdSidecarImage      = "guacamole/guacd:1.6.0"
 	DefaultSessionTimeout         = 2 * time.Hour
 	DefaultSessionCleanupInterval = 5 * time.Minute
 	DefaultPodReadyTimeout        = 2 * time.Minute

@@ -81,8 +81,8 @@ func TestGetGuacdSidecarImage_Default(t *testing.T) {
 	defer ResetClient()
 
 	got := GetGuacdSidecarImage()
-	if got != "guacamole/guacd:1.5.5" {
-		t.Errorf("GetGuacdSidecarImage() = %q, want %q", got, "guacamole/guacd:1.5.5")
+	if got != "guacamole/guacd:1.6.0" {
+		t.Errorf("GetGuacdSidecarImage() = %q, want %q", got, "guacamole/guacd:1.6.0")
 	}
 }
 

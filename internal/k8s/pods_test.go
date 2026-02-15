@@ -484,8 +484,8 @@ func TestBuildWindowsPodSpec(t *testing.T) {
 	if guacd.Name != "guacd-sidecar" {
 		t.Errorf("guacd container name = %q, want %q", guacd.Name, "guacd-sidecar")
 	}
-	if guacd.Image != "guacamole/guacd:1.5.5" {
-		t.Errorf("guacd image = %q, want %q", guacd.Image, "guacamole/guacd:1.5.5")
+	if guacd.Image != "guacamole/guacd:1.6.0" {
+		t.Errorf("guacd image = %q, want %q", guacd.Image, "guacamole/guacd:1.6.0")
 	}
 	if len(guacd.Ports) != 1 || guacd.Ports[0].ContainerPort != 4822 {
 		t.Errorf("guacd port = %v, want containerPort=4822", guacd.Ports)

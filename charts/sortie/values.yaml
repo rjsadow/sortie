@@ -19,7 +19,7 @@ browserSidecar:
 
 # Guacd sidecar image for Windows RDP sessions
 guacdSidecar:
-  image: guacamole/guacd:1.5.5
+  image: guacamole/guacd:1.6.0
 
 # Replica count - supports >1 for horizontal scalability.
 # When replicaCount > 1, persistence.enabled must be true with a ReadWriteMany
