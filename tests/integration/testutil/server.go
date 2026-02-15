@@ -14,6 +14,7 @@ import (
 	"github.com/rjsadow/sortie/internal/files"
 	"github.com/rjsadow/sortie/internal/plugins"
 	"github.com/rjsadow/sortie/internal/plugins/auth"
+	"github.com/rjsadow/sortie/internal/recordings"
 	"github.com/rjsadow/sortie/internal/server"
 	"github.com/rjsadow/sortie/internal/sessions"
 )
@@ -56,6 +57,15 @@ func WithMaxSessionsPerUser(n int) Option {
 // WithMaxGlobalSessions sets the global session quota.
 func WithMaxGlobalSessions(n int) Option {
 	return func(c *config.Config) { c.MaxGlobalSessions = n }
+}
+
+// WithRecordingEnabled enables the video recording handler with local storage.
+func WithRecordingEnabled() Option {
+	return func(c *config.Config) {
+		c.VideoRecordingEnabled = true
+		c.RecordingStorageBackend = "local"
+		c.RecordingMaxSizeMB = 10
+	}
 }
 
 // NewTestServer creates a fully wired test server with:
@@ -148,7 +158,16 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 	// 8. Create diagnostics collector
 	dc := diagnostics.NewCollector(database, cfg, plugins.Global(), time.Now())
 
-	// 9. Build server.App and handler
+	// 9. Optionally create recording handler
+	var recordingHandler *recordings.Handler
+	if cfg.VideoRecordingEnabled {
+		recDir := filepath.Join(tmpDir, "recordings")
+		os.MkdirAll(recDir, 0o755)
+		recStore := recordings.NewLocalStore(recDir)
+		recordingHandler = recordings.NewHandler(database, recStore, cfg)
+	}
+
+	// 10. Build server.App and handler
 	app := &server.App{
 		DB:                  database,
 		SessionManager:      sm,
@@ -157,6 +176,7 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 		GatewayHandler:      nil, // No WebSocket gateway in integration tests
 		BackpressureHandler: bp,
 		FileHandler:         fh,
+		RecordingHandler:    recordingHandler,
 		DiagCollector:       dc,
 		Config:              cfg,
 		StaticFS:            nil, // No static files in integration tests

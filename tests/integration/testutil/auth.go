@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"testing"
 )
@@ -127,6 +128,45 @@ func AuthDelete(t *testing.T, url, token string) *http.Response {
 		t.Fatalf("failed to create request: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	return resp
+}
+
+// AuthPostMultipart sends a multipart POST request with form fields and a file attachment.
+func AuthPostMultipart(t *testing.T, url, token string, fields map[string]string, fileName string, fileContent []byte) *http.Response {
+	t.Helper()
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	for k, v := range fields {
+		if err := writer.WriteField(k, v); err != nil {
+			t.Fatalf("failed to write field %s: %v", k, err)
+		}
+	}
+
+	part, err := writer.CreateFormFile("file", fileName)
+	if err != nil {
+		t.Fatalf("failed to create form file: %v", err)
+	}
+	if _, err := part.Write(fileContent); err != nil {
+		t.Fatalf("failed to write file content: %v", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close multipart writer: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
