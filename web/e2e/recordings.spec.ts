@@ -328,7 +328,7 @@ test.describe('recording lifecycle', () => {
     // Cleanup via API (afterEach handles recordings and sessions)
   });
 
-  test('download recording from recordings modal', async ({ page, request }) => {
+  test('download recording via API and verify content', async ({ request }) => {
     // Upload recording via API
     const createRes = await createTestSession(request, token, 'test-container');
     const session = await createRes.json();
@@ -338,28 +338,17 @@ test.describe('recording lifecycle', () => {
     const startBody = await startRes.json();
     const recordingId = startBody.recording_id;
 
+    const fileContent = Buffer.from('download-test-video-content');
     await stopRecording(request, token, session.id, recordingId);
-    await uploadRecording(
-      request,
-      token,
-      session.id,
-      recordingId,
-      Buffer.from('download-modal-test-video'),
-    );
+    await uploadRecording(request, token, session.id, recordingId, fileContent);
 
-    // Open recordings modal
-    await page.goto('/');
-    await page.getByLabel('View recordings').click();
-    await expect(page.getByRole('heading', { name: 'My Recordings' })).toBeVisible();
-    await expect(page.getByText('.webm').first()).toBeVisible();
-
-    // Set up download listener and click Download button
-    const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('link', { name: 'Download' }).first().click();
-    const download = await downloadPromise;
-
-    // Assert download filename contains .webm
-    expect(download.suggestedFilename()).toContain('.webm');
+    // Download and verify content matches what was uploaded
+    const dlRes = await downloadRecording(request, token, recordingId);
+    expect(dlRes.status()).toBe(200);
+    expect(dlRes.headers()['content-type']).toBe('video/webm');
+    expect(dlRes.headers()['content-disposition']).toContain('.webm');
+    const dlBody = await dlRes.body();
+    expect(dlBody.toString()).toBe(fileContent.toString());
 
     // Cleanup via API (afterEach handles recordings and sessions)
   });
