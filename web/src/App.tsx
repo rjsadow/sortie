@@ -7,6 +7,7 @@ import { Register } from './components/Register';
 import { Admin } from './components/Admin';
 import { AuditLog } from './components/AuditLog';
 import { SessionManager } from './components/SessionManager';
+import { RecordingsList } from './components/RecordingsList';
 import { TemplateBrowser } from './components/templates/TemplateBrowser';
 import {
   getStoredUser,
@@ -56,6 +57,7 @@ function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [showSessionManager, setShowSessionManager] = useState(false);
+  const [showRecordings, setShowRecordings] = useState(false);
   const [allowRegistration, setAllowRegistration] = useState(false);
   const [ssoEnabled, setSsoEnabled] = useState(false);
   const [showKeyboardHint, setShowKeyboardHint] = useState(false);
@@ -487,6 +489,18 @@ function App() {
                 )}
               </button>
 
+              {/* Recordings button */}
+              <button
+                onClick={() => setShowRecordings(true)}
+                className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/15 hover:border-white/25 transition-colors text-sm font-medium flex items-center gap-2"
+                aria-label="View recordings"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span className="hidden sm:inline">Recordings</span>
+              </button>
+
               {/* Avatar / User Menu */}
               <UserMenu
                 user={user}
@@ -902,6 +916,13 @@ function App() {
           onClose={() => setShowAuditLog(false)}
         />
       )}
+
+      {/* Recordings List */}
+      <RecordingsList
+        isOpen={showRecordings}
+        onClose={() => setShowRecordings(false)}
+        darkMode={darkMode}
+      />
 
       {/* Session Manager */}
       <SessionManager

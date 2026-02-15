@@ -215,3 +215,45 @@ export async function joinSessionShare(
     data: { token: shareToken },
   });
 }
+
+// --- Recording helpers ---
+
+export async function listRecordings(
+  request: APIRequestContext,
+  token: string,
+) {
+  return request.get(`${BASE}/api/recordings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function listAdminRecordings(
+  request: APIRequestContext,
+  token: string,
+) {
+  return request.get(`${BASE}/api/admin/recordings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// --- Settings helpers ---
+
+export async function getAdminSettings(
+  request: APIRequestContext,
+  token: string,
+) {
+  return request.get(`${BASE}/api/admin/settings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function updateAdminSettings(
+  request: APIRequestContext,
+  token: string,
+  settings: Record<string, string>,
+) {
+  return request.put(`${BASE}/api/admin/settings`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: settings,
+  });
+}

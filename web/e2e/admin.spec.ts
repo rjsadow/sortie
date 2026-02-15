@@ -16,11 +16,11 @@ test.describe('Admin Panel', () => {
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
   });
 
-  test('shows all five tabs', async ({ page }) => {
+  test('shows all admin tabs', async ({ page }) => {
     await openAdminPanel(page);
     await expect(page.getByRole('heading', { name: 'Admin Settings' })).toBeVisible();
 
-    for (const tab of ['Settings', 'Users', 'Categories', 'Apps', 'Templates', 'Sessions']) {
+    for (const tab of ['Settings', 'Users', 'Categories', 'Apps', 'Templates', 'Sessions', 'Recordings']) {
       await expect(page.getByRole('button', { name: tab, exact: true })).toBeVisible();
     }
   });

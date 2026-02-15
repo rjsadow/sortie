@@ -11,6 +11,9 @@ import {
   deleteTemplate,
   listAdminSessions,
   terminateAdminSession,
+  listAdminRecordings,
+  downloadRecording,
+  deleteRecording,
   listApps,
   createApp,
   updateApp,
@@ -19,7 +22,7 @@ import {
   listCategories,
   type AdminTemplate,
 } from '../services/auth';
-import type { Application, AppVisibility, Category, Session, SessionStatus } from '../types';
+import type { Application, AppVisibility, Category, Session, SessionStatus, Recording, RecordingStatus } from '../types';
 import { formatDuration } from '../utils/time';
 import { CategoryManager } from './CategoryManager';
 
@@ -102,7 +105,7 @@ const emptyApp: Application = {
 };
 
 export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: AdminProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'categories' | 'apps' | 'templates' | 'sessions'>(
+  const [activeTab, setActiveTab] = useState<'settings' | 'users' | 'categories' | 'apps' | 'templates' | 'sessions' | 'recordings'>(
     isSystemAdmin ? 'settings' : 'categories'
   );
   const [loading, setLoading] = useState(true);
@@ -111,6 +114,7 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
 
   // Settings state
   const [allowRegistration, setAllowRegistration] = useState(false);
+  const [autoRecord, setAutoRecord] = useState(false);
 
   // Users state
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -125,6 +129,9 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
 
   // Sessions state
   const [adminSessions, setAdminSessions] = useState<Session[]>([]);
+
+  // Recordings state
+  const [adminRecordings, setAdminRecordings] = useState<Recording[]>([]);
 
   // Categories state (for app form dropdown)
   const [categories, setCategories] = useState<Category[]>([]);
@@ -154,20 +161,23 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
     setError('');
     try {
       if (isSystemAdmin) {
-        const [settings, userList, catList, appList, templateList, sessionList] = await Promise.all([
+        const [settings, userList, catList, appList, templateList, sessionList, recordingList] = await Promise.all([
           getAdminSettings(),
           listUsers(),
           listCategories(),
           listApps(),
           listTemplates(),
           listAdminSessions(),
+          listAdminRecordings(),
         ]);
         setAllowRegistration(settings.allow_registration === true || settings.allow_registration === 'true');
+        setAutoRecord(settings.recording_auto_record === true || settings.recording_auto_record === 'true');
         setUsers(userList);
         setCategories(catList);
         setApps(appList);
         setTemplates(templateList);
         setAdminSessions(sessionList);
+        setAdminRecordings(recordingList || []);
       } else {
         // Category admin: only load categories and apps (non-admin endpoints)
         const [catList, appList] = await Promise.all([
@@ -193,6 +203,7 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
     try {
       await updateAdminSettings({
         allow_registration: allowRegistration.toString(),
+        recording_auto_record: autoRecord.toString(),
       });
       setSuccess('Settings saved successfully');
       setTimeout(() => setSuccess(''), 3000);
@@ -525,6 +536,16 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
               Sessions
             </button>
           )}
+          {isSystemAdmin && (
+            <button
+              onClick={() => setActiveTab('recordings')}
+              className={`pb-2 px-1 ${activeTab === 'recordings'
+                ? 'border-b-2 border-brand-accent text-brand-accent'
+                : mutedText}`}
+            >
+              Recordings
+            </button>
+          )}
         </div>
 
         {/* Error/Success messages */}
@@ -562,6 +583,21 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
                       <span className={textColor}>Allow user self-registration</span>
                       <p className={`text-sm ${mutedText}`}>
                         When enabled, new users can create their own accounts
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={autoRecord}
+                      onChange={(e) => setAutoRecord(e.target.checked)}
+                      className="w-5 h-5 rounded border-gray-500 text-brand-accent focus:ring-brand-accent"
+                    />
+                    <div>
+                      <span className={textColor}>Auto-record sessions</span>
+                      <p className={`text-sm ${mutedText}`}>
+                        When enabled, recording starts automatically for all new sessions
                       </p>
                     </div>
                   </label>
@@ -1573,6 +1609,119 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
                   </table>
                   {adminSessions.length === 0 && (
                     <p className={`text-center py-8 ${mutedText}`}>No sessions found</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Recordings Tab */}
+            {activeTab === 'recordings' && (
+              <div className={`${cardBg} rounded-lg p-6`}>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className={`text-lg font-semibold ${textColor}`}>All Recordings</h2>
+                  <button
+                    onClick={loadData}
+                    className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-primary transition-colors"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <th className={`text-left py-2 ${mutedText}`}>Status</th>
+                        <th className={`text-left py-2 ${mutedText}`}>User</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Filename</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Duration</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Size</th>
+                        <th className={`text-left py-2 ${mutedText}`}>Date</th>
+                        <th className={`text-right py-2 ${mutedText}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminRecordings.map((recording) => {
+                        const recStatusColors: Record<RecordingStatus, { bg: string; text: string; pulse?: boolean }> = {
+                          recording: { bg: 'bg-red-500', text: 'text-red-500', pulse: true },
+                          uploading: { bg: 'bg-yellow-500', text: 'text-yellow-500', pulse: true },
+                          ready: { bg: 'bg-green-500', text: 'text-green-500' },
+                          failed: { bg: 'bg-gray-400', text: 'text-gray-400' },
+                        };
+                        const sc = recStatusColors[recording.status];
+                        const dur = `${Math.floor(recording.duration_seconds / 60)}:${(recording.duration_seconds % 60).toString().padStart(2, '0')}`;
+                        const sizeStr = recording.size_bytes === 0 ? '0 B' : (() => {
+                          const k = 1024;
+                          const sizes = ['B', 'KB', 'MB', 'GB'];
+                          const i = Math.floor(Math.log(recording.size_bytes) / Math.log(k));
+                          return `${(recording.size_bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+                        })();
+                        return (
+                          <tr
+                            key={recording.id}
+                            className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}
+                          >
+                            <td className="py-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-block w-2 h-2 rounded-full ${sc.bg} ${sc.pulse ? 'animate-pulse' : ''}`} />
+                                <span className={`text-sm ${sc.text}`}>{recording.status}</span>
+                              </div>
+                            </td>
+                            <td className={`py-3 ${mutedText}`}>{recording.user_id}</td>
+                            <td className={`py-3 ${textColor}`}>{recording.filename}</td>
+                            <td className={`py-3 ${mutedText}`}>{dur}</td>
+                            <td className={`py-3 ${mutedText}`}>{sizeStr}</td>
+                            <td className={`py-3 ${mutedText}`}>
+                              {new Date(recording.created_at).toLocaleString(undefined, {
+                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                              })}
+                            </td>
+                            <td className="py-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {recording.status === 'ready' && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const blobUrl = await downloadRecording(recording.id);
+                                        const a = document.createElement('a');
+                                        a.href = blobUrl;
+                                        a.download = recording.filename;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                        URL.revokeObjectURL(blobUrl);
+                                      } catch (err) {
+                                        setError(err instanceof Error ? err.message : 'Download failed');
+                                      }
+                                    }}
+                                    className="text-brand-accent hover:text-brand-primary text-sm"
+                                  >
+                                    Download
+                                  </button>
+                                )}
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Delete recording "${recording.filename}"?`)) return;
+                                    try {
+                                      await deleteRecording(recording.id);
+                                      await loadData();
+                                    } catch (err) {
+                                      setError(err instanceof Error ? err.message : 'Delete failed');
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-400 text-sm"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {adminRecordings.length === 0 && (
+                    <p className={`text-center py-8 ${mutedText}`}>No recordings found</p>
                   )}
                 </div>
               </div>
