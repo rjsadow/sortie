@@ -25,6 +25,16 @@ type handlers struct {
 	app *App
 }
 
+// getRecordingPolicy reads the recording_auto_record setting and returns
+// "auto" when enabled, or "" otherwise.
+func (h *handlers) getRecordingPolicy() string {
+	val, err := h.app.DB.GetSetting("recording_auto_record")
+	if err == nil && val == "true" {
+		return "auto"
+	}
+	return ""
+}
+
 // --- Health endpoints ---
 
 func (h *handlers) handleHealthz(w http.ResponseWriter, r *http.Request) {
@@ -995,6 +1005,7 @@ func (h *handlers) handleSessions(w http.ResponseWriter, r *http.Request) {
 			sessionList = []db.Session{}
 		}
 
+		recPolicy := h.getRecordingPolicy()
 		responses := make([]sessions.SessionResponse, len(sessionList))
 		for i, s := range sessionList {
 			app, _ := h.app.DB.GetApp(s.AppID)
@@ -1012,7 +1023,7 @@ func (h *handlers) handleSessions(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-			responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, guacURL, proxyURL)
+			responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, guacURL, proxyURL, recPolicy)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1085,7 +1096,7 @@ func (h *handlers) handleSessions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL)
+		response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL, h.getRecordingPolicy())
 
 		details := fmt.Sprintf("Created session %s for app %s", session.ID, session.AppID)
 		h.app.DB.LogAudit(req.UserID, "CREATE_SESSION", details)
@@ -1169,7 +1180,7 @@ func (h *handlers) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL)
+		response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL, h.getRecordingPolicy())
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
@@ -1234,7 +1245,7 @@ func (h *handlers) handleSessionStop(w http.ResponseWriter, r *http.Request, id 
 	if app != nil {
 		appName = app.Name
 	}
-	response := sessions.SessionFromDB(session, appName, "", "", "")
+	response := sessions.SessionFromDB(session, appName, "", "", "", "")
 
 	h.app.DB.LogAudit("user", "STOP_SESSION", fmt.Sprintf("Stopped session %s", id))
 
@@ -1283,7 +1294,7 @@ func (h *handlers) handleSessionRestart(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
-	response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL)
+	response := sessions.SessionFromDB(session, appName, wsURL, guacURL, proxyURL, h.getRecordingPolicy())
 
 	h.app.DB.LogAudit("user", "RESTART_SESSION", fmt.Sprintf("Restarted session %s", id))
 
@@ -1494,7 +1505,7 @@ func (h *handlers) handleSharedSessions(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
-		resp := *sessions.SessionFromDB(&r.Session, r.AppName, wsURL, guacURL, "")
+		resp := *sessions.SessionFromDB(&r.Session, r.AppName, wsURL, guacURL, "", "")
 		resp.IsShared = true
 		resp.OwnerUsername = r.OwnerUsername
 		resp.SharePermission = string(r.Permission)
@@ -1581,7 +1592,7 @@ func (h *handlers) handleJoinShare(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp := *sessions.SessionFromDB(session, appName, wsURL, guacURL, "")
+	resp := *sessions.SessionFromDB(session, appName, wsURL, guacURL, "", "")
 	resp.IsShared = true
 	resp.SharePermission = string(share.Permission)
 
@@ -1910,6 +1921,7 @@ func (h *handlers) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 		sessionList = []db.Session{}
 	}
 
+	recPolicy := h.getRecordingPolicy()
 	responses := make([]sessions.SessionResponse, len(sessionList))
 	for i, s := range sessionList {
 		app, _ := h.app.DB.GetApp(s.AppID)
@@ -1927,7 +1939,7 @@ func (h *handlers) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, guacURL, proxyURL)
+		responses[i] = *sessions.SessionFromDB(&s, appName, wsURL, guacURL, proxyURL, recPolicy)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

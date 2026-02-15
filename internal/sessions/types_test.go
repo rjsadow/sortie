@@ -20,7 +20,7 @@ func TestSessionFromDB(t *testing.T) {
 		UpdatedAt:   now,
 	}
 
-	resp := SessionFromDB(session, "My App", "/ws/sessions/sess-123", "/ws/guac/sessions/sess-123", "/api/sessions/sess-123/proxy/")
+	resp := SessionFromDB(session, "My App", "/ws/sessions/sess-123", "/ws/guac/sessions/sess-123", "/api/sessions/sess-123/proxy/", "")
 
 	if resp.ID != "sess-123" {
 		t.Errorf("ID = %q, want %q", resp.ID, "sess-123")
@@ -68,7 +68,7 @@ func TestSessionFromDB_EmptyURLs(t *testing.T) {
 		Status: db.SessionStatusCreating,
 	}
 
-	resp := SessionFromDB(session, "", "", "", "")
+	resp := SessionFromDB(session, "", "", "", "", "")
 
 	if resp.WebSocketURL != "" {
 		t.Errorf("WebSocketURL = %q, want empty", resp.WebSocketURL)
@@ -84,6 +84,29 @@ func TestSessionFromDB_EmptyURLs(t *testing.T) {
 	}
 }
 
+func TestSessionFromDB_RecordingPolicy(t *testing.T) {
+	session := &db.Session{
+		ID:     "sess-rec",
+		UserID: "user1",
+		AppID:  "app1",
+		Status: db.SessionStatusRunning,
+	}
+
+	t.Run("auto policy is passed through", func(t *testing.T) {
+		resp := SessionFromDB(session, "App", "", "", "", "auto")
+		if resp.RecordingPolicy != "auto" {
+			t.Errorf("RecordingPolicy = %q, want %q", resp.RecordingPolicy, "auto")
+		}
+	})
+
+	t.Run("empty policy is omitted", func(t *testing.T) {
+		resp := SessionFromDB(session, "App", "", "", "", "")
+		if resp.RecordingPolicy != "" {
+			t.Errorf("RecordingPolicy = %q, want empty", resp.RecordingPolicy)
+		}
+	})
+}
+
 func TestSessionFromDB_ZeroIdleTimeout(t *testing.T) {
 	session := &db.Session{
 		ID:          "sess-zero",
@@ -92,7 +115,7 @@ func TestSessionFromDB_ZeroIdleTimeout(t *testing.T) {
 		IdleTimeout: 0,
 	}
 
-	resp := SessionFromDB(session, "App", "", "", "")
+	resp := SessionFromDB(session, "App", "", "", "", "")
 
 	if resp.IdleTimeout != 0 {
 		t.Errorf("IdleTimeout = %d, want 0", resp.IdleTimeout)

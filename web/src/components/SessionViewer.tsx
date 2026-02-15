@@ -60,6 +60,18 @@ export function SessionViewer({
     }
   }, [isRecording, startRecording, stopRecording, session.id]);
 
+  // Auto-start recording when admin policy is "auto" and canvas is ready
+  useEffect(() => {
+    if (
+      session.recording_policy === 'auto' &&
+      hasCanvas &&
+      canvasRef.current &&
+      !isRecording
+    ) {
+      startRecording(canvasRef.current, session.id);
+    }
+  }, [hasCanvas, session.recording_policy, session.id, isRecording, startRecording]);
+
   const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;

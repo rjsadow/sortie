@@ -58,6 +58,7 @@ export interface Session {
   owner_username?: string;
   share_permission?: 'read_only' | 'read_write';
   share_id?: string;
+  recording_policy?: string;
   created_at: string;
   updated_at: string;
 }

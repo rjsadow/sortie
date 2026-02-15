@@ -61,6 +61,8 @@ export default defineConfig({
       SORTIE_ADMIN_PASSWORD: 'admin123',
       SORTIE_ALLOW_REGISTRATION: 'true',
       SORTIE_GATEWAY_RATE_LIMIT: '0',
+      SORTIE_VIDEO_RECORDING_ENABLED: 'true',
+      SORTIE_RECORDING_STORAGE_PATH: '/tmp/sortie-e2e-recordings',
     },
   },
 });

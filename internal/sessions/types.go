@@ -55,6 +55,7 @@ type SessionResponse struct {
 	OwnerUsername   string           `json:"owner_username,omitempty"`   // set for shared sessions
 	SharePermission string           `json:"share_permission,omitempty"` // "read_only" or "read_write" for shared sessions
 	ShareID         string           `json:"share_id,omitempty"`         // share record ID for shared sessions
+	RecordingPolicy string           `json:"recording_policy,omitempty"` // "auto" when admin enables auto-record
 	CreatedAt       time.Time        `json:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`
 }
@@ -84,19 +85,20 @@ type JoinShareRequest struct {
 }
 
 // SessionFromDB converts a database session to an API response
-func SessionFromDB(session *db.Session, appName string, wsURL string, guacURL string, proxyURL string) *SessionResponse {
+func SessionFromDB(session *db.Session, appName string, wsURL string, guacURL string, proxyURL string, recordingPolicy string) *SessionResponse {
 	return &SessionResponse{
-		ID:           session.ID,
-		UserID:       session.UserID,
-		AppID:        session.AppID,
-		AppName:      appName,
-		PodName:      session.PodName,
-		Status:       session.Status,
-		IdleTimeout:  session.IdleTimeout,
-		WebSocketURL: wsURL,
-		GuacamoleURL: guacURL,
-		ProxyURL:     proxyURL,
-		CreatedAt:    session.CreatedAt,
-		UpdatedAt:    session.UpdatedAt,
+		ID:              session.ID,
+		UserID:          session.UserID,
+		AppID:           session.AppID,
+		AppName:         appName,
+		PodName:         session.PodName,
+		Status:          session.Status,
+		IdleTimeout:     session.IdleTimeout,
+		WebSocketURL:    wsURL,
+		GuacamoleURL:    guacURL,
+		ProxyURL:        proxyURL,
+		RecordingPolicy: recordingPolicy,
+		CreatedAt:       session.CreatedAt,
+		UpdatedAt:       session.UpdatedAt,
 	}
 }

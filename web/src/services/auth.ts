@@ -1,4 +1,4 @@
-import type { User, Session, Application, Category } from '../types';
+import type { User, Session, Application, Category, Recording } from '../types';
 
 // Auth response types
 export interface AuthResponse {
@@ -601,6 +601,47 @@ export async function removeCategoryApprovedUser(categoryId: string, userId: str
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || 'Failed to remove approved user');
+  }
+}
+
+// --- Recording API ---
+
+// List current user's recordings
+export async function listRecordings(): Promise<Recording[]> {
+  const response = await fetchWithAuth('/api/recordings');
+  if (!response.ok) {
+    throw new Error('Failed to list recordings');
+  }
+  return response.json();
+}
+
+// Admin: List all recordings (system-wide)
+export async function listAdminRecordings(): Promise<Recording[]> {
+  const response = await fetchWithAuth('/api/admin/recordings');
+  if (!response.ok) {
+    throw new Error('Failed to list admin recordings');
+  }
+  return response.json();
+}
+
+// Download a recording — returns a blob URL
+export async function downloadRecording(id: string): Promise<string> {
+  const response = await fetchWithAuth(`/api/recordings/${id}/download`);
+  if (!response.ok) {
+    throw new Error('Failed to download recording');
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+// Delete a recording
+export async function deleteRecording(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/recordings/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'Failed to delete recording');
   }
 }
 
