@@ -99,6 +99,64 @@ function App() {
     validateAuth();
   }, []);
 
+  // Handle share link URLs: /session/{id}?share_token={token}
+  useEffect(() => {
+    if (authLoading || !user) return;
+
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const shareToken = params.get('share_token');
+
+    const match = path.match(/^\/session\/([^/]+)$/);
+    if (!match || !shareToken) return;
+
+    const shareSessionId = match[1];
+
+    // Clear the URL immediately to prevent re-processing on re-renders
+    window.history.replaceState({}, '', '/');
+
+    const joinShare = async () => {
+      try {
+        const response = await fetchWithAuth('/api/sessions/shares/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: shareToken }),
+        });
+
+        if (!response.ok) {
+          console.error('Failed to join shared session:', response.statusText);
+          return;
+        }
+
+        const session = await response.json();
+
+        // Construct a minimal app object from the join response.
+        // The shared user may not have this app in their own apps list.
+        const app: Application = {
+          id: session.app_id,
+          name: session.app_name || 'Shared Session',
+          description: '',
+          url: '',
+          icon: '',
+          category: '',
+          launch_type: 'container',
+        };
+
+        setReconnectSessionId(shareSessionId);
+        setSessionShareInfo({
+          viewOnly: session.share_permission === 'read_only',
+          ownerUsername: session.owner_username,
+          sharePermission: session.share_permission,
+        });
+        setSelectedContainerApp(app);
+      } catch (err) {
+        console.error('Failed to join shared session:', err);
+      }
+    };
+
+    joinShare();
+  }, [authLoading, user]);
+
   // Fetch apps after authentication is validated
   useEffect(() => {
     if (authLoading || !user) return;
