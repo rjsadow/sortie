@@ -728,6 +728,95 @@ func TestSharedSession_LateJoinerSeesDisplay(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSharedSession_DisplayBufferCap(t *testing.T) {
+	guacd := newFakeGuacd(t)
+
+	done := make(chan struct{})
+	go func() {
+		guacd.acceptAndHandshake(t)
+		close(done)
+	}()
+
+	registry := NewSessionRegistry()
+	shared, err := registry.GetOrCreate("sess-cap", guacd.addr(), "127.0.0.1", "3389", "u", "p", "1024", "768")
+	if err != nil {
+		t.Fatalf("GetOrCreate failed: %v", err)
+	}
+	<-done
+	defer shared.Close()
+
+	// Directly fill the display buffer beyond maxDisplayBuf to test truncation.
+	// We don't need a connected client — broadcast() writes to displayBuf regardless.
+	bigChunk := make([]byte, maxDisplayBuf/2+1)
+	for i := range bigChunk {
+		bigChunk[i] = 'A'
+	}
+	// Terminate as a valid instruction so broadcast sends it
+	bigChunk[len(bigChunk)-1] = ';'
+
+	// First broadcast — buffer should be under the cap
+	shared.broadcast(bigChunk)
+	shared.mu.RLock()
+	size1 := len(shared.displayBuf)
+	shared.mu.RUnlock()
+	if size1 != len(bigChunk) {
+		t.Fatalf("after first broadcast: displayBuf size = %d, want %d", size1, len(bigChunk))
+	}
+
+	// Second broadcast — total would exceed maxDisplayBuf, should trigger truncation
+	shared.broadcast(bigChunk)
+	shared.mu.RLock()
+	size2 := len(shared.displayBuf)
+	shared.mu.RUnlock()
+
+	if size2 > maxDisplayBuf {
+		t.Errorf("displayBuf size %d exceeds maxDisplayBuf %d after truncation", size2, maxDisplayBuf)
+	}
+	if size2 == 0 {
+		t.Error("displayBuf should not be empty after truncation")
+	}
+}
+
+func TestSharedSession_AddClientAfterClose(t *testing.T) {
+	guacd := newFakeGuacd(t)
+
+	done := make(chan struct{})
+	go func() {
+		guacd.acceptAndHandshake(t)
+		close(done)
+	}()
+
+	registry := NewSessionRegistry()
+	shared, err := registry.GetOrCreate("sess-closed", guacd.addr(), "127.0.0.1", "3389", "u", "p", "1024", "768")
+	if err != nil {
+		t.Fatalf("GetOrCreate failed: %v", err)
+	}
+	<-done
+
+	// Close the session first
+	shared.Close()
+
+	// Now try to add a client — should return immediately without blocking
+	_, server := createWSPair(t)
+	addDone := make(chan struct{})
+	go func() {
+		shared.AddClient(server, false)
+		close(addDone)
+	}()
+
+	select {
+	case <-addDone:
+		// AddClient returned immediately — correct behavior
+	case <-time.After(2 * time.Second):
+		t.Fatal("AddClient blocked on a closed session instead of returning immediately")
+	}
+
+	// No clients should have been added
+	if shared.clientCount() != 0 {
+		t.Errorf("clientCount = %d, want 0 for closed session", shared.clientCount())
+	}
+}
+
 func TestSharedSession_ConcurrentInputSerialization(t *testing.T) {
 	guacd := newFakeGuacd(t)
 

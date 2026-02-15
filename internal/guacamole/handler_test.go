@@ -87,6 +87,9 @@ func TestNewGuacHandler(t *testing.T) {
 	if h.sessionManager != mgr {
 		t.Error("NewHandler() did not set sessionManager correctly")
 	}
+	if h.registry == nil {
+		t.Error("NewHandler() did not initialize registry")
+	}
 }
 
 func TestGuacHandler_MissingSessionID(t *testing.T) {
