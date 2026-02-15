@@ -152,10 +152,6 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
   const [tagsInput, setTagsInput] = useState('');
   const [containerArgsInput, setContainerArgsInput] = useState('');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const loadData = async () => {
     setLoading(true);
     setError('');
@@ -196,6 +192,9 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
       setLoading(false);
     }
   };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, []);
 
   const handleSaveSettings = async () => {
     setError('');
