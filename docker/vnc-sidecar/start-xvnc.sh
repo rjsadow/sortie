@@ -20,7 +20,8 @@ if [ -e "$X11_SOCKET" ]; then
     -nopw \
     -shared \
     -forever \
-    -noxdamage
+    -noxdamage \
+    -noshm
 fi
 
 # Try to start Xvnc. If it fails because another X server grabbed the display
@@ -57,7 +58,8 @@ else
         -nopw \
         -shared \
         -forever \
-        -noxdamage
+        -noxdamage \
+        -noshm
     fi
     sleep 1
   done

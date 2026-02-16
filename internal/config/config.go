@@ -79,6 +79,10 @@ type Config struct {
 	RecordingStoragePath   string // Local storage path for recordings
 	RecordingMaxSizeMB     int    // Maximum recording upload size in MB
 	RecordingRetentionDays int    // Days to retain recordings (0 = keep forever)
+	RecordingS3Bucket   string // S3 bucket name
+	RecordingS3Region   string // AWS region
+	RecordingS3Endpoint string // Custom endpoint for MinIO/self-hosted S3
+	RecordingS3Prefix   string // Key prefix within bucket
 
 	// Billing/metering configuration
 	BillingEnabled        bool          // Enable metering event collection
@@ -149,6 +153,8 @@ const (
 	DefaultRecordingStorageBackend = "local"
 	DefaultRecordingStoragePath    = "/data/recordings"
 	DefaultRecordingMaxSizeMB      = 500
+	DefaultRecordingS3Region       = "us-east-1"
+	DefaultRecordingS3Prefix       = "recordings/"
 )
 
 // Load reads configuration from environment variables and returns a Config.
@@ -201,6 +207,8 @@ func Load() (*Config, error) {
 		RecordingStorageBackend: DefaultRecordingStorageBackend,
 		RecordingStoragePath:    DefaultRecordingStoragePath,
 		RecordingMaxSizeMB:      DefaultRecordingMaxSizeMB,
+		RecordingS3Region:       DefaultRecordingS3Region,
+		RecordingS3Prefix:       DefaultRecordingS3Prefix,
 
 		// Queue defaults
 		QueueMaxSize: DefaultQueueMaxSize,
@@ -618,6 +626,22 @@ func (c *Config) loadFromEnv() error {
 		}
 	}
 
+	if v := os.Getenv("SORTIE_RECORDING_S3_BUCKET"); v != "" {
+		c.RecordingS3Bucket = v
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_S3_REGION"); v != "" {
+		c.RecordingS3Region = v
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_S3_ENDPOINT"); v != "" {
+		c.RecordingS3Endpoint = v
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_S3_PREFIX"); v != "" {
+		c.RecordingS3Prefix = v
+	}
+
 	// Session queueing configuration
 	if v := os.Getenv("SORTIE_QUEUE_MAX_SIZE"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -699,6 +723,14 @@ func (c *Config) Validate() ValidationErrors {
 		errs = append(errs, ValidationError{
 			Field:   "SORTIE_VNC_SIDECAR_IMAGE",
 			Message: "VNC sidecar image cannot be empty",
+		})
+	}
+
+	// Validate S3 config when S3 backend is selected
+	if c.RecordingStorageBackend == "s3" && c.RecordingS3Bucket == "" {
+		errs = append(errs, ValidationError{
+			Field:   "SORTIE_RECORDING_S3_BUCKET",
+			Message: "S3 bucket is required when storage backend is \"s3\"",
 		})
 	}
 

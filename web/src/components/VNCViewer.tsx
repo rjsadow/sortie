@@ -16,6 +16,7 @@ interface VNCViewerProps {
   onReconnecting?: (attempt: number, maxAttempts: number) => void;
   onReconnected?: () => void;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
+  onWebSocketReady?: (ws: WebSocket) => void;
   viewOnly?: boolean;
   scaleViewport?: boolean;
   showStats?: boolean;
@@ -32,6 +33,7 @@ export function VNCViewer({
   onReconnecting,
   onReconnected,
   onCanvasReady,
+  onWebSocketReady,
   viewOnly = false,
   scaleViewport = true,
   showStats = false,
@@ -294,9 +296,28 @@ export function VNCViewer({
           if (screen) screen.remove();
         }
 
+        // Temporarily wrap WebSocket to capture the instance noVNC creates
+        const OriginalWebSocket = window.WebSocket;
+        if (onWebSocketReady) {
+          const onWsReady = onWebSocketReady;
+          const WrappedWS = function (url: string | URL, protocols?: string | string[]) {
+            const ws = new OriginalWebSocket(url, protocols);
+            onWsReady(ws);
+            return ws;
+          } as unknown as typeof WebSocket;
+          // Copy static properties so noVNC's readyState checks work
+          Object.defineProperties(WrappedWS, Object.getOwnPropertyDescriptors(OriginalWebSocket));
+          window.WebSocket = WrappedWS;
+        }
+
         const rfb = new RFBClass(containerRef.current, fullWsUrl.current, {
           shared: true,
         });
+
+        // Restore original WebSocket immediately
+        if (onWebSocketReady) {
+          window.WebSocket = OriginalWebSocket;
+        }
 
         rfb.scaleViewport = scaleViewport;
         rfb.resizeSession = true;
@@ -334,7 +355,7 @@ export function VNCViewer({
         rfbRef.current = null;
       }
     };
-  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleSecurityFailure, handleClipboard, syncClipboardToRemote, canWriteRemote, onError, clearReconnectTimer]);
+  }, [wsUrl, viewOnly, scaleViewport, handleConnect, handleDisconnect, handleSecurityFailure, handleClipboard, syncClipboardToRemote, canWriteRemote, onError, onWebSocketReady, clearReconnectTimer]);
 
   return (
     <div

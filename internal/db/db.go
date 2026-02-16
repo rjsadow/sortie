@@ -480,6 +480,8 @@ func (db *DB) migrate() error {
 		"ALTER TABLE analytics ADD COLUMN tenant_id TEXT DEFAULT 'default'",
 		"ALTER TABLE app_specs ADD COLUMN tenant_id TEXT DEFAULT 'default'",
 		"ALTER TABLE applications ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'",
+		// Video conversion path for recordings
+		"ALTER TABLE recordings ADD COLUMN video_path TEXT DEFAULT ''",
 	}
 
 	for _, migration := range migrations {
@@ -2327,6 +2329,7 @@ type Recording struct {
 	Format          string         `json:"format"`
 	StorageBackend  string         `json:"storage_backend"`
 	StoragePath     string         `json:"storage_path"`
+	VideoPath       string         `json:"video_path,omitempty"`
 	Status          RecordingStatus `json:"status"`
 	TenantID        string         `json:"tenant_id,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
@@ -2353,11 +2356,12 @@ func (db *DB) GetRecording(id string) (*Recording, error) {
 	var rec Recording
 	var status string
 	var completedAt sql.NullTime
+	var videoPath sql.NullString
 	err := db.conn.QueryRow(
-		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, video_path, status, tenant_id, created_at, completed_at
 		 FROM recordings WHERE id = ?`, id,
 	).Scan(&rec.ID, &rec.SessionID, &rec.UserID, &rec.Filename, &rec.SizeBytes, &rec.DurationSeconds,
-		&rec.Format, &rec.StorageBackend, &rec.StoragePath, &status, &rec.TenantID, &rec.CreatedAt, &completedAt)
+		&rec.Format, &rec.StorageBackend, &rec.StoragePath, &videoPath, &status, &rec.TenantID, &rec.CreatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -2367,6 +2371,9 @@ func (db *DB) GetRecording(id string) (*Recording, error) {
 	rec.Status = RecordingStatus(status)
 	if completedAt.Valid {
 		rec.CompletedAt = &completedAt.Time
+	}
+	if videoPath.Valid {
+		rec.VideoPath = videoPath.String
 	}
 	return &rec, nil
 }
@@ -2407,10 +2414,29 @@ func (db *DB) UpdateRecordingComplete(id string, storagePath string, sizeBytes i
 	return nil
 }
 
+// UpdateRecordingVideoPath sets the converted video path for a recording.
+func (db *DB) UpdateRecordingVideoPath(id string, videoPath string) error {
+	result, err := db.conn.Exec(
+		"UPDATE recordings SET video_path = ? WHERE id = ?",
+		videoPath, id,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // ListRecordingsByUser returns all recordings for a given user.
 func (db *DB) ListRecordingsByUser(userID string) ([]Recording, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, video_path, status, tenant_id, created_at, completed_at
 		 FROM recordings WHERE user_id = ? ORDER BY created_at DESC`, userID,
 	)
 	if err != nil {
@@ -2423,7 +2449,7 @@ func (db *DB) ListRecordingsByUser(userID string) ([]Recording, error) {
 // ListRecordingsBySession returns all recordings for a given session.
 func (db *DB) ListRecordingsBySession(sessionID string) ([]Recording, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, video_path, status, tenant_id, created_at, completed_at
 		 FROM recordings WHERE session_id = ? ORDER BY created_at DESC`, sessionID,
 	)
 	if err != nil {
@@ -2436,7 +2462,7 @@ func (db *DB) ListRecordingsBySession(sessionID string) ([]Recording, error) {
 // ListAllRecordings returns all recordings (admin use).
 func (db *DB) ListAllRecordings() ([]Recording, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, status, tenant_id, created_at, completed_at
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, video_path, status, tenant_id, created_at, completed_at
 		 FROM recordings ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -2462,19 +2488,37 @@ func (db *DB) DeleteRecording(id string) error {
 	return nil
 }
 
+// ListExpiredRecordings returns recordings with status 'ready' that completed before the given cutoff time.
+func (db *DB) ListExpiredRecordings(olderThan time.Time) ([]Recording, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, session_id, user_id, filename, size_bytes, duration_seconds, format, storage_backend, storage_path, video_path, status, tenant_id, created_at, completed_at
+		 FROM recordings WHERE status = ? AND completed_at < ? ORDER BY completed_at ASC`,
+		string(RecordingStatusReady), olderThan,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRecordings(rows)
+}
+
 func scanRecordings(rows *sql.Rows) ([]Recording, error) {
 	var recs []Recording
 	for rows.Next() {
 		var rec Recording
 		var status string
 		var completedAt sql.NullTime
+		var videoPath sql.NullString
 		if err := rows.Scan(&rec.ID, &rec.SessionID, &rec.UserID, &rec.Filename, &rec.SizeBytes, &rec.DurationSeconds,
-			&rec.Format, &rec.StorageBackend, &rec.StoragePath, &status, &rec.TenantID, &rec.CreatedAt, &completedAt); err != nil {
+			&rec.Format, &rec.StorageBackend, &rec.StoragePath, &videoPath, &status, &rec.TenantID, &rec.CreatedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		rec.Status = RecordingStatus(status)
 		if completedAt.Valid {
 			rec.CompletedAt = &completedAt.Time
+		}
+		if videoPath.Valid {
+			rec.VideoPath = videoPath.String
 		}
 		recs = append(recs, rec)
 	}

@@ -10,7 +10,7 @@ import (
 )
 
 // LocalStore implements RecordingStore using the local filesystem.
-// Files are stored at {baseDir}/{year}/{month}/{id}.webm.
+// Files are stored at {baseDir}/{year}/{month}/{id}.vncrec.
 type LocalStore struct {
 	baseDir string
 }
@@ -24,7 +24,7 @@ func NewLocalStore(baseDir string) *LocalStore {
 func (s *LocalStore) Save(id string, r io.Reader) (string, error) {
 	now := time.Now()
 	cleanID := filepath.Base(id) // strip any directory components
-	relPath := filepath.Join(fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()), cleanID+".webm")
+	relPath := filepath.Join(fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()), cleanID+".vncrec")
 
 	// Validate path stays within baseDir
 	fullPath := filepath.Clean(filepath.Join(s.baseDir, relPath))

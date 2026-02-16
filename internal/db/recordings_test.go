@@ -307,6 +307,170 @@ func TestRecordingStatusConstants(t *testing.T) {
 	}
 }
 
+func TestListExpiredRecordings(t *testing.T) {
+	db := setupTestDB(t)
+
+	app := Application{
+		ID: "exp-app", Name: "E App", Description: "d",
+		URL: "http://x", Icon: "i", Category: "c",
+		LaunchType: LaunchTypeContainer,
+	}
+	if err := db.CreateApp(app); err != nil {
+		t.Fatalf("CreateApp() error = %v", err)
+	}
+
+	now := time.Now().Truncate(time.Second)
+	session := Session{
+		ID: "exp-sess", UserID: "user-1", AppID: "exp-app",
+		PodName: "pod-1", Status: SessionStatusRunning,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.CreateSession(session); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	// Create two ready recordings with different completed_at times
+	for _, id := range []string{"exp-old", "exp-new"} {
+		rec := Recording{
+			ID: id, SessionID: "exp-sess", UserID: "user-1",
+			Filename: id + ".webm", Format: "webm", StorageBackend: "local",
+			Status: RecordingStatusRecording, CreatedAt: now,
+		}
+		if err := db.CreateRecording(rec); err != nil {
+			t.Fatalf("CreateRecording(%s): %v", id, err)
+		}
+		if err := db.UpdateRecordingComplete(id, id+".webm", 1024, 60.0); err != nil {
+			t.Fatalf("UpdateRecordingComplete(%s): %v", id, err)
+		}
+	}
+
+	// Backdate exp-old to 31 days ago
+	past := now.Add(-31 * 24 * time.Hour)
+	if _, err := db.conn.Exec("UPDATE recordings SET completed_at = ? WHERE id = ?", past, "exp-old"); err != nil {
+		t.Fatalf("backdate completed_at: %v", err)
+	}
+
+	// Query with 30 day cutoff
+	cutoff := now.Add(-30 * 24 * time.Hour)
+	expired, err := db.ListExpiredRecordings(cutoff)
+	if err != nil {
+		t.Fatalf("ListExpiredRecordings() error = %v", err)
+	}
+
+	if len(expired) != 1 {
+		t.Fatalf("expected 1 expired recording, got %d", len(expired))
+	}
+	if expired[0].ID != "exp-old" {
+		t.Errorf("expected exp-old, got %s", expired[0].ID)
+	}
+
+	// Non-ready recordings should not appear
+	rec := Recording{
+		ID: "exp-failed", SessionID: "exp-sess", UserID: "user-1",
+		Filename: "f.webm", Format: "webm", StorageBackend: "local",
+		Status: RecordingStatusFailed, CreatedAt: now,
+	}
+	if err := db.CreateRecording(rec); err != nil {
+		t.Fatalf("CreateRecording: %v", err)
+	}
+	expired, err = db.ListExpiredRecordings(cutoff)
+	if err != nil {
+		t.Fatalf("ListExpiredRecordings() error = %v", err)
+	}
+	if len(expired) != 1 {
+		t.Errorf("expected 1 expired (failed should be excluded), got %d", len(expired))
+	}
+}
+
+func TestListExpiredRecordings_EmptyResult(t *testing.T) {
+	db := setupTestDB(t)
+
+	app := Application{
+		ID: "empty-app", Name: "E App", Description: "d",
+		URL: "http://x", Icon: "i", Category: "c",
+		LaunchType: LaunchTypeContainer,
+	}
+	if err := db.CreateApp(app); err != nil {
+		t.Fatalf("CreateApp() error = %v", err)
+	}
+
+	now := time.Now().Truncate(time.Second)
+	session := Session{
+		ID: "empty-sess", UserID: "user-1", AppID: "empty-app",
+		PodName: "pod-1", Status: SessionStatusRunning,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.CreateSession(session); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	// Create a fresh ready recording (not expired)
+	rec := Recording{
+		ID: "fresh-rec", SessionID: "empty-sess", UserID: "user-1",
+		Filename: "f.webm", Format: "webm", StorageBackend: "local",
+		Status: RecordingStatusRecording, CreatedAt: now,
+	}
+	if err := db.CreateRecording(rec); err != nil {
+		t.Fatalf("CreateRecording: %v", err)
+	}
+	if err := db.UpdateRecordingComplete("fresh-rec", "fresh-rec.webm", 1024, 60.0); err != nil {
+		t.Fatalf("UpdateRecordingComplete: %v", err)
+	}
+
+	// Query with cutoff far in the past - nothing should match
+	cutoff := now.Add(-30 * 24 * time.Hour)
+	expired, err := db.ListExpiredRecordings(cutoff)
+	if err != nil {
+		t.Fatalf("ListExpiredRecordings() error = %v", err)
+	}
+	if len(expired) != 0 {
+		t.Errorf("expected 0 expired recordings, got %d", len(expired))
+	}
+}
+
+func TestListExpiredRecordings_NullCompletedAtExcluded(t *testing.T) {
+	db := setupTestDB(t)
+
+	app := Application{
+		ID: "null-app", Name: "N App", Description: "d",
+		URL: "http://x", Icon: "i", Category: "c",
+		LaunchType: LaunchTypeContainer,
+	}
+	if err := db.CreateApp(app); err != nil {
+		t.Fatalf("CreateApp() error = %v", err)
+	}
+
+	now := time.Now().Truncate(time.Second)
+	session := Session{
+		ID: "null-sess", UserID: "user-1", AppID: "null-app",
+		PodName: "pod-1", Status: SessionStatusRunning,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.CreateSession(session); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	// Create a recording that is still "recording" (no completed_at, NULL)
+	rec := Recording{
+		ID: "incomplete-rec", SessionID: "null-sess", UserID: "user-1",
+		Filename: "i.webm", Format: "webm", StorageBackend: "local",
+		Status: RecordingStatusRecording, CreatedAt: now,
+	}
+	if err := db.CreateRecording(rec); err != nil {
+		t.Fatalf("CreateRecording: %v", err)
+	}
+
+	// Even with a very generous cutoff, NULL completed_at should be excluded
+	cutoff := now.Add(24 * time.Hour) // future cutoff
+	expired, err := db.ListExpiredRecordings(cutoff)
+	if err != nil {
+		t.Fatalf("ListExpiredRecordings() error = %v", err)
+	}
+	if len(expired) != 0 {
+		t.Errorf("expected 0 expired (incomplete should be excluded), got %d", len(expired))
+	}
+}
+
 func TestRecordingTenantDefault(t *testing.T) {
 	db := setupTestDB(t)
 

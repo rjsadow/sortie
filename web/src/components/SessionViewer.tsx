@@ -37,40 +37,49 @@ export function SessionViewer({
   onError,
 }: SessionViewerProps) {
   const viewerContainerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const [viewerState, setViewerState] = useState<ViewerState>('connecting');
   const [reconnectInfo, setReconnectInfo] = useState<{ attempt: number; max: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStats, setShowStats] = useState(showStatsProp);
   const [showClipboardToast, setShowClipboardToast] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [hasCanvas, setHasCanvas] = useState(false);
-  const { isRecording, duration: recordingDuration, startRecording, stopRecording, error: recordingError } = useRecording();
+  const [hasWs, setHasWs] = useState(false);
+  const { isRecording, duration: recordingDuration, attachWebSocket, startRecording, stopRecording, error: recordingError } = useRecording();
 
-  const handleCanvasReady = useCallback((canvas: HTMLCanvasElement) => {
-    canvasRef.current = canvas;
-    setHasCanvas(true);
-  }, []);
+  const handleWebSocketReady = useCallback((ws: WebSocket) => {
+    wsRef.current = ws;
+    // Start passive capture immediately so the VNC handshake is included
+    // in any future recording. Use a default size; it will be updated once
+    // the canvas is available, but the handshake capture starts right away.
+    const canvas = viewerContainerRef.current?.querySelector('canvas');
+    const w = canvas?.width || 1024;
+    const h = canvas?.height || 768;
+    attachWebSocket(ws, w, h);
+    setHasWs(true);
+  }, [attachWebSocket]);
 
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
       await stopRecording();
-    } else if (canvasRef.current) {
-      await startRecording(canvasRef.current, session.id);
+    } else {
+      // Pass the actual VNC canvas dimensions (available now that the connection is up)
+      const canvas = viewerContainerRef.current?.querySelector('canvas');
+      await startRecording(session.id, canvas?.width, canvas?.height);
     }
   }, [isRecording, startRecording, stopRecording, session.id]);
 
-  // Auto-start recording when admin policy is "auto" and canvas is ready
+  // Auto-start recording when admin policy is "auto" and WebSocket is ready
   useEffect(() => {
     if (
       session.recording_policy === 'auto' &&
-      hasCanvas &&
-      canvasRef.current &&
+      hasWs &&
       !isRecording
     ) {
-      startRecording(canvasRef.current, session.id);
+      const canvas = viewerContainerRef.current?.querySelector('canvas');
+      startRecording(session.id, canvas?.width, canvas?.height);
     }
-  }, [hasCanvas, session.recording_policy, session.id, isRecording, startRecording]);
+  }, [hasWs, session.recording_policy, session.id, isRecording, startRecording]);
 
   const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -156,7 +165,7 @@ export function SessionViewer({
           onError={handleViewerError}
           onReconnecting={handleReconnecting}
           onReconnected={handleReconnected}
-          onCanvasReady={handleCanvasReady}
+          onWebSocketReady={handleWebSocketReady}
           showStats={showStats}
           clipboardPolicy={viewOnly ? 'none' : clipboardPolicy}
         />
@@ -231,7 +240,7 @@ export function SessionViewer({
           </button>
 
           {/* Record toggle */}
-          {(isVNC || isGuacamole) && hasCanvas && (
+          {isVNC && hasWs && (
             <button
               onClick={toggleRecording}
               className={`p-1.5 rounded transition-colors ${isRecording ? 'bg-red-600 text-white' : `${btnBg} text-white`}`}
