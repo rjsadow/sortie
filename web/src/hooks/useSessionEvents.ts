@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { getAccessToken } from '../services/auth';
 
 interface UseSessionEventsOptions {
@@ -31,35 +31,37 @@ export function useSessionEvents({
     onDisconnectedRef.current = onDisconnected;
   }, [onDisconnected]);
 
-  const connect = useCallback(() => {
-    const token = getAccessToken();
-    if (!token) return;
-
-    const es = new EventSource(`/api/sessions/events?token=${encodeURIComponent(token)}`);
-    esRef.current = es;
-
-    es.addEventListener('connected', () => {
-      onConnectedRef.current();
-    });
-
-    es.addEventListener('session', () => {
-      onEventRef.current();
-    });
-
-    es.onerror = () => {
-      es.close();
-      esRef.current = null;
-      onDisconnectedRef.current();
-
-      // Retry after 5 seconds
-      retryTimerRef.current = window.setTimeout(() => {
-        retryTimerRef.current = null;
-        connect();
-      }, 5000);
-    };
-  }, []);
-
   useEffect(() => {
+    // Use a local function so the retry closure can reference it
+    // without a forward-declaration issue.
+    function connect() {
+      const token = getAccessToken();
+      if (!token) return;
+
+      const es = new EventSource(`/api/sessions/events?token=${encodeURIComponent(token)}`);
+      esRef.current = es;
+
+      es.addEventListener('connected', () => {
+        onConnectedRef.current();
+      });
+
+      es.addEventListener('session', () => {
+        onEventRef.current();
+      });
+
+      es.onerror = () => {
+        es.close();
+        esRef.current = null;
+        onDisconnectedRef.current();
+
+        // Retry after 5 seconds
+        retryTimerRef.current = window.setTimeout(() => {
+          retryTimerRef.current = null;
+          connect();
+        }, 5000);
+      };
+    }
+
     connect();
 
     return () => {
@@ -72,5 +74,5 @@ export function useSessionEvents({
         retryTimerRef.current = null;
       }
     };
-  }, [connect]);
+  }, []);
 }
