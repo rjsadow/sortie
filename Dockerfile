@@ -41,9 +41,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o sortie .
 FROM alpine:3.21
 
 RUN apk add --no-cache ffmpeg && \
-    adduser -D -u 65532 nonroot
+    adduser -D -u 65532 nonroot && \
+    mkdir -p /data && chown nonroot:nonroot /data
 
 USER nonroot
+WORKDIR /data
 
 COPY --from=backend /app/sortie /sortie
 

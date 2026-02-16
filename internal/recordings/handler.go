@@ -266,9 +266,18 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request, session *
 
 // convertToVideo converts a .vncrec recording to MP4 in the background.
 func (h *Handler) convertToVideo(recordingID, storagePath string) {
-	inputPath := filepath.Join(h.config.RecordingStoragePath, storagePath)
+	baseDir := filepath.Clean(h.config.RecordingStoragePath)
+	inputPath := filepath.Clean(filepath.Join(baseDir, storagePath))
 	videoRelPath := strings.TrimSuffix(storagePath, filepath.Ext(storagePath)) + ".mp4"
-	outputPath := filepath.Join(h.config.RecordingStoragePath, videoRelPath)
+	outputPath := filepath.Clean(filepath.Join(baseDir, videoRelPath))
+
+	// Validate paths stay within the storage directory
+	if !strings.HasPrefix(inputPath, baseDir+string(filepath.Separator)) ||
+		!strings.HasPrefix(outputPath, baseDir+string(filepath.Separator)) {
+		slog.Error("Video conversion: path traversal detected",
+			"recording_id", recordingID, "storage_path", storagePath)
+		return
+	}
 
 	slog.Info("Starting video conversion", "recording_id", recordingID, "input", inputPath)
 
