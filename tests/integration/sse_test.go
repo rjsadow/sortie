@@ -68,7 +68,9 @@ func readNextEvent(scanner *bufio.Scanner) *sseEvent {
 }
 
 // collectEvents reads SSE events until timeout, returning all parsed events.
-func collectEvents(scanner *bufio.Scanner, timeout time.Duration) []sseEvent {
+// The caller must pass the response body so it can be closed on timeout to
+// unblock the scanner goroutine and prevent goroutine leaks.
+func collectEvents(scanner *bufio.Scanner, body io.Closer, timeout time.Duration) []sseEvent {
 	var events []sseEvent
 	done := make(chan struct{})
 	go func() {
@@ -88,6 +90,8 @@ func collectEvents(scanner *bufio.Scanner, timeout time.Duration) []sseEvent {
 	select {
 	case <-done:
 	case <-time.After(timeout):
+		body.Close() // Unblock scanner.Scan()
+		<-done        // Wait for goroutine to exit
 	}
 	return events
 }
@@ -300,8 +304,9 @@ func TestSSE_MultiUserIsolation(t *testing.T) {
 	resp = testutil.AuthPost(t, ts.URL+"/api/sessions", ts.AdminToken, sessBody)
 	resp.Body.Close()
 
-	// Alice should NOT receive admin's session events
-	events := collectEvents(aliceScanner, 1*time.Second)
+	// Alice should NOT receive admin's session events.
+	// Pass the response body so collectEvents can close it on timeout.
+	events := collectEvents(aliceScanner, aliceSSE.Body, 1*time.Second)
 	for _, evt := range events {
 		t.Errorf("alice received event that should have gone to admin: %+v", evt)
 	}

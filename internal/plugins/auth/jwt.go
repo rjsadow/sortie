@@ -410,9 +410,13 @@ func (p *JWTAuthProvider) Logout(ctx context.Context, token string) error {
 	return nil
 }
 
+// BcryptCost is the bcrypt cost parameter used by HashPassword.
+// Tests can set this to bcrypt.MinCost for faster execution.
+var BcryptCost = bcrypt.DefaultCost
+
 // HashPassword creates a bcrypt hash of the password
 func HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
 	if err != nil {
 		return "", err
 	}

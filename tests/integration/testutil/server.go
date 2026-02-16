@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/rjsadow/sortie/internal/config"
 	"github.com/rjsadow/sortie/internal/db"
 	"github.com/rjsadow/sortie/internal/diagnostics"
@@ -80,6 +82,9 @@ func WithRecordingEnabled() Option {
 // Optional Option functions can modify the config before the server is built.
 func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 	t.Helper()
+
+	// Use fast bcrypt for tests (DefaultCost is ~100x slower under -race).
+	auth.BcryptCost = bcrypt.MinCost
 
 	// 1. Open a temp-file SQLite database.
 	// We cannot use ":memory:" because Go's sql.DB connection pool opens
