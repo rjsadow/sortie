@@ -256,12 +256,17 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request, session *
 	h.database.LogAudit(userID, "RECORDING_UPLOAD", fmt.Sprintf("Uploaded recording %s for session %s (%d bytes)", recordingID, session.ID, header.Size))
 
 	// Trigger background video conversion for local storage
+	responseStatus := db.RecordingStatusReady
 	if h.config.RecordingStorageBackend == "local" {
+		responseStatus = db.RecordingStatusProcessing
+		if err := h.database.UpdateRecordingStatus(recordingID, db.RecordingStatusProcessing); err != nil {
+			slog.Error("failed to set processing status", "error", err)
+		}
 		go h.convertToVideo(recordingID, storagePath)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	json.NewEncoder(w).Encode(map[string]string{"status": string(responseStatus)})
 }
 
 // convertToVideo converts a .vncrec recording to MP4 in the background.
@@ -283,12 +288,22 @@ func (h *Handler) convertToVideo(recordingID, storagePath string) {
 
 	if err := ConvertToMP4(inputPath, outputPath); err != nil {
 		slog.Error("Video conversion failed", "recording_id", recordingID, "error", err)
+		if uerr := h.database.UpdateRecordingStatus(recordingID, db.RecordingStatusFailed); uerr != nil {
+			slog.Error("failed to mark recording as failed after conversion error", "error", uerr)
+		}
 		return
 	}
 
 	if err := h.database.UpdateRecordingVideoPath(recordingID, videoRelPath); err != nil {
 		slog.Error("Failed to update video path in DB", "recording_id", recordingID, "error", err)
+		if uerr := h.database.UpdateRecordingStatus(recordingID, db.RecordingStatusFailed); uerr != nil {
+			slog.Error("failed to mark recording as failed after DB error", "error", uerr)
+		}
 		return
+	}
+
+	if err := h.database.UpdateRecordingStatus(recordingID, db.RecordingStatusReady); err != nil {
+		slog.Error("failed to set ready status after conversion", "recording_id", recordingID, "error", err)
 	}
 
 	slog.Info("Video conversion complete", "recording_id", recordingID, "video_path", videoRelPath)

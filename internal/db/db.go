@@ -2312,10 +2312,11 @@ func (db *DB) UpdateSessionShareUserID(id, userID string) error {
 type RecordingStatus string
 
 const (
-	RecordingStatusRecording RecordingStatus = "recording"
-	RecordingStatusUploading RecordingStatus = "uploading"
-	RecordingStatusReady     RecordingStatus = "ready"
-	RecordingStatusFailed    RecordingStatus = "failed"
+	RecordingStatusRecording  RecordingStatus = "recording"
+	RecordingStatusUploading  RecordingStatus = "uploading"
+	RecordingStatusProcessing RecordingStatus = "processing"
+	RecordingStatusReady      RecordingStatus = "ready"
+	RecordingStatusFailed     RecordingStatus = "failed"
 )
 
 // Recording represents a video recording of a session.

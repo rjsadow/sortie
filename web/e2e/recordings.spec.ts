@@ -197,19 +197,18 @@ test.describe('recording lifecycle', () => {
     );
     expect(uploadRes.status()).toBe(200);
 
-    // List recordings - verify it's present with status "ready"
+    // List recordings - verify it's present with "processing" or "failed" status
+    // (conversion runs in background and fails with fake test data)
     const listRes = await listRecordings(request, token);
     expect(listRes.ok()).toBeTruthy();
     const recs = await listRes.json();
     const found = recs.find((r: { id: string }) => r.id === recordingId);
     expect(found).toBeTruthy();
-    expect(found.status).toBe('ready');
+    expect(['processing', 'failed']).toContain(found.status);
 
-    // Download recording - verify content matches
+    // Download is blocked while not ready (status is processing or failed)
     const dlRes = await downloadRecording(request, token, recordingId);
-    expect(dlRes.status()).toBe(200);
-    const dlBody = await dlRes.body();
-    expect(dlBody.toString()).toBe(fileContent.toString());
+    expect(dlRes.status()).toBe(409);
 
     // Delete recording
     const delRes = await deleteRecording(request, token, recordingId);
@@ -251,8 +250,9 @@ test.describe('recording lifecycle', () => {
 
     // Assert recording filename is visible (contains .vncrec)
     await expect(page.getByText('.vncrec').first()).toBeVisible();
-    // Assert "ready" status is visible
-    await expect(page.getByText('ready').first()).toBeVisible();
+    // Assert "Processing" or "Failed" status is visible (conversion runs async with fake data)
+    const statusCell = page.getByText(/Processing|Failed/).first();
+    await expect(statusCell).toBeVisible();
 
     // Cleanup via API (afterEach handles recordings and sessions)
   });
@@ -328,7 +328,7 @@ test.describe('recording lifecycle', () => {
     // Cleanup via API (afterEach handles recordings and sessions)
   });
 
-  test('download recording via API and verify content', async ({ request }) => {
+  test('download recording is blocked while processing', async ({ request }) => {
     // Upload recording via API
     const createRes = await createTestSession(request, token, 'test-container');
     const session = await createRes.json();
@@ -342,13 +342,9 @@ test.describe('recording lifecycle', () => {
     await stopRecording(request, token, session.id, recordingId);
     await uploadRecording(request, token, session.id, recordingId, fileContent);
 
-    // Download and verify content matches what was uploaded
+    // Download is blocked while status is "processing" (conversion runs async)
     const dlRes = await downloadRecording(request, token, recordingId);
-    expect(dlRes.status()).toBe(200);
-    expect(dlRes.headers()['content-type']).toBe('application/octet-stream');
-    expect(dlRes.headers()['content-disposition']).toContain('.vncrec');
-    const dlBody = await dlRes.body();
-    expect(dlBody.toString()).toBe(fileContent.toString());
+    expect(dlRes.status()).toBe(409);
 
     // Cleanup via API (afterEach handles recordings and sessions)
   });
