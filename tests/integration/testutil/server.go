@@ -17,6 +17,7 @@ import (
 	"github.com/rjsadow/sortie/internal/recordings"
 	"github.com/rjsadow/sortie/internal/server"
 	"github.com/rjsadow/sortie/internal/sessions"
+	"github.com/rjsadow/sortie/internal/sse"
 )
 
 const (
@@ -137,7 +138,10 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 		t.Fatalf("failed to seed admin user: %v", err)
 	}
 
-	// 5. Create mock runner + session manager
+	// 5. Create SSE hub + mock runner + session manager
+	// Use MultiRecorder to match main.go's composition pattern
+	sseHub := sse.NewHub(jwtAuth)
+	recorder := sessions.NewMultiRecorder(nil, sseHub) // nil simulates the no-billing case
 	mockRunner := NewMockRunner()
 	sm := sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
 		SessionTimeout:     cfg.SessionTimeout,
@@ -145,6 +149,7 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 		PodReadyTimeout:    cfg.PodReadyTimeout,
 		MaxSessionsPerUser: cfg.MaxSessionsPerUser,
 		MaxGlobalSessions:  cfg.MaxGlobalSessions,
+		Recorder:           recorder,
 		Runner:             mockRunner,
 	})
 	sm.Start()
@@ -174,6 +179,7 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 		JWTAuth:             jwtAuth,
 		OIDCAuth:            nil,
 		GatewayHandler:      nil, // No WebSocket gateway in integration tests
+		SSEHub:              sseHub,
 		BackpressureHandler: bp,
 		FileHandler:         fh,
 		RecordingHandler:    recordingHandler,

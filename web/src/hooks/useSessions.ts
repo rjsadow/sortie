@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from '../types';
 import { fetchWithAuth } from '../services/auth';
+import { useSessionEvents } from './useSessionEvents';
 
 interface UseSessionsReturn {
   sessions: Session[];
@@ -10,12 +11,14 @@ interface UseSessionsReturn {
   terminateSession: (id: string) => Promise<boolean>;
 }
 
-const REFRESH_INTERVAL = 30000; // 30 seconds
+const POLL_INTERVAL_SSE = 120000; // 120s safety net when SSE is connected
+const POLL_INTERVAL_NO_SSE = 30000; // 30s when SSE is disconnected
 
 export function useSessions(autoRefresh = false): UseSessionsReturn {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sseConnected, setSseConnected] = useState(false);
   const refreshIntervalRef = useRef<number | null>(null);
 
   const fetchSessions = useCallback(async () => {
@@ -70,15 +73,23 @@ export function useSessions(autoRefresh = false): UseSessionsReturn {
     }
   }, []);
 
+  // SSE integration: re-fetch on any session lifecycle event
+  useSessionEvents({
+    onEvent: fetchSessions,
+    onConnected: useCallback(() => setSseConnected(true), []),
+    onDisconnected: useCallback(() => setSseConnected(false), []),
+  });
+
   // Initial fetch
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
 
-  // Auto-refresh when enabled
+  // Adaptive polling: faster when SSE is disconnected, slower safety-net when connected
   useEffect(() => {
     if (autoRefresh) {
-      refreshIntervalRef.current = window.setInterval(fetchSessions, REFRESH_INTERVAL);
+      const interval = sseConnected ? POLL_INTERVAL_SSE : POLL_INTERVAL_NO_SSE;
+      refreshIntervalRef.current = window.setInterval(fetchSessions, interval);
     } else if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
       refreshIntervalRef.current = null;
@@ -90,7 +101,7 @@ export function useSessions(autoRefresh = false): UseSessionsReturn {
         refreshIntervalRef.current = null;
       }
     };
-  }, [autoRefresh, fetchSessions]);
+  }, [autoRefresh, sseConnected, fetchSessions]);
 
   return {
     sessions,
