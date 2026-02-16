@@ -244,12 +244,41 @@ func main() {
 	// Initialize video recording handler
 	var recordingHandler *recordings.Handler
 	if appConfig.VideoRecordingEnabled {
-		recordingStore := recordings.NewLocalStore(appConfig.RecordingStoragePath)
+		var recordingStore recordings.RecordingStore
+		switch appConfig.RecordingStorageBackend {
+		case "s3":
+			s3Store, err := recordings.NewS3Store(
+				appConfig.RecordingS3Bucket,
+				appConfig.RecordingS3Region,
+				appConfig.RecordingS3Endpoint,
+				appConfig.RecordingS3Prefix,
+			)
+			if err != nil {
+				slog.Error("failed to initialize S3 recording store", "error", err)
+				os.Exit(1)
+			}
+			recordingStore = s3Store
+			slog.Info("Video recording enabled",
+				"storage_backend", "s3",
+				"bucket", appConfig.RecordingS3Bucket,
+				"region", appConfig.RecordingS3Region,
+				"max_size_mb", appConfig.RecordingMaxSizeMB)
+		default:
+			recordingStore = recordings.NewLocalStore(appConfig.RecordingStoragePath)
+			slog.Info("Video recording enabled",
+				"storage_backend", "local",
+				"storage_path", appConfig.RecordingStoragePath,
+				"max_size_mb", appConfig.RecordingMaxSizeMB)
+		}
+
 		recordingHandler = recordings.NewHandler(database, recordingStore, appConfig)
-		slog.Info("Video recording enabled",
-			"storage_backend", appConfig.RecordingStorageBackend,
-			"storage_path", appConfig.RecordingStoragePath,
-			"max_size_mb", appConfig.RecordingMaxSizeMB)
+
+		if appConfig.RecordingRetentionDays > 0 {
+			cleaner := recordings.NewCleaner(database, recordingStore, appConfig.RecordingRetentionDays)
+			cleaner.Start()
+			defer cleaner.Stop()
+			slog.Info("Recording retention cleanup enabled", "retention_days", appConfig.RecordingRetentionDays)
+		}
 	}
 
 	// Get the subdirectory from the embedded filesystem

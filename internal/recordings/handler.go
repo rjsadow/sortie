@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -146,8 +147,8 @@ func (h *Handler) handleStart(w http.ResponseWriter, r *http.Request, session *d
 		ID:             id,
 		SessionID:      session.ID,
 		UserID:         userID,
-		Filename:       fmt.Sprintf("%s-%s.webm", session.AppID, now.Format("20060102-150405")),
-		Format:         "webm",
+		Filename:       fmt.Sprintf("%s-%s.vncrec", session.AppID, now.Format("20060102-150405")),
+		Format:         "vncrec",
 		StorageBackend: h.config.RecordingStorageBackend,
 		Status:         db.RecordingStatusRecording,
 		TenantID:       session.TenantID,
@@ -254,8 +255,43 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request, session *
 	}
 	h.database.LogAudit(userID, "RECORDING_UPLOAD", fmt.Sprintf("Uploaded recording %s for session %s (%d bytes)", recordingID, session.ID, header.Size))
 
+	// Trigger background video conversion for local storage
+	if h.config.RecordingStorageBackend == "local" {
+		go h.convertToVideo(recordingID, storagePath)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+}
+
+// convertToVideo converts a .vncrec recording to MP4 in the background.
+func (h *Handler) convertToVideo(recordingID, storagePath string) {
+	baseDir := filepath.Clean(h.config.RecordingStoragePath)
+	inputPath := filepath.Clean(filepath.Join(baseDir, storagePath))
+	videoRelPath := strings.TrimSuffix(storagePath, filepath.Ext(storagePath)) + ".mp4"
+	outputPath := filepath.Clean(filepath.Join(baseDir, videoRelPath))
+
+	// Validate paths stay within the storage directory
+	if !strings.HasPrefix(inputPath, baseDir+string(filepath.Separator)) ||
+		!strings.HasPrefix(outputPath, baseDir+string(filepath.Separator)) {
+		slog.Error("Video conversion: path traversal detected",
+			"recording_id", recordingID, "storage_path", storagePath)
+		return
+	}
+
+	slog.Info("Starting video conversion", "recording_id", recordingID, "input", inputPath)
+
+	if err := ConvertToMP4(inputPath, outputPath); err != nil {
+		slog.Error("Video conversion failed", "recording_id", recordingID, "error", err)
+		return
+	}
+
+	if err := h.database.UpdateRecordingVideoPath(recordingID, videoRelPath); err != nil {
+		slog.Error("Failed to update video path in DB", "recording_id", recordingID, "error", err)
+		return
+	}
+
+	slog.Info("Video conversion complete", "recording_id", recordingID, "video_path", videoRelPath)
 }
 
 func (h *Handler) handleUserRecordings(w http.ResponseWriter, r *http.Request) {
@@ -332,7 +368,27 @@ func (h *Handler) handleDownload(w http.ResponseWriter, r *http.Request, recordi
 		return
 	}
 
-	reader, err := h.store.Get(rec.StoragePath)
+	// Prefer serving the converted MP4 video if available
+	servePath := rec.StoragePath
+	filename := rec.Filename
+	contentType := "application/octet-stream"
+
+	if rec.VideoPath != "" {
+		// Try to serve the MP4 video
+		reader, verr := h.store.Get(rec.VideoPath)
+		if verr == nil {
+			defer reader.Close()
+			filename = strings.TrimSuffix(rec.Filename, filepath.Ext(rec.Filename)) + ".mp4"
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+			w.Header().Set("Content-Type", "video/mp4")
+			io.Copy(w, reader)
+			return
+		}
+		slog.Warn("MP4 video not available, falling back to vncrec", "recording_id", recordingID, "error", verr)
+	}
+
+	// Fall back to original vncrec
+	reader, err := h.store.Get(servePath)
 	if err != nil {
 		slog.Error("failed to open recording file", "error", err)
 		http.Error(w, "Failed to read recording", http.StatusInternalServerError)
@@ -340,8 +396,12 @@ func (h *Handler) handleDownload(w http.ResponseWriter, r *http.Request, recordi
 	}
 	defer reader.Close()
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", rec.Filename))
-	w.Header().Set("Content-Type", "video/webm")
+	if rec.Format == "webm" {
+		contentType = "video/webm"
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Type", contentType)
 	io.Copy(w, reader)
 }
 
@@ -366,10 +426,15 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request, recording
 		}
 	}
 
-	// Delete storage file if it exists
+	// Delete storage files if they exist
 	if rec.StoragePath != "" {
 		if err := h.store.Delete(rec.StoragePath); err != nil {
 			slog.Warn("failed to delete recording file", "error", err, "path", rec.StoragePath)
+		}
+	}
+	if rec.VideoPath != "" {
+		if err := h.store.Delete(rec.VideoPath); err != nil {
+			slog.Warn("failed to delete video file", "error", err, "path", rec.VideoPath)
 		}
 	}
 

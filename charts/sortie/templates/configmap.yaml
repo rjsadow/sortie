@@ -15,3 +15,16 @@ data:
   SORTIE_VNC_SIDECAR_IMAGE: {{ .Values.vncSidecar.image | quote }}
   SORTIE_BROWSER_SIDECAR_IMAGE: {{ .Values.browserSidecar.image | quote }}
   SORTIE_GUACD_SIDECAR_IMAGE: {{ .Values.guacdSidecar.image | quote }}
+  {{- if .Values.recording.enabled }}
+  SORTIE_VIDEO_RECORDING_ENABLED: "true"
+  SORTIE_RECORDING_STORAGE_BACKEND: {{ .Values.recording.storageBackend | quote }}
+  SORTIE_RECORDING_STORAGE_PATH: {{ .Values.recording.storagePath | quote }}
+  SORTIE_RECORDING_MAX_SIZE_MB: {{ .Values.recording.maxSizeMB | quote }}
+  SORTIE_RECORDING_RETENTION_DAYS: {{ .Values.recording.retentionDays | quote }}
+  {{- if eq .Values.recording.storageBackend "s3" }}
+  SORTIE_RECORDING_S3_BUCKET: {{ .Values.recording.s3.bucket | quote }}
+  SORTIE_RECORDING_S3_REGION: {{ .Values.recording.s3.region | quote }}
+  SORTIE_RECORDING_S3_ENDPOINT: {{ .Values.recording.s3.endpoint | quote }}
+  SORTIE_RECORDING_S3_PREFIX: {{ .Values.recording.s3.prefix | quote }}
+  {{- end }}
+  {{- end }}

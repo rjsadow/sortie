@@ -154,6 +154,10 @@ func TestLoad_AllEnvVars(t *testing.T) {
 	t.Setenv("SORTIE_RECORDING_STORAGE_PATH", "/mnt/recordings")
 	t.Setenv("SORTIE_RECORDING_MAX_SIZE_MB", "2048")
 	t.Setenv("SORTIE_RECORDING_RETENTION_DAYS", "30")
+	t.Setenv("SORTIE_RECORDING_S3_BUCKET", "my-recordings")
+	t.Setenv("SORTIE_RECORDING_S3_REGION", "eu-west-1")
+	t.Setenv("SORTIE_RECORDING_S3_ENDPOINT", "https://minio.local:9000")
+	t.Setenv("SORTIE_RECORDING_S3_PREFIX", "tenant1/")
 
 	cfg, err := Load()
 	if err != nil {
@@ -237,6 +241,18 @@ func TestLoad_AllEnvVars(t *testing.T) {
 	}
 	if cfg.RecordingRetentionDays != 30 {
 		t.Errorf("RecordingRetentionDays = %v, want 30", cfg.RecordingRetentionDays)
+	}
+	if cfg.RecordingS3Bucket != "my-recordings" {
+		t.Errorf("RecordingS3Bucket = %v, want my-recordings", cfg.RecordingS3Bucket)
+	}
+	if cfg.RecordingS3Region != "eu-west-1" {
+		t.Errorf("RecordingS3Region = %v, want eu-west-1", cfg.RecordingS3Region)
+	}
+	if cfg.RecordingS3Endpoint != "https://minio.local:9000" {
+		t.Errorf("RecordingS3Endpoint = %v, want https://minio.local:9000", cfg.RecordingS3Endpoint)
+	}
+	if cfg.RecordingS3Prefix != "tenant1/" {
+		t.Errorf("RecordingS3Prefix = %v, want tenant1/", cfg.RecordingS3Prefix)
 	}
 }
 
@@ -861,6 +877,46 @@ func TestLoad_VideoRecordingDefaults(t *testing.T) {
 	if cfg.RecordingRetentionDays != 0 {
 		t.Errorf("RecordingRetentionDays = %v, want 0", cfg.RecordingRetentionDays)
 	}
+	if cfg.RecordingS3Region != DefaultRecordingS3Region {
+		t.Errorf("RecordingS3Region = %v, want %v", cfg.RecordingS3Region, DefaultRecordingS3Region)
+	}
+	if cfg.RecordingS3Prefix != DefaultRecordingS3Prefix {
+		t.Errorf("RecordingS3Prefix = %v, want %v", cfg.RecordingS3Prefix, DefaultRecordingS3Prefix)
+	}
+	if cfg.RecordingS3Bucket != "" {
+		t.Errorf("RecordingS3Bucket = %v, want empty", cfg.RecordingS3Bucket)
+	}
+	if cfg.RecordingS3Endpoint != "" {
+		t.Errorf("RecordingS3Endpoint = %v, want empty", cfg.RecordingS3Endpoint)
+	}
+}
+
+func TestValidate_S3BucketRequiredWhenS3Backend(t *testing.T) {
+	clearEnvVars(t)
+
+	// backend=s3 without bucket should fail validation
+	t.Setenv("SORTIE_RECORDING_STORAGE_BACKEND", "s3")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected error when s3 backend has no bucket")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "SORTIE_RECORDING_S3_BUCKET") {
+		t.Errorf("error should mention SORTIE_RECORDING_S3_BUCKET, got: %s", errStr)
+	}
+}
+
+func TestValidate_LocalBackendDoesNotRequireS3Bucket(t *testing.T) {
+	clearEnvVars(t)
+
+	// backend=local without bucket should pass
+	t.Setenv("SORTIE_RECORDING_STORAGE_BACKEND", "local")
+
+	_, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error for local backend: %v", err)
+	}
 }
 
 func TestLoad_VideoRecordingFromEnv(t *testing.T) {
@@ -871,6 +927,10 @@ func TestLoad_VideoRecordingFromEnv(t *testing.T) {
 	t.Setenv("SORTIE_RECORDING_STORAGE_PATH", "/custom/recordings")
 	t.Setenv("SORTIE_RECORDING_MAX_SIZE_MB", "1024")
 	t.Setenv("SORTIE_RECORDING_RETENTION_DAYS", "90")
+	t.Setenv("SORTIE_RECORDING_S3_BUCKET", "test-bucket")
+	t.Setenv("SORTIE_RECORDING_S3_REGION", "ap-southeast-1")
+	t.Setenv("SORTIE_RECORDING_S3_ENDPOINT", "https://s3.local")
+	t.Setenv("SORTIE_RECORDING_S3_PREFIX", "vids/")
 
 	cfg, err := Load()
 	if err != nil {
@@ -891,6 +951,18 @@ func TestLoad_VideoRecordingFromEnv(t *testing.T) {
 	}
 	if cfg.RecordingRetentionDays != 90 {
 		t.Errorf("RecordingRetentionDays = %v, want 90", cfg.RecordingRetentionDays)
+	}
+	if cfg.RecordingS3Bucket != "test-bucket" {
+		t.Errorf("RecordingS3Bucket = %v, want test-bucket", cfg.RecordingS3Bucket)
+	}
+	if cfg.RecordingS3Region != "ap-southeast-1" {
+		t.Errorf("RecordingS3Region = %v, want ap-southeast-1", cfg.RecordingS3Region)
+	}
+	if cfg.RecordingS3Endpoint != "https://s3.local" {
+		t.Errorf("RecordingS3Endpoint = %v, want https://s3.local", cfg.RecordingS3Endpoint)
+	}
+	if cfg.RecordingS3Prefix != "vids/" {
+		t.Errorf("RecordingS3Prefix = %v, want vids/", cfg.RecordingS3Prefix)
 	}
 }
 
@@ -954,6 +1026,10 @@ func clearEnvVars(t *testing.T) {
 		"SORTIE_RECORDING_STORAGE_PATH",
 		"SORTIE_RECORDING_MAX_SIZE_MB",
 		"SORTIE_RECORDING_RETENTION_DAYS",
+		"SORTIE_RECORDING_S3_BUCKET",
+		"SORTIE_RECORDING_S3_REGION",
+		"SORTIE_RECORDING_S3_ENDPOINT",
+		"SORTIE_RECORDING_S3_PREFIX",
 	}
 	for _, env := range envVars {
 		os.Unsetenv(env)

@@ -55,11 +55,11 @@ session:
 # Resource limits for the sortie server
 resources:
   requests:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "2"
+    memory: "2Gi"
   limits:
-    cpu: "500m"
-    memory: "512Mi"
+    cpu: "2"
+    memory: "2Gi"
 
 # Service configuration
 service:
@@ -88,6 +88,19 @@ resourceQuota:
 # Limit range
 limitRange:
   enabled: true
+
+# Video recording configuration
+recording:
+  enabled: true
+  storageBackend: "local"    # "local" or "s3"
+  storagePath: "/data/recordings"
+  maxSizeMB: 500
+  retentionDays: 0           # 0 = keep forever
+  s3:
+    bucket: ""
+    region: "us-east-1"
+    endpoint: ""             # Custom S3 endpoint (MinIO)
+    prefix: "recordings/"
 
 # Persistent storage for SQLite database.
 # Required for multi-replica deployments.

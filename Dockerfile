@@ -37,8 +37,15 @@ COPY --from=docs /app/docs-site/dist ./docs-site/dist
 # Build static binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o sortie .
 
-# Runtime stage: Minimal image
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
+# Runtime stage: Alpine with ffmpeg for video conversion
+FROM alpine:3.21
+
+RUN apk add --no-cache ffmpeg && \
+    adduser -D -u 65532 nonroot && \
+    mkdir -p /data && chown nonroot:nonroot /data
+
+USER nonroot
+WORKDIR /data
 
 COPY --from=backend /app/sortie /sortie
 

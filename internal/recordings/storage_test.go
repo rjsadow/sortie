@@ -23,8 +23,8 @@ func TestLocalStore_SaveGetDelete(t *testing.T) {
 		if path == "" {
 			t.Fatal("Save() returned empty path")
 		}
-		if !strings.HasSuffix(path, "test-rec-1.webm") {
-			t.Errorf("path = %s, want suffix test-rec-1.webm", path)
+		if !strings.HasSuffix(path, "test-rec-1.vncrec") {
+			t.Errorf("path = %s, want suffix test-rec-1.vncrec", path)
 		}
 
 		// Verify file exists on disk
@@ -61,7 +61,7 @@ func TestLocalStore_SaveGetDelete(t *testing.T) {
 	})
 
 	t.Run("get nonexistent recording", func(t *testing.T) {
-		_, err := store.Get("nonexistent/path.webm")
+		_, err := store.Get("nonexistent/path.vncrec")
 		if err == nil {
 			t.Fatal("expected error for nonexistent path")
 		}
@@ -85,7 +85,7 @@ func TestLocalStore_SaveGetDelete(t *testing.T) {
 	})
 
 	t.Run("delete nonexistent is not error", func(t *testing.T) {
-		if err := store.Delete("nonexistent/path.webm"); err != nil {
+		if err := store.Delete("nonexistent/path.vncrec"); err != nil {
 			t.Errorf("Delete() should not error for nonexistent file, got %v", err)
 		}
 	})
@@ -149,8 +149,8 @@ func TestLocalStore_PathTraversal(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Save() error = %v", err)
 		}
-		if !strings.HasSuffix(path, "passwd.webm") {
-			t.Errorf("path = %s, want suffix passwd.webm", path)
+		if !strings.HasSuffix(path, "passwd.vncrec") {
+			t.Errorf("path = %s, want suffix passwd.vncrec", path)
 		}
 		// Verify file is within baseDir
 		fullPath, _ := filepath.Abs(filepath.Join(baseDir, path))
@@ -179,6 +179,7 @@ func TestNewLocalStore(t *testing.T) {
 	store := NewLocalStore("/tmp/test-recordings")
 	if store == nil {
 		t.Fatal("NewLocalStore() returned nil")
+		return
 	}
 	if store.baseDir != "/tmp/test-recordings" {
 		t.Errorf("baseDir = %s, want /tmp/test-recordings", store.baseDir)

@@ -148,6 +148,7 @@ export interface Recording {
   size_bytes: number;
   duration_seconds: number;
   format: string;
+  video_path?: string;
   status: RecordingStatus;
   created_at: string;
   completed_at?: string;

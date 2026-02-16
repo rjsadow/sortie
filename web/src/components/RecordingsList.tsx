@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { listRecordings, downloadRecording, deleteRecording } from '../services/auth';
+import { RecordingPlayer } from './RecordingPlayer';
 import type { Recording, RecordingStatus } from '../types';
 
 interface RecordingsListProps {
@@ -52,6 +53,7 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null);
 
   const loadRecordings = useCallback(async () => {
     setLoading(true);
@@ -77,7 +79,9 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
       const blobUrl = await downloadRecording(recording.id);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = recording.filename;
+      a.download = recording.video_path
+        ? recording.filename.replace(/\.[^.]+$/, '.mp4')
+        : recording.filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -199,13 +203,22 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {recording.status === 'ready' && recording.format === 'vncrec' && (
+                              <button
+                                onClick={() => setPlayingRecordingId(recording.id)}
+                                className="text-blue-500 hover:text-blue-400 text-sm"
+                                title="Play"
+                              >
+                                Play
+                              </button>
+                            )}
                             {recording.status === 'ready' && (
                               <button
                                 onClick={() => handleDownload(recording)}
                                 className="text-brand-accent hover:text-brand-primary text-sm"
-                                title="Download"
+                                title={recording.video_path ? 'Download MP4' : 'Download'}
                               >
-                                Download
+                                {recording.video_path ? 'Download MP4' : 'Download'}
                               </button>
                             )}
                             <button
@@ -226,6 +239,15 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
           )}
         </div>
       </div>
+
+      {/* Recording replay modal */}
+      {playingRecordingId && (
+        <RecordingPlayer
+          recordingId={playingRecordingId}
+          onClose={() => setPlayingRecordingId(null)}
+          darkMode={darkMode}
+        />
+      )}
     </div>
   );
 }
