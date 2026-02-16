@@ -179,6 +179,7 @@ func TestNewLocalStore(t *testing.T) {
 	store := NewLocalStore("/tmp/test-recordings")
 	if store == nil {
 		t.Fatal("NewLocalStore() returned nil")
+		return
 	}
 	if store.baseDir != "/tmp/test-recordings" {
 		t.Errorf("baseDir = %s, want /tmp/test-recordings", store.baseDir)

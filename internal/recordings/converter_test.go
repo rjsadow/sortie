@@ -204,6 +204,7 @@ func TestParseVNCHandshake(t *testing.T) {
 
 	if pf == nil {
 		t.Fatal("pixel format is nil")
+		return
 	}
 	if pf.bitsPerPixel != 32 {
 		t.Errorf("bitsPerPixel = %d, want 32", pf.bitsPerPixel)

@@ -11,22 +11,28 @@ import (
 
 const (
 	vrecMagic      uint32 = 0x56524543 // "VREC"
-	vrecHeaderSize        = 12
+	vrecHeaderSize int    = 12
+)
 
+const (
 	// VNC server→client message types
 	vncFramebufferUpdate   byte = 0
 	vncSetColourMapEntries byte = 1
 	vncBell                byte = 2
 	vncServerCutText       byte = 3
+)
 
+const (
 	// VNC encoding types
 	vncEncodingRaw             int32 = 0
 	vncEncodingDesktopSize     int32 = -223
 	vncEncodingLastRect        int32 = -224
 	vncEncodingExtendedDesktop int32 = -308
+)
 
+const (
 	// Default conversion settings
-	defaultFPS = 10
+	defaultFPS int = 10
 )
 
 // VRECHeader is the header of a .vncrec file.
