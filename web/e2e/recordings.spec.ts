@@ -249,8 +249,8 @@ test.describe('recording lifecycle', () => {
     await page.getByLabel('View recordings').click();
     await expect(page.getByRole('heading', { name: 'My Recordings' })).toBeVisible();
 
-    // Assert recording filename is visible (contains .webm)
-    await expect(page.getByText('.webm').first()).toBeVisible();
+    // Assert recording filename is visible (contains .vncrec)
+    await expect(page.getByText('.vncrec').first()).toBeVisible();
     // Assert "ready" status is visible
     await expect(page.getByText('ready').first()).toBeVisible();
 
@@ -286,7 +286,7 @@ test.describe('recording lifecycle', () => {
     await expect(page.getByText('All Recordings')).toBeVisible();
 
     // Assert recording visible in admin table
-    await expect(page.getByText('.webm').first()).toBeVisible();
+    await expect(page.getByText('.vncrec').first()).toBeVisible();
 
     // Cleanup via API (afterEach handles recordings and sessions)
   });
@@ -314,7 +314,7 @@ test.describe('recording lifecycle', () => {
     await page.goto('/');
     await page.getByLabel('View recordings').click();
     await expect(page.getByRole('heading', { name: 'My Recordings' })).toBeVisible();
-    await expect(page.getByText('.webm').first()).toBeVisible();
+    await expect(page.getByText('.vncrec').first()).toBeVisible();
 
     // Set up dialog handler to accept confirmation
     page.on('dialog', (d) => d.accept());
@@ -345,8 +345,8 @@ test.describe('recording lifecycle', () => {
     // Download and verify content matches what was uploaded
     const dlRes = await downloadRecording(request, token, recordingId);
     expect(dlRes.status()).toBe(200);
-    expect(dlRes.headers()['content-type']).toBe('video/webm');
-    expect(dlRes.headers()['content-disposition']).toContain('.webm');
+    expect(dlRes.headers()['content-type']).toBe('application/octet-stream');
+    expect(dlRes.headers()['content-disposition']).toContain('.vncrec');
     const dlBody = await dlRes.body();
     expect(dlBody.toString()).toBe(fileContent.toString());
 
