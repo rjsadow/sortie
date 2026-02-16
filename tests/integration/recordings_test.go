@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/rjsadow/sortie/internal/db"
 	"github.com/rjsadow/sortie/tests/integration/testutil"
 )
 
@@ -57,7 +59,7 @@ func TestRecording_FullLifecycle(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// 4. List recordings - verify it's present and ready
+	// 4. List recordings - verify it's present and processing (conversion runs async)
 	resp = testutil.AuthGet(t, ts.URL+"/api/recordings", ts.AdminToken)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list recordings: expected 200, got %d", resp.StatusCode)
@@ -70,14 +72,22 @@ func TestRecording_FullLifecycle(t *testing.T) {
 	for _, rec := range recs {
 		if rec["id"] == recordingID {
 			found = true
-			if rec["status"] != "ready" {
-				t.Errorf("expected status 'ready', got %v", rec["status"])
+			status := rec["status"].(string)
+			// Status should be "processing" or "failed" (conversion fails with fake data)
+			if status != "processing" && status != "failed" {
+				t.Errorf("expected status 'processing' or 'failed', got %v", status)
 			}
 			break
 		}
 	}
 	if !found {
 		t.Fatalf("recording %s not found in list", recordingID)
+	}
+
+	// 4b. Wait for background conversion goroutine to finish, then set ready for download test
+	time.Sleep(100 * time.Millisecond)
+	if err := ts.DB.UpdateRecordingStatus(recordingID, db.RecordingStatusReady); err != nil {
+		t.Fatalf("failed to set recording ready: %v", err)
 	}
 
 	// 5. Download recording - verify content matches
@@ -443,6 +453,13 @@ func recStartAndUpload(t *testing.T, ts *testutil.TestServer, appID, token, user
 		t.Fatalf("upload recording failed: %d: %s", resp.StatusCode, string(b))
 	}
 	resp.Body.Close()
+
+	// Wait for background conversion goroutine to finish, then set ready
+	// (conversion fails with fake test data, leaving status as "failed")
+	time.Sleep(100 * time.Millisecond)
+	if err := ts.DB.UpdateRecordingStatus(recordingID, db.RecordingStatusReady); err != nil {
+		t.Fatalf("failed to set recording ready: %v", err)
+	}
 
 	return recordingID
 }

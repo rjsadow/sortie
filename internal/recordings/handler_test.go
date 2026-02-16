@@ -250,10 +250,10 @@ func TestHandler_UploadRecording(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body: %s)", rr.Code, http.StatusOK, rr.Body.String())
 		}
 
-		// Verify recording was marked as ready
+		// Verify recording was marked as processing (conversion pending)
 		got, _ := database.GetRecording("upload-rec")
-		if got.Status != db.RecordingStatusReady {
-			t.Errorf("status = %s, want ready", got.Status)
+		if got.Status != db.RecordingStatusProcessing {
+			t.Errorf("status = %s, want processing", got.Status)
 		}
 		if got.SizeBytes == 0 {
 			t.Error("SizeBytes should not be 0")
@@ -792,13 +792,13 @@ func TestHandler_UploadZeroLengthFile(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body: %s)", rr.Code, http.StatusOK, rr.Body.String())
 	}
 
-	// Verify DB: status=ready, SizeBytes=0, StoragePath non-empty
+	// Verify DB: status=processing (conversion pending), SizeBytes=0, StoragePath non-empty
 	got, _ := database.GetRecording("zero-rec")
 	if got == nil {
 		t.Fatal("recording should exist")
 	}
-	if got.Status != db.RecordingStatusReady {
-		t.Errorf("status = %s, want ready", got.Status)
+	if got.Status != db.RecordingStatusProcessing {
+		t.Errorf("status = %s, want processing", got.Status)
 	}
 	if got.SizeBytes != 0 {
 		t.Errorf("SizeBytes = %d, want 0", got.SizeBytes)

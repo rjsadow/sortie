@@ -138,7 +138,7 @@ export interface Category {
 }
 
 // Video recording types
-export type RecordingStatus = 'recording' | 'uploading' | 'ready' | 'failed';
+export type RecordingStatus = 'recording' | 'uploading' | 'processing' | 'ready' | 'failed';
 
 export interface Recording {
   id: string;

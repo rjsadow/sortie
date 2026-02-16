@@ -1644,6 +1644,7 @@ export function Admin({ darkMode, onClose, isSystemAdmin, adminCategoryIds }: Ad
                         const recStatusColors: Record<RecordingStatus, { bg: string; text: string; pulse?: boolean }> = {
                           recording: { bg: 'bg-red-500', text: 'text-red-500', pulse: true },
                           uploading: { bg: 'bg-yellow-500', text: 'text-yellow-500', pulse: true },
+                          processing: { bg: 'bg-blue-500', text: 'text-blue-500', pulse: true },
                           ready: { bg: 'bg-green-500', text: 'text-green-500' },
                           failed: { bg: 'bg-gray-400', text: 'text-gray-400' },
                         };

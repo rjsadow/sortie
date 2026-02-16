@@ -12,6 +12,7 @@ interface RecordingsListProps {
 const STATUS_COLORS: Record<RecordingStatus, { bg: string; text: string; pulse?: boolean }> = {
   recording: { bg: 'bg-red-500', text: 'text-red-500', pulse: true },
   uploading: { bg: 'bg-yellow-500', text: 'text-yellow-500', pulse: true },
+  processing: { bg: 'bg-blue-500', text: 'text-blue-500', pulse: true },
   ready: { bg: 'bg-green-500', text: 'text-green-500' },
   failed: { bg: 'bg-gray-400', text: 'text-gray-400' },
 };
@@ -19,6 +20,7 @@ const STATUS_COLORS: Record<RecordingStatus, { bg: string; text: string; pulse?:
 const STATUS_LABELS: Record<RecordingStatus, string> = {
   recording: 'Recording',
   uploading: 'Uploading',
+  processing: 'Processing',
   ready: 'Ready',
   failed: 'Failed',
 };
@@ -55,8 +57,8 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
   const [error, setError] = useState('');
   const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null);
 
-  const loadRecordings = useCallback(async () => {
-    setLoading(true);
+  const loadRecordings = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     setError('');
     try {
       const data = await listRecordings();
@@ -64,7 +66,7 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load recordings');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, []);
 
@@ -73,6 +75,18 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
       loadRecordings();
     }
   }, [isOpen, loadRecordings]);
+
+  // Auto-poll while any recording is in a transient state
+  useEffect(() => {
+    if (!isOpen) return;
+    const hasActive = recordings.some(
+      (r) => r.status === 'processing' || r.status === 'uploading'
+    );
+    if (!hasActive) return;
+
+    const interval = setInterval(() => loadRecordings(false), 3000);
+    return () => clearInterval(interval);
+  }, [isOpen, recordings, loadRecordings]);
 
   const handleDownload = async (recording: Recording) => {
     try {
@@ -119,7 +133,7 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={loadRecordings}
+              onClick={() => loadRecordings()}
               className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               aria-label="Refresh"
               title="Refresh"
