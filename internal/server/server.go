@@ -16,6 +16,7 @@ import (
 	"github.com/rjsadow/sortie/internal/recordings"
 	"github.com/rjsadow/sortie/internal/plugins/auth"
 	"github.com/rjsadow/sortie/internal/sessions"
+	"github.com/rjsadow/sortie/internal/sse"
 )
 
 // App holds all dependencies needed to build the HTTP handler.
@@ -28,6 +29,7 @@ type App struct {
 	BackpressureHandler *sessions.BackpressureHandler
 	FileHandler         *files.Handler
 	RecordingHandler    *recordings.Handler
+	SSEHub              *sse.Hub
 	DiagCollector       *diagnostics.Collector
 	Config              *config.Config
 	StaticFS            fs.FS // web/dist content (nil disables static serving)
@@ -133,6 +135,11 @@ func (a *App) Handler() http.Handler {
 	if a.GatewayHandler != nil {
 		mux.Handle("/ws/sessions/", a.GatewayHandler)
 		mux.Handle("/ws/guac/sessions/", a.GatewayHandler)
+	}
+
+	// SSE route for real-time session events (auth is inline — EventSource can't set headers)
+	if a.SSEHub != nil {
+		mux.Handle("/api/sessions/events", a.SSEHub)
 	}
 
 	// Legacy apps.json

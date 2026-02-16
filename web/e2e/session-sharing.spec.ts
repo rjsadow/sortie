@@ -342,9 +342,6 @@ test.describe('Session Sharing - Shared Sessions Empty State', () => {
     await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(page.getByLabel('Manage sessions')).toBeVisible();
 
-    // Wait for initial page load to settle before opening session manager
-    await page.waitForLoadState('networkidle');
-
     // Open session manager
     await page.getByLabel('Manage sessions').click();
     const dialog = page.getByRole('dialog');

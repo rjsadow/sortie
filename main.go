@@ -25,6 +25,7 @@ import (
 	"github.com/rjsadow/sortie/internal/runner"
 	"github.com/rjsadow/sortie/internal/server"
 	"github.com/rjsadow/sortie/internal/sessions"
+	"github.com/rjsadow/sortie/internal/sse"
 
 	"golang.org/x/time/rate"
 )
@@ -177,6 +178,15 @@ func main() {
 			"interval", appConfig.BillingExportInterval)
 	}
 
+	// Initialize SSE hub for real-time session event push
+	var sseHub *sse.Hub
+	if jwtAuthProvider != nil {
+		sseHub = sse.NewHub(jwtAuthProvider)
+	}
+
+	// Compose multi-recorder: chain existing recorder (billing/noop) with SSE hub
+	sessionRecorder = sessions.NewMultiRecorder(sessionRecorder, sseHub)
+
 	// Initialize workload runner
 	var workloadRunner runner.Runner
 	if *mockRunnerFlag {
@@ -326,6 +336,7 @@ func main() {
 		BackpressureHandler: backpressureHandler,
 		FileHandler:         fileHandler,
 		RecordingHandler:    recordingHandler,
+		SSEHub:              sseHub,
 		DiagCollector:       diagCollector,
 		Config:              appConfig,
 		StaticFS:            distFS,

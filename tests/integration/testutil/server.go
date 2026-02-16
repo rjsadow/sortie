@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/rjsadow/sortie/internal/config"
 	"github.com/rjsadow/sortie/internal/db"
 	"github.com/rjsadow/sortie/internal/diagnostics"
@@ -17,6 +19,7 @@ import (
 	"github.com/rjsadow/sortie/internal/recordings"
 	"github.com/rjsadow/sortie/internal/server"
 	"github.com/rjsadow/sortie/internal/sessions"
+	"github.com/rjsadow/sortie/internal/sse"
 )
 
 const (
@@ -80,6 +83,9 @@ func WithRecordingEnabled() Option {
 func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 	t.Helper()
 
+	// Use fast bcrypt for tests (DefaultCost is ~100x slower under -race).
+	auth.BcryptCost = bcrypt.MinCost
+
 	// 1. Open a temp-file SQLite database.
 	// We cannot use ":memory:" because Go's sql.DB connection pool opens
 	// multiple connections, and each in-memory connection gets its own DB.
@@ -137,7 +143,10 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 		t.Fatalf("failed to seed admin user: %v", err)
 	}
 
-	// 5. Create mock runner + session manager
+	// 5. Create SSE hub + mock runner + session manager
+	// Use MultiRecorder to match main.go's composition pattern
+	sseHub := sse.NewHub(jwtAuth)
+	recorder := sessions.NewMultiRecorder(nil, sseHub) // nil simulates the no-billing case
 	mockRunner := NewMockRunner()
 	sm := sessions.NewManagerWithConfig(database, sessions.ManagerConfig{
 		SessionTimeout:     cfg.SessionTimeout,
@@ -145,6 +154,7 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 		PodReadyTimeout:    cfg.PodReadyTimeout,
 		MaxSessionsPerUser: cfg.MaxSessionsPerUser,
 		MaxGlobalSessions:  cfg.MaxGlobalSessions,
+		Recorder:           recorder,
 		Runner:             mockRunner,
 	})
 	sm.Start()
@@ -174,6 +184,7 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 		JWTAuth:             jwtAuth,
 		OIDCAuth:            nil,
 		GatewayHandler:      nil, // No WebSocket gateway in integration tests
+		SSEHub:              sseHub,
 		BackpressureHandler: bp,
 		FileHandler:         fh,
 		RecordingHandler:    recordingHandler,
