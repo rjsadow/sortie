@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { listRecordings, downloadRecording, deleteRecording } from '../services/auth';
-import { RecordingPlayer } from './RecordingPlayer';
 import type { Recording, RecordingStatus } from '../types';
 
 interface RecordingsListProps {
@@ -53,7 +52,6 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null);
 
   const loadRecordings = useCallback(async () => {
     setLoading(true);
@@ -203,15 +201,6 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {recording.status === 'ready' && recording.format === 'vncrec' && (
-                              <button
-                                onClick={() => setPlayingRecordingId(recording.id)}
-                                className="text-blue-500 hover:text-blue-400 text-sm"
-                                title="Play"
-                              >
-                                Play
-                              </button>
-                            )}
                             {recording.status === 'ready' && (
                               <button
                                 onClick={() => handleDownload(recording)}
@@ -240,14 +229,6 @@ export function RecordingsList({ isOpen, onClose, darkMode }: RecordingsListProp
         </div>
       </div>
 
-      {/* Recording replay modal */}
-      {playingRecordingId && (
-        <RecordingPlayer
-          recordingId={playingRecordingId}
-          onClose={() => setPlayingRecordingId(null)}
-          darkMode={darkMode}
-        />
-      )}
     </div>
   );
 }
