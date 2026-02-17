@@ -42,7 +42,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "sortie.fullname" . }}-config
-            {{- if .Values.auth.enabled }}
+            {{- if or .Values.auth.enabled (and .Values.oidc.enabled .Values.oidc.clientSecret) (and .Values.billing.enabled .Values.billing.webhookUrl) }}
             - secretRef:
                 name: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "sortie.fullname" .)) }}
             {{- end }}

@@ -3,6 +3,9 @@
 # Namespace configuration
 namespace: sortie
 
+# Seed data file path (optional, loads initial apps/categories on first run)
+seed: ""
+
 # Image configuration
 image:
   repository: ghcr.io/rjsadow/sortie
@@ -20,6 +23,14 @@ browserSidecar:
 # Guacd sidecar image for Windows RDP sessions
 guacdSidecar:
   image: guacamole/guacd:1.6.0
+
+# Branding configuration
+branding:
+  configPath: ""           # Path to branding config JSON
+  logoURL: ""              # Custom logo URL
+  primaryColor: "#1F2A3C"
+  secondaryColor: "#2B3445"
+  tenantName: "Sortie"
 
 # Replica count - supports >1 for horizontal scalability.
 # When replicaCount > 1, persistence.enabled must be true with a ReadWriteMany
@@ -46,11 +57,41 @@ auth:
   # Use existing secret instead of creating one
   existingSecret: ""
 
+# OIDC/SSO authentication configuration
+oidc:
+  enabled: false
+  issuer: ""
+  clientId: ""
+  clientSecret: ""
+  redirectUrl: ""
+  scopes: ""
+
 # Session configuration
 session:
   timeout: "120"           # Session timeout in minutes
   cleanupInterval: "5"     # Cleanup interval in minutes
   podReadyTimeout: "300"   # Pod ready timeout in seconds
+
+# Gateway rate limiting
+gateway:
+  rateLimit: 10            # Requests per second per IP (0 = disabled)
+  burst: 20                # Maximum burst size for rate limiter
+
+# Session quotas
+sessionQuotas:
+  maxSessionsPerUser: 5    # Maximum concurrent sessions per user (0 = unlimited)
+  maxGlobalSessions: 100   # Maximum concurrent sessions globally (0 = unlimited)
+
+# Default resource limits for session pods
+sessionResources:
+  cpuRequest: "500m"
+  cpuLimit: "2"
+  memRequest: "512Mi"
+  memLimit: "2Gi"
+
+# File transfer configuration
+fileTransfer:
+  maxUploadSize: 104857600  # Maximum upload file size in bytes (100MB)
 
 # Resource limits for the sortie server
 resources:
@@ -89,6 +130,12 @@ resourceQuota:
 limitRange:
   enabled: true
 
+# Session event recording configuration (lifecycle events, not video)
+eventRecording:
+  enabled: false
+  endpoint: ""             # Optional endpoint for recording events
+  bufferSize: 0            # Buffer size for async event processing
+
 # Video recording configuration
 recording:
   enabled: true
@@ -101,6 +148,18 @@ recording:
     region: "us-east-1"
     endpoint: ""             # Custom S3 endpoint (MinIO)
     prefix: "recordings/"
+
+# Billing/metering configuration
+billing:
+  enabled: false
+  exporter: "log"          # Exporter type: "log" or "webhook"
+  webhookUrl: ""           # Webhook URL (when exporter=webhook)
+  exportInterval: "5"      # Export interval in minutes
+
+# Session queueing configuration
+queue:
+  maxSize: 0               # Max queued requests when at capacity (0 = no queueing)
+  timeout: "30"            # Per-request queue wait timeout in seconds
 
 # Persistent storage for SQLite database.
 # Required for multi-replica deployments.
