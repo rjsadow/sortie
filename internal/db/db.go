@@ -255,36 +255,79 @@ type AppSpec struct {
 
 // DB wraps the sql.DB connection
 type DB struct {
-	conn *sql.DB
+	conn   *sql.DB
+	dbType string
 }
 
-// Open opens a SQLite database at the given path
+// DBType returns the database type ("sqlite" or "postgres").
+func (db *DB) DBType() string {
+	return db.dbType
+}
+
+// Open opens a SQLite database at the given path.
+// This is a convenience wrapper around OpenDB for backward compatibility.
 func Open(dbPath string) (*DB, error) {
-	conn, err := sql.Open("sqlite", dbPath)
+	return OpenDB("sqlite", dbPath)
+}
+
+// OpenDB opens a database connection for the given type and DSN,
+// runs any pending migrations, and returns the DB handle.
+func OpenDB(dbType, dsn string) (*DB, error) {
+	var driverName string
+	switch dbType {
+	case "sqlite":
+		driverName = "sqlite"
+	case "postgres":
+		driverName = "postgres"
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s", dbType)
+	}
+
+	// For SQLite in-memory databases, use shared cache so that the migration
+	// connection (opened separately by golang-migrate) sees the same database.
+	migrateDSN := dsn
+	if dbType == "sqlite" && dsn == ":memory:" {
+		dsn = "file::memory:?cache=shared"
+		migrateDSN = dsn
+	}
+
+	conn, err := sql.Open(driverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Configure SQLite for better concurrency
-	// busy_timeout waits up to 5 seconds for locks to clear
-	if _, err := conn.Exec("PRAGMA busy_timeout = 5000"); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to set busy_timeout: %w", err)
+	// Configure SQLite-specific settings
+	if dbType == "sqlite" {
+		// busy_timeout waits up to 5 seconds for locks to clear
+		if _, err := conn.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to set busy_timeout: %w", err)
+		}
+
+		// WAL mode allows concurrent reads while writing
+		if _, err := conn.Exec("PRAGMA journal_mode = WAL"); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+		}
+
+		// Keep at least one connection open to prevent in-memory databases
+		// from being destroyed when all connections close.
+		conn.SetMaxIdleConns(1)
 	}
 
-	// WAL mode allows concurrent reads while writing
-	if _, err := conn.Exec("PRAGMA journal_mode = WAL"); err != nil {
+	// Handle upgrade from pre-golang-migrate databases
+	if err := handleMigrationUpgrade(conn, dbType); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+		return nil, fmt.Errorf("failed to handle migration upgrade: %w", err)
 	}
 
-	db := &DB{conn: conn}
-	if err := db.migrate(); err != nil {
+	// Run all pending migrations (uses its own connection to avoid m.Close() side effects)
+	if err := runMigrations(dbType, migrateDSN); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("failed to migrate database: %w", err)
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	return db, nil
+	return &DB{conn: conn, dbType: dbType}, nil
 }
 
 // Close closes the database connection
@@ -295,304 +338,6 @@ func (db *DB) Close() error {
 // Ping verifies the database connection is alive.
 func (db *DB) Ping() error {
 	return db.conn.Ping()
-}
-
-// migrate creates the necessary tables
-func (db *DB) migrate() error {
-	schema := `
-	CREATE TABLE IF NOT EXISTS applications (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		description TEXT NOT NULL,
-		url TEXT NOT NULL,
-		icon TEXT NOT NULL,
-		category TEXT NOT NULL,
-		visibility TEXT NOT NULL DEFAULT 'public',
-		launch_type TEXT NOT NULL DEFAULT 'url',
-		os_type TEXT DEFAULT 'linux',
-		container_image TEXT DEFAULT '',
-		container_port INTEGER DEFAULT 0,
-		container_args TEXT DEFAULT '[]',
-		cpu_request TEXT DEFAULT '',
-		cpu_limit TEXT DEFAULT '',
-		memory_request TEXT DEFAULT '',
-		memory_limit TEXT DEFAULT '',
-		egress_policy TEXT DEFAULT ''
-	);
-
-	CREATE TABLE IF NOT EXISTS audit_log (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-		user TEXT NOT NULL,
-		action TEXT NOT NULL,
-		details TEXT NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS analytics (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		app_id TEXT NOT NULL,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (app_id) REFERENCES applications(id)
-	);
-
-	CREATE TABLE IF NOT EXISTS sessions (
-		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
-		app_id TEXT NOT NULL,
-		pod_name TEXT NOT NULL,
-		pod_ip TEXT DEFAULT '',
-		status TEXT NOT NULL DEFAULT 'pending',
-		idle_timeout INTEGER DEFAULT 0,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (app_id) REFERENCES applications(id)
-	);
-
-	CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
-	CREATE INDEX IF NOT EXISTS idx_analytics_app_id ON analytics(app_id);
-	CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON analytics(timestamp);
-	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
-
-	CREATE TABLE IF NOT EXISTS users (
-		id TEXT PRIMARY KEY,
-		username TEXT NOT NULL UNIQUE,
-		email TEXT,
-		display_name TEXT,
-		password_hash TEXT NOT NULL,
-		roles TEXT DEFAULT '["user"]',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-
-	CREATE TABLE IF NOT EXISTS settings (
-		key TEXT PRIMARY KEY,
-		value TEXT NOT NULL,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-
-	CREATE TABLE IF NOT EXISTS templates (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		template_id TEXT UNIQUE NOT NULL,
-		template_version TEXT NOT NULL DEFAULT '1.0.0',
-		template_category TEXT NOT NULL,
-		name TEXT NOT NULL,
-		description TEXT NOT NULL,
-		url TEXT DEFAULT '',
-		icon TEXT DEFAULT '',
-		category TEXT NOT NULL,
-		launch_type TEXT NOT NULL DEFAULT 'container',
-		os_type TEXT DEFAULT 'linux',
-		container_image TEXT,
-		container_port INTEGER DEFAULT 8080,
-		container_args TEXT DEFAULT '[]',
-		tags TEXT DEFAULT '[]',
-		maintainer TEXT,
-		documentation_url TEXT,
-		cpu_request TEXT DEFAULT '',
-		cpu_limit TEXT DEFAULT '',
-		memory_request TEXT DEFAULT '',
-		memory_limit TEXT DEFAULT '',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-	CREATE INDEX IF NOT EXISTS idx_templates_template_id ON templates(template_id);
-	CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(template_category);
-
-	CREATE TABLE IF NOT EXISTS app_specs (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		description TEXT DEFAULT '',
-		image TEXT NOT NULL,
-		launch_command TEXT DEFAULT '',
-		cpu_request TEXT DEFAULT '',
-		cpu_limit TEXT DEFAULT '',
-		memory_request TEXT DEFAULT '',
-		memory_limit TEXT DEFAULT '',
-		env_vars TEXT DEFAULT '[]',
-		volumes TEXT DEFAULT '[]',
-		network_rules TEXT DEFAULT '[]',
-		egress_policy TEXT DEFAULT '',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-
-	CREATE TABLE IF NOT EXISTS oidc_states (
-		state TEXT PRIMARY KEY,
-		redirect_url TEXT NOT NULL DEFAULT '',
-		expires_at DATETIME NOT NULL
-	);
-	CREATE INDEX IF NOT EXISTS idx_oidc_states_expires ON oidc_states(expires_at);
-
-	CREATE TABLE IF NOT EXISTS tenants (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		slug TEXT NOT NULL UNIQUE,
-		settings TEXT DEFAULT '{}',
-		quotas TEXT DEFAULT '{}',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-	CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
-
-	CREATE TABLE IF NOT EXISTS categories (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL UNIQUE,
-		description TEXT DEFAULT '',
-		tenant_id TEXT DEFAULT 'default',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-	CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id);
-
-	CREATE TABLE IF NOT EXISTS category_admins (
-		category_id TEXT NOT NULL,
-		user_id TEXT NOT NULL,
-		PRIMARY KEY (category_id, user_id)
-	);
-
-	CREATE TABLE IF NOT EXISTS category_approved_users (
-		category_id TEXT NOT NULL,
-		user_id TEXT NOT NULL,
-		PRIMARY KEY (category_id, user_id)
-	);
-
-	CREATE TABLE IF NOT EXISTS recordings (
-		id TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL,
-		user_id TEXT NOT NULL,
-		filename TEXT NOT NULL,
-		size_bytes INTEGER DEFAULT 0,
-		duration_seconds REAL DEFAULT 0,
-		format TEXT NOT NULL DEFAULT 'webm',
-		storage_backend TEXT NOT NULL DEFAULT 'local',
-		storage_path TEXT NOT NULL DEFAULT '',
-		status TEXT NOT NULL DEFAULT 'recording',
-		tenant_id TEXT DEFAULT 'default',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		completed_at DATETIME,
-		FOREIGN KEY (session_id) REFERENCES sessions(id)
-	);
-	CREATE INDEX IF NOT EXISTS idx_recordings_session ON recordings(session_id);
-	CREATE INDEX IF NOT EXISTS idx_recordings_user ON recordings(user_id);
-	CREATE INDEX IF NOT EXISTS idx_recordings_status ON recordings(status);
-
-	CREATE TABLE IF NOT EXISTS session_shares (
-		id TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL,
-		user_id TEXT NOT NULL DEFAULT '',
-		permission TEXT NOT NULL DEFAULT 'read_only',
-		share_token TEXT UNIQUE,
-		created_by TEXT NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-	);
-	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id);
-	CREATE INDEX IF NOT EXISTS idx_session_shares_user ON session_shares(user_id);
-	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
-	`
-	_, err := db.conn.Exec(schema)
-	if err != nil {
-		return err
-	}
-
-	// Run migrations for existing databases (add new columns if they don't exist)
-	migrations := []string{
-		"ALTER TABLE applications ADD COLUMN launch_type TEXT NOT NULL DEFAULT 'url'",
-		"ALTER TABLE applications ADD COLUMN container_image TEXT DEFAULT ''",
-		"ALTER TABLE applications ADD COLUMN container_port INTEGER DEFAULT 0",
-		"ALTER TABLE applications ADD COLUMN container_args TEXT DEFAULT '[]'",
-		"ALTER TABLE applications ADD COLUMN cpu_request TEXT DEFAULT ''",
-		"ALTER TABLE applications ADD COLUMN cpu_limit TEXT DEFAULT ''",
-		"ALTER TABLE applications ADD COLUMN memory_request TEXT DEFAULT ''",
-		"ALTER TABLE applications ADD COLUMN memory_limit TEXT DEFAULT ''",
-		"ALTER TABLE applications ADD COLUMN os_type TEXT DEFAULT 'linux'",
-		"ALTER TABLE templates ADD COLUMN os_type TEXT DEFAULT 'linux'",
-		"ALTER TABLE sessions ADD COLUMN idle_timeout INTEGER DEFAULT 0",
-		"ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local'",
-		"ALTER TABLE users ADD COLUMN auth_provider_id TEXT DEFAULT ''",
-		"ALTER TABLE applications ADD COLUMN egress_policy TEXT DEFAULT ''",
-		"ALTER TABLE app_specs ADD COLUMN egress_policy TEXT DEFAULT ''",
-		// Multi-tenancy columns
-		"ALTER TABLE applications ADD COLUMN tenant_id TEXT DEFAULT 'default'",
-		"ALTER TABLE users ADD COLUMN tenant_id TEXT DEFAULT 'default'",
-		"ALTER TABLE users ADD COLUMN tenant_roles TEXT DEFAULT '[]'",
-		"ALTER TABLE sessions ADD COLUMN tenant_id TEXT DEFAULT 'default'",
-		"ALTER TABLE audit_log ADD COLUMN tenant_id TEXT DEFAULT 'default'",
-		"ALTER TABLE analytics ADD COLUMN tenant_id TEXT DEFAULT 'default'",
-		"ALTER TABLE app_specs ADD COLUMN tenant_id TEXT DEFAULT 'default'",
-		"ALTER TABLE applications ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'",
-		// Video conversion path for recordings
-		"ALTER TABLE recordings ADD COLUMN video_path TEXT DEFAULT ''",
-	}
-
-	for _, migration := range migrations {
-		// Ignore errors - column may already exist
-		db.conn.Exec(migration)
-	}
-
-	// Seed default tenant for backwards compatibility
-	db.conn.Exec(
-		"INSERT OR IGNORE INTO tenants (id, name, slug, settings, quotas) VALUES ('default', 'Default', 'default', '{}', '{}')",
-	)
-
-	// Migrate existing app categories into the categories table as public
-	db.migrateExistingCategories()
-
-	// Migrate visibility from categories to applications (one-time)
-	db.migrateAppVisibilityFromCategories()
-
-	return nil
-}
-
-// migrateExistingCategories creates category records for any distinct
-// application.category values that don't yet have a categories row.
-func (db *DB) migrateExistingCategories() {
-	rows, err := db.conn.Query("SELECT DISTINCT category FROM applications WHERE category != ''")
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-
-	now := time.Now()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			continue
-		}
-		id := fmt.Sprintf("cat-%s-%d", name, now.UnixNano())
-		db.conn.Exec(
-			"INSERT OR IGNORE INTO categories (id, name, description, tenant_id, created_at, updated_at) VALUES (?, ?, '', 'default', ?, ?)",
-			id, name, now, now,
-		)
-	}
-}
-
-// migrateAppVisibilityFromCategories copies visibility from category rows
-// to application rows for databases that had visibility on categories.
-// Safe to run multiple times — only updates apps still at the default 'public'.
-func (db *DB) migrateAppVisibilityFromCategories() {
-	// Check if categories table still has a visibility column
-	var colCount int
-	err := db.conn.QueryRow(
-		"SELECT COUNT(*) FROM pragma_table_info('categories') WHERE name = 'visibility'",
-	).Scan(&colCount)
-	if err != nil || colCount == 0 {
-		return
-	}
-
-	db.conn.Exec(`
-		UPDATE applications SET visibility = (
-			SELECT c.visibility FROM categories c
-			WHERE c.name = applications.category
-		)
-		WHERE EXISTS (
-			SELECT 1 FROM categories c
-			WHERE c.name = applications.category AND c.visibility != 'public'
-		)
-		AND applications.visibility = 'public'
-	`)
 }
 
 // SeedFromJSON loads initial apps from a JSON file if the database is empty

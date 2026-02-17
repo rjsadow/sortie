@@ -68,7 +68,7 @@ func main() {
 	}
 
 	// Initialize database
-	database, err := db.Open(appConfig.DB)
+	database, err := db.OpenDB(appConfig.DBType, appConfig.DSN())
 	if err != nil {
 		slog.Error("failed to open database", "error", err)
 		os.Exit(1)
