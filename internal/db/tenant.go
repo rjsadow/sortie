@@ -5,17 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/uptrace/bun"
 )
 
 // Tenant represents a tenant in the multi-tenant system
 type Tenant struct {
-	ID        string        `json:"id"`
-	Name      string        `json:"name"`
-	Slug      string        `json:"slug"`
-	Settings  TenantSettings `json:"settings"`
-	Quotas    TenantQuotas  `json:"quotas"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
+	bun.BaseModel `bun:"table:tenants"`
+
+	ID        string         `json:"id" bun:"id,pk"`
+	Name      string         `json:"name" bun:"name,notnull"`
+	Slug      string         `json:"slug" bun:"slug,unique,notnull"`
+	Settings  TenantSettings `json:"settings" bun:"-"`
+	Quotas    TenantQuotas   `json:"quotas" bun:"-"`
+	CreatedAt time.Time      `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	UpdatedAt time.Time      `json:"updated_at" bun:"updated_at,nullzero,notnull,default:current_timestamp"`
+
+	// JSON-serialized DB columns
+	SettingsJSON string `json:"-" bun:"settings"`
+	QuotasJSON   string `json:"-" bun:"quotas"`
 }
 
 // TenantSettings holds tenant-specific configuration

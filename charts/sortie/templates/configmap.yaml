@@ -7,8 +7,22 @@ metadata:
   labels:
     {{- include "sortie.labels" . | nindent 4 }}
 data:
-  # Database path must be in writable volume (readOnlyRootFilesystem is enabled)
-  SORTIE_DB: "/data/sortie.db"
+  # Database configuration
+  SORTIE_DB_TYPE: {{ .Values.database.type | quote }}
+  {{- if eq .Values.database.type "sqlite" }}
+  SORTIE_DB: {{ .Values.database.sqlite.path | quote }}
+  {{- end }}
+  {{- if eq .Values.database.type "postgres" }}
+  {{- if .Values.database.postgres.dsn }}
+  SORTIE_DB_DSN: {{ .Values.database.postgres.dsn | quote }}
+  {{- else }}
+  SORTIE_DB_HOST: {{ .Values.database.postgres.host | quote }}
+  SORTIE_DB_PORT: {{ .Values.database.postgres.port | quote }}
+  SORTIE_DB_NAME: {{ .Values.database.postgres.database | quote }}
+  SORTIE_DB_USER: {{ .Values.database.postgres.user | quote }}
+  SORTIE_DB_SSLMODE: {{ .Values.database.postgres.sslMode | quote }}
+  {{- end }}
+  {{- end }}
   {{- if .Values.seed }}
   SORTIE_SEED: {{ .Values.seed | quote }}
   {{- end }}

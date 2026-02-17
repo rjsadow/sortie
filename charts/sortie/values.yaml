@@ -3,6 +3,21 @@
 # Namespace configuration
 namespace: sortie
 
+# Database configuration
+database:
+  type: sqlite             # "sqlite" or "postgres"
+  sqlite:
+    path: "/data/sortie.db"
+  postgres:
+    host: ""
+    port: 5432
+    database: "sortie"
+    user: "sortie"
+    password: ""
+    sslMode: "disable"
+    dsn: ""                # Full DSN (takes precedence over individual params)
+    existingSecret: ""     # Name of existing K8s Secret for SORTIE_DB_PASSWORD
+
 # Seed data file path (optional, loads initial apps/categories on first run)
 seed: ""
 

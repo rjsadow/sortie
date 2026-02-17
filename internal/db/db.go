@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/uptrace/bun"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -21,12 +23,14 @@ const (
 
 // Category represents a first-class category with access controls
 type Category struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	TenantID    string    `json:"tenant_id,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	bun.BaseModel `bun:"table:categories"`
+
+	ID          string    `json:"id" bun:"id,pk"`
+	Name        string    `json:"name" bun:"name,notnull"`
+	Description string    `json:"description" bun:"description"`
+	TenantID    string    `json:"tenant_id,omitempty" bun:"tenant_id"`
+	CreatedAt   time.Time `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	UpdatedAt   time.Time `json:"updated_at" bun:"updated_at,nullzero,notnull,default:current_timestamp"`
 }
 
 // LaunchType represents how an application is launched
@@ -48,21 +52,33 @@ type ResourceLimits struct {
 
 // Application represents an app in the sortie
 type Application struct {
-	ID             string             `json:"id"`
-	Name           string             `json:"name"`
-	Description    string             `json:"description"`
-	URL            string             `json:"url"`
-	Icon           string             `json:"icon"`
-	Category       string             `json:"category"`
-	Visibility     CategoryVisibility `json:"visibility"`
-	LaunchType     LaunchType         `json:"launch_type"`
-	OsType         string          `json:"os_type,omitempty"`         // "linux" (default) or "windows"
-	ContainerImage string          `json:"container_image,omitempty"`
-	ContainerPort  int             `json:"container_port,omitempty"`  // Port web app listens on (default: 8080)
-	ContainerArgs  []string        `json:"container_args,omitempty"`  // Extra arguments to pass to the container
-	ResourceLimits *ResourceLimits `json:"resource_limits,omitempty"` // Resource limits for container apps
-	EgressPolicy   *EgressPolicy   `json:"egress_policy,omitempty"`   // Network egress rules for container sessions
-	TenantID       string          `json:"tenant_id,omitempty"`       // Tenant this app belongs to
+	bun.BaseModel `bun:"table:applications"`
+
+	ID             string             `json:"id" bun:"id,pk"`
+	Name           string             `json:"name" bun:"name,notnull"`
+	Description    string             `json:"description" bun:"description"`
+	URL            string             `json:"url" bun:"url"`
+	Icon           string             `json:"icon" bun:"icon"`
+	Category       string             `json:"category" bun:"category"`
+	Visibility     CategoryVisibility `json:"visibility" bun:"visibility"`
+	LaunchType     LaunchType         `json:"launch_type" bun:"launch_type"`
+	OsType         string             `json:"os_type,omitempty" bun:"os_type"`
+	ContainerImage string             `json:"container_image,omitempty" bun:"container_image"`
+	ContainerPort  int                `json:"container_port,omitempty" bun:"container_port"`
+	ContainerArgs  []string           `json:"container_args,omitempty" bun:"-"`
+	ResourceLimits *ResourceLimits    `json:"resource_limits,omitempty" bun:"-"`
+	EgressPolicy   *EgressPolicy      `json:"egress_policy,omitempty" bun:"-"`
+	TenantID       string             `json:"tenant_id,omitempty" bun:"tenant_id"`
+
+	// Flattened DB columns for ResourceLimits (not exported to JSON)
+	CPURequest    string `json:"-" bun:"cpu_request"`
+	CPULimit      string `json:"-" bun:"cpu_limit"`
+	MemoryRequest string `json:"-" bun:"memory_request"`
+	MemoryLimit   string `json:"-" bun:"memory_limit"`
+
+	// JSON-serialized DB columns
+	ContainerArgsJSON string `json:"-" bun:"container_args"`
+	EgressPolicyJSON  string `json:"-" bun:"egress_policy"`
 }
 
 // AppConfig is the JSON structure for apps.json
@@ -72,26 +88,33 @@ type AppConfig struct {
 
 // Template represents an application template in the marketplace
 type Template struct {
-	ID                int             `json:"id"`
-	TemplateID        string          `json:"template_id"`
-	TemplateVersion   string          `json:"template_version"`
-	TemplateCategory  string          `json:"template_category"`
-	Name              string          `json:"name"`
-	Description       string          `json:"description"`
-	URL               string          `json:"url"`
-	Icon              string          `json:"icon"`
-	Category          string          `json:"category"`
-	LaunchType        string          `json:"launch_type"`
-	OsType            string          `json:"os_type,omitempty"`
-	ContainerImage    string          `json:"container_image,omitempty"`
-	ContainerPort     int             `json:"container_port,omitempty"`
-	ContainerArgs     []string        `json:"container_args,omitempty"`
-	Tags              []string        `json:"tags"`
-	Maintainer        string          `json:"maintainer,omitempty"`
-	DocumentationURL  string          `json:"documentation_url,omitempty"`
-	RecommendedLimits *ResourceLimits `json:"recommended_limits,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
+	bun.BaseModel `bun:"table:templates"`
+
+	ID                int             `json:"id" bun:"id,pk,autoincrement"`
+	TemplateID        string          `json:"template_id" bun:"template_id,unique,notnull"`
+	TemplateVersion   string          `json:"template_version" bun:"template_version"`
+	TemplateCategory  string          `json:"template_category" bun:"template_category"`
+	Name              string          `json:"name" bun:"name,notnull"`
+	Description       string          `json:"description" bun:"description"`
+	URL               string          `json:"url" bun:"url"`
+	Icon              string          `json:"icon" bun:"icon"`
+	Category          string          `json:"category" bun:"category"`
+	LaunchType        string          `json:"launch_type" bun:"launch_type"`
+	OsType            string          `json:"os_type,omitempty" bun:"os_type"`
+	ContainerImage    string          `json:"container_image,omitempty" bun:"container_image"`
+	ContainerPort     int             `json:"container_port,omitempty" bun:"container_port"`
+	ContainerArgs     []string        `json:"container_args,omitempty" bun:"-"`
+	Tags              []string        `json:"tags" bun:"-"`
+	Maintainer        string          `json:"maintainer,omitempty" bun:"maintainer"`
+	DocumentationURL  string          `json:"documentation_url,omitempty" bun:"documentation_url"`
+	RecommendedLimits *ResourceLimits `json:"recommended_limits,omitempty" bun:"-"`
+	CreatedAt         time.Time       `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	UpdatedAt         time.Time       `json:"updated_at" bun:"updated_at,nullzero,notnull,default:current_timestamp"`
+
+	// JSON-serialized DB columns
+	ContainerArgsJSON     string `json:"-" bun:"container_args"`
+	TagsJSON              string `json:"-" bun:"tags"`
+	RecommendedLimitsJSON string `json:"-" bun:"recommended_limits"`
 }
 
 // TemplateCatalog is the JSON structure for templates.json
@@ -102,27 +125,36 @@ type TemplateCatalog struct {
 
 // AuditLog represents an audit log entry
 type AuditLog struct {
-	ID        int64     `json:"id"`
-	Timestamp time.Time `json:"timestamp"`
-	User      string    `json:"user"`
-	Action    string    `json:"action"`
-	Details   string    `json:"details"`
+	bun.BaseModel `bun:"table:audit_log"`
+
+	ID        int64     `json:"id" bun:"id,pk,autoincrement"`
+	Timestamp time.Time `json:"timestamp" bun:"timestamp,nullzero,notnull,default:current_timestamp"`
+	User      string    `json:"user" bun:"user"`
+	Action    string    `json:"action" bun:"action"`
+	Details   string    `json:"details" bun:"details"`
+	TenantID  string    `json:"-" bun:"tenant_id"`
 }
 
 // User represents a user account
 type User struct {
-	ID              string    `json:"id"`
-	Username        string    `json:"username"`
-	Email           string    `json:"email,omitempty"`
-	DisplayName     string    `json:"display_name,omitempty"`
-	PasswordHash    string    `json:"-"`
-	Roles           []string  `json:"roles"`
-	AuthProvider    string    `json:"auth_provider,omitempty"`     // "local" or "oidc"
-	AuthProviderID  string    `json:"auth_provider_id,omitempty"` // External subject ID (e.g., OIDC sub)
-	TenantID        string    `json:"tenant_id,omitempty"`        // Tenant this user belongs to
-	TenantRoles     []string  `json:"tenant_roles,omitempty"`     // Roles within the tenant (e.g., "tenant-admin")
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	bun.BaseModel `bun:"table:users"`
+
+	ID             string    `json:"id" bun:"id,pk"`
+	Username       string    `json:"username" bun:"username,unique,notnull"`
+	Email          string    `json:"email,omitempty" bun:"email"`
+	DisplayName    string    `json:"display_name,omitempty" bun:"display_name"`
+	PasswordHash   string    `json:"-" bun:"password_hash"`
+	Roles          []string  `json:"roles" bun:"-"`
+	AuthProvider   string    `json:"auth_provider,omitempty" bun:"auth_provider"`
+	AuthProviderID string    `json:"auth_provider_id,omitempty" bun:"auth_provider_id"`
+	TenantID       string    `json:"tenant_id,omitempty" bun:"tenant_id"`
+	TenantRoles    []string  `json:"tenant_roles,omitempty" bun:"-"`
+	CreatedAt      time.Time `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	UpdatedAt      time.Time `json:"updated_at" bun:"updated_at,nullzero,notnull,default:current_timestamp"`
+
+	// JSON-serialized DB columns
+	RolesJSON       string `json:"-" bun:"roles"`
+	TenantRolesJSON string `json:"-" bun:"tenant_roles"`
 }
 
 // SessionStatus represents the status of a container session.
@@ -145,16 +177,18 @@ const (
 
 // Session represents an active container session
 type Session struct {
-	ID          string        `json:"id"`
-	UserID      string        `json:"user_id"`
-	AppID       string        `json:"app_id"`
-	PodName     string        `json:"pod_name"`
-	PodIP       string        `json:"pod_ip,omitempty"`
-	Status      SessionStatus `json:"status"`
-	IdleTimeout int64         `json:"idle_timeout,omitempty"` // Per-session idle timeout in seconds (0 = use global default)
-	TenantID    string        `json:"tenant_id,omitempty"`    // Tenant this session belongs to
-	CreatedAt   time.Time     `json:"created_at"`
-	UpdatedAt   time.Time     `json:"updated_at"`
+	bun.BaseModel `bun:"table:sessions"`
+
+	ID          string        `json:"id" bun:"id,pk"`
+	UserID      string        `json:"user_id" bun:"user_id,notnull"`
+	AppID       string        `json:"app_id" bun:"app_id,notnull"`
+	PodName     string        `json:"pod_name" bun:"pod_name"`
+	PodIP       string        `json:"pod_ip,omitempty" bun:"pod_ip"`
+	Status      SessionStatus `json:"status" bun:"status,notnull"`
+	IdleTimeout int64         `json:"idle_timeout,omitempty" bun:"idle_timeout"`
+	TenantID    string        `json:"tenant_id,omitempty" bun:"tenant_id"`
+	CreatedAt   time.Time     `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	UpdatedAt   time.Time     `json:"updated_at" bun:"updated_at,nullzero,notnull,default:current_timestamp"`
 }
 
 // EnvVar represents an environment variable for an AppSpec
@@ -196,18 +230,27 @@ type EgressPolicy struct {
 
 // AppSpec defines an application specification for launching containers
 type AppSpec struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name"`
-	Description    string          `json:"description,omitempty"`
-	Image          string          `json:"image"`
-	LaunchCommand  string          `json:"launch_command,omitempty"`
-	Resources      *ResourceLimits `json:"resources,omitempty"`
-	EnvVars        []EnvVar        `json:"env_vars,omitempty"`
-	Volumes        []VolumeMount   `json:"volumes,omitempty"`
-	NetworkRules   []NetworkRule   `json:"network_rules,omitempty"`
-	EgressPolicy   *EgressPolicy   `json:"egress_policy,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	bun.BaseModel `bun:"table:app_specs"`
+
+	ID            string          `json:"id" bun:"id,pk"`
+	Name          string          `json:"name" bun:"name,notnull"`
+	Description   string          `json:"description,omitempty" bun:"description"`
+	Image         string          `json:"image" bun:"image,notnull"`
+	LaunchCommand string          `json:"launch_command,omitempty" bun:"launch_command"`
+	Resources     *ResourceLimits `json:"resources,omitempty" bun:"-"`
+	EnvVars       []EnvVar        `json:"env_vars,omitempty" bun:"-"`
+	Volumes       []VolumeMount   `json:"volumes,omitempty" bun:"-"`
+	NetworkRules  []NetworkRule   `json:"network_rules,omitempty" bun:"-"`
+	EgressPolicy  *EgressPolicy   `json:"egress_policy,omitempty" bun:"-"`
+	CreatedAt     time.Time       `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	UpdatedAt     time.Time       `json:"updated_at" bun:"updated_at,nullzero,notnull,default:current_timestamp"`
+
+	// JSON-serialized DB columns
+	ResourcesJSON    string `json:"-" bun:"resources"`
+	EnvVarsJSON      string `json:"-" bun:"env_vars"`
+	VolumesJSON      string `json:"-" bun:"volumes"`
+	NetworkRulesJSON string `json:"-" bun:"network_rules"`
+	EgressPolicyJSON string `json:"-" bun:"egress_policy"`
 }
 
 // DB wraps the sql.DB connection
@@ -2120,13 +2163,15 @@ const (
 
 // SessionShare represents a share record granting access to a session.
 type SessionShare struct {
-	ID         string          `json:"id"`
-	SessionID  string          `json:"session_id"`
-	UserID     string          `json:"user_id"`
-	Permission SharePermission `json:"permission"`
-	ShareToken string          `json:"share_token,omitempty"`
-	CreatedBy  string          `json:"created_by"`
-	CreatedAt  time.Time       `json:"created_at"`
+	bun.BaseModel `bun:"table:session_shares"`
+
+	ID         string          `json:"id" bun:"id,pk"`
+	SessionID  string          `json:"session_id" bun:"session_id,notnull"`
+	UserID     string          `json:"user_id" bun:"user_id"`
+	Permission SharePermission `json:"permission" bun:"permission,notnull"`
+	ShareToken string          `json:"share_token,omitempty" bun:"share_token,unique"`
+	CreatedBy  string          `json:"created_by" bun:"created_by,notnull"`
+	CreatedAt  time.Time       `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
 }
 
 // CreateSessionShare inserts a new session share record.
@@ -2321,20 +2366,22 @@ const (
 
 // Recording represents a video recording of a session.
 type Recording struct {
-	ID              string         `json:"id"`
-	SessionID       string         `json:"session_id"`
-	UserID          string         `json:"user_id"`
-	Filename        string         `json:"filename"`
-	SizeBytes       int64          `json:"size_bytes"`
-	DurationSeconds float64        `json:"duration_seconds"`
-	Format          string         `json:"format"`
-	StorageBackend  string         `json:"storage_backend"`
-	StoragePath     string         `json:"storage_path"`
-	VideoPath       string         `json:"video_path,omitempty"`
-	Status          RecordingStatus `json:"status"`
-	TenantID        string         `json:"tenant_id,omitempty"`
-	CreatedAt       time.Time      `json:"created_at"`
-	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
+	bun.BaseModel `bun:"table:recordings"`
+
+	ID              string          `json:"id" bun:"id,pk"`
+	SessionID       string          `json:"session_id" bun:"session_id,notnull"`
+	UserID          string          `json:"user_id" bun:"user_id,notnull"`
+	Filename        string          `json:"filename" bun:"filename,notnull"`
+	SizeBytes       int64           `json:"size_bytes" bun:"size_bytes"`
+	DurationSeconds float64         `json:"duration_seconds" bun:"duration_seconds"`
+	Format          string          `json:"format" bun:"format"`
+	StorageBackend  string          `json:"storage_backend" bun:"storage_backend"`
+	StoragePath     string          `json:"storage_path" bun:"storage_path"`
+	VideoPath       string          `json:"video_path,omitempty" bun:"video_path"`
+	Status          RecordingStatus `json:"status" bun:"status,notnull"`
+	TenantID        string          `json:"tenant_id,omitempty" bun:"tenant_id"`
+	CreatedAt       time.Time       `json:"created_at" bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	CompletedAt     *time.Time      `json:"completed_at,omitempty" bun:"completed_at"`
 }
 
 // CreateRecording inserts a new recording record.

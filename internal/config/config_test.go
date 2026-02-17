@@ -485,6 +485,7 @@ func TestValidate_PortRange(t *testing.T) {
 		cfg := &Config{
 			Port:            tt.port,
 			DB:              "test.db",
+			DBType:          "sqlite",
 			VNCSidecarImage: "test:latest",
 			PrimaryColor:    "#FFFFFF",
 			SecondaryColor:  "#000000",
@@ -503,6 +504,7 @@ func TestValidate_EmptyDB(t *testing.T) {
 	cfg := &Config{
 		Port:            8080,
 		DB:              "",
+		DBType:          "sqlite",
 		VNCSidecarImage: "test:latest",
 		PrimaryColor:    "#FFFFFF",
 		SecondaryColor:  "#000000",
@@ -529,6 +531,7 @@ func TestValidate_EmptyVNCSidecarImage(t *testing.T) {
 	cfg := &Config{
 		Port:            8080,
 		DB:              "test.db",
+		DBType:          "sqlite",
 		VNCSidecarImage: "",
 		PrimaryColor:    "#FFFFFF",
 		SecondaryColor:  "#000000",
@@ -571,6 +574,7 @@ func TestValidate_InvalidColors(t *testing.T) {
 			cfg := &Config{
 				Port:            8080,
 				DB:              "test.db",
+				DBType:          "sqlite",
 				VNCSidecarImage: "test:latest",
 				PrimaryColor:    tt.primary,
 				SecondaryColor:  tt.secondary,
@@ -589,6 +593,7 @@ func TestValidate_MultipleErrors(t *testing.T) {
 	cfg := &Config{
 		Port:            0,
 		DB:              "",
+		DBType:          "sqlite",
 		VNCSidecarImage: "",
 		PrimaryColor:    "bad",
 		SecondaryColor:  "bad",
@@ -991,6 +996,272 @@ func TestLoad_VideoRecordingInvalidValues(t *testing.T) {
 	}
 }
 
+// --- Database configuration tests ---
+
+func TestLoad_DBTypeDefaults(t *testing.T) {
+	clearEnvVars(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.DBType != DefaultDBType {
+		t.Errorf("DBType = %v, want %v", cfg.DBType, DefaultDBType)
+	}
+	if cfg.DBPort != DefaultDBPort {
+		t.Errorf("DBPort = %v, want %v", cfg.DBPort, DefaultDBPort)
+	}
+	if cfg.DBSSLMode != DefaultDBSSLMode {
+		t.Errorf("DBSSLMode = %v, want %v", cfg.DBSSLMode, DefaultDBSSLMode)
+	}
+	if cfg.DBPath != cfg.DB {
+		t.Errorf("DBPath = %v, want %v (should match DB)", cfg.DBPath, cfg.DB)
+	}
+}
+
+func TestLoad_DBTypeFromEnv(t *testing.T) {
+	clearEnvVars(t)
+
+	t.Setenv("SORTIE_DB_TYPE", "postgres")
+	t.Setenv("SORTIE_DB_DSN", "postgres://user:pass@localhost:5432/sortie")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.DBType != "postgres" {
+		t.Errorf("DBType = %v, want postgres", cfg.DBType)
+	}
+	if cfg.DBDSN != "postgres://user:pass@localhost:5432/sortie" {
+		t.Errorf("DBDSN = %v, want postgres://user:pass@localhost:5432/sortie", cfg.DBDSN)
+	}
+}
+
+func TestLoad_DBPostgresIndividualParams(t *testing.T) {
+	clearEnvVars(t)
+
+	t.Setenv("SORTIE_DB_TYPE", "postgres")
+	t.Setenv("SORTIE_DB_HOST", "db.example.com")
+	t.Setenv("SORTIE_DB_PORT", "5433")
+	t.Setenv("SORTIE_DB_NAME", "mydb")
+	t.Setenv("SORTIE_DB_USER", "myuser")
+	t.Setenv("SORTIE_DB_PASSWORD", "secret")
+	t.Setenv("SORTIE_DB_SSLMODE", "require")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.DBHost != "db.example.com" {
+		t.Errorf("DBHost = %v, want db.example.com", cfg.DBHost)
+	}
+	if cfg.DBPort != 5433 {
+		t.Errorf("DBPort = %v, want 5433", cfg.DBPort)
+	}
+	if cfg.DBName != "mydb" {
+		t.Errorf("DBName = %v, want mydb", cfg.DBName)
+	}
+	if cfg.DBUser != "myuser" {
+		t.Errorf("DBUser = %v, want myuser", cfg.DBUser)
+	}
+	if cfg.DBPassword != "secret" {
+		t.Errorf("DBPassword = %v, want secret", cfg.DBPassword)
+	}
+	if cfg.DBSSLMode != "require" {
+		t.Errorf("DBSSLMode = %v, want require", cfg.DBSSLMode)
+	}
+}
+
+func TestLoad_DBPortInvalid(t *testing.T) {
+	clearEnvVars(t)
+
+	t.Setenv("SORTIE_DB_PORT", "not-a-number")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected error for invalid DB port")
+	}
+}
+
+func TestValidate_PostgresRequiresDSNOrParams(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     Config
+		wantErr bool
+	}{
+		{
+			name: "postgres with full DSN",
+			cfg: Config{
+				Port: 8080, DBType: "postgres", DB: "unused",
+				DBDSN: "postgres://user:pass@localhost/db",
+				VNCSidecarImage: "test:latest",
+			},
+			wantErr: false,
+		},
+		{
+			name: "postgres with individual params",
+			cfg: Config{
+				Port: 8080, DBType: "postgres", DB: "unused",
+				DBHost: "localhost", DBName: "sortie", DBUser: "sortie",
+				VNCSidecarImage: "test:latest",
+			},
+			wantErr: false,
+		},
+		{
+			name: "postgres missing host",
+			cfg: Config{
+				Port: 8080, DBType: "postgres", DB: "unused",
+				DBName: "sortie", DBUser: "sortie",
+				VNCSidecarImage: "test:latest",
+			},
+			wantErr: true,
+		},
+		{
+			name: "postgres missing dbname",
+			cfg: Config{
+				Port: 8080, DBType: "postgres", DB: "unused",
+				DBHost: "localhost", DBUser: "sortie",
+				VNCSidecarImage: "test:latest",
+			},
+			wantErr: true,
+		},
+		{
+			name: "postgres missing user",
+			cfg: Config{
+				Port: 8080, DBType: "postgres", DB: "unused",
+				DBHost: "localhost", DBName: "sortie",
+				VNCSidecarImage: "test:latest",
+			},
+			wantErr: true,
+		},
+		{
+			name: "postgres missing everything",
+			cfg: Config{
+				Port: 8080, DBType: "postgres", DB: "unused",
+				VNCSidecarImage: "test:latest",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := tt.cfg.Validate()
+			gotErr := len(errs) > 0
+			if gotErr != tt.wantErr {
+				t.Errorf("Validate() gotErr=%v, wantErr=%v, errs=%v", gotErr, tt.wantErr, errs)
+			}
+		})
+	}
+}
+
+func TestValidate_UnsupportedDBType(t *testing.T) {
+	cfg := &Config{
+		Port:            8080,
+		DB:              "test.db",
+		DBType:          "mysql",
+		VNCSidecarImage: "test:latest",
+	}
+
+	errs := cfg.Validate()
+	if len(errs) == 0 {
+		t.Fatal("Validate() expected error for unsupported DB type")
+	}
+
+	found := false
+	for _, e := range errs {
+		if e.Field == "SORTIE_DB_TYPE" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Validate() expected SORTIE_DB_TYPE in validation errors")
+	}
+}
+
+func TestConfig_DSN_SQLite(t *testing.T) {
+	cfg := &Config{DBType: "sqlite", DB: "/data/sortie.db"}
+
+	got := cfg.DSN()
+	if got != "/data/sortie.db" {
+		t.Errorf("DSN() = %v, want /data/sortie.db", got)
+	}
+}
+
+func TestConfig_DSN_PostgresExplicitDSN(t *testing.T) {
+	cfg := &Config{
+		DBType: "postgres",
+		DBDSN:  "postgres://user:pass@host:5432/db?sslmode=disable",
+		DBHost: "other-host", DBPort: 9999, DBName: "other", DBUser: "other",
+	}
+
+	got := cfg.DSN()
+	want := "postgres://user:pass@host:5432/db?sslmode=disable"
+	if got != want {
+		t.Errorf("DSN() = %v, want %v (explicit DSN should take precedence)", got, want)
+	}
+}
+
+func TestConfig_DSN_PostgresConstructed(t *testing.T) {
+	cfg := &Config{
+		DBType:     "postgres",
+		DBHost:     "db.example.com",
+		DBPort:     5433,
+		DBName:     "mydb",
+		DBUser:     "myuser",
+		DBPassword: "s3cret",
+		DBSSLMode:  "require",
+	}
+
+	got := cfg.DSN()
+	want := "postgres://myuser:s3cret@db.example.com:5433/mydb?sslmode=require"
+	if got != want {
+		t.Errorf("DSN() = %v, want %v", got, want)
+	}
+}
+
+func TestConfig_IsSQLite(t *testing.T) {
+	tests := []struct {
+		dbType string
+		want   bool
+	}{
+		{"", true},
+		{"sqlite", true},
+		{"postgres", false},
+		{"mysql", false},
+	}
+
+	for _, tt := range tests {
+		cfg := &Config{DBType: tt.dbType}
+		if got := cfg.IsSQLite(); got != tt.want {
+			t.Errorf("IsSQLite() with DBType=%q = %v, want %v", tt.dbType, got, tt.want)
+		}
+	}
+}
+
+func TestConfig_IsPostgres(t *testing.T) {
+	tests := []struct {
+		dbType string
+		want   bool
+	}{
+		{"postgres", true},
+		{"", false},
+		{"sqlite", false},
+		{"mysql", false},
+	}
+
+	for _, tt := range tests {
+		cfg := &Config{DBType: tt.dbType}
+		if got := cfg.IsPostgres(); got != tt.want {
+			t.Errorf("IsPostgres() with DBType=%q = %v, want %v", tt.dbType, got, tt.want)
+		}
+	}
+}
+
 func clearEnvVars(t *testing.T) {
 	t.Helper()
 	envVars := []string{
@@ -1030,6 +1301,14 @@ func clearEnvVars(t *testing.T) {
 		"SORTIE_RECORDING_S3_REGION",
 		"SORTIE_RECORDING_S3_ENDPOINT",
 		"SORTIE_RECORDING_S3_PREFIX",
+		"SORTIE_DB_TYPE",
+		"SORTIE_DB_DSN",
+		"SORTIE_DB_HOST",
+		"SORTIE_DB_PORT",
+		"SORTIE_DB_NAME",
+		"SORTIE_DB_USER",
+		"SORTIE_DB_PASSWORD",
+		"SORTIE_DB_SSLMODE",
 	}
 	for _, env := range envVars {
 		os.Unsetenv(env)
