@@ -98,4 +98,35 @@ test.describe('SSE Real-Time Updates', () => {
       await expect(badge).toHaveText(String(beforeCount - 1), { timeout: 10_000 });
     }
   });
+
+  test('badge decrements from 2 to 1 when one of multiple sessions is terminated', async ({
+    page,
+    request,
+  }) => {
+    // Create two sessions so the badge shows "2"
+    const res1 = await createTestSession(request, token, 'test-container');
+    expect(res1.ok()).toBeTruthy();
+    const session1 = await res1.json();
+    await waitForSessionRunning(request, token, session1.id);
+
+    const res2 = await createTestSession(request, token, 'test-container');
+    expect(res2.ok()).toBeTruthy();
+    const session2 = await res2.json();
+    await waitForSessionRunning(request, token, session2.id);
+
+    // Load the page — badge should show 2
+    await page.goto('/');
+    await expect(page.getByLabel('Manage sessions')).toBeVisible();
+
+    const sessionsButton = page.getByLabel('Manage sessions');
+    const badge = sessionsButton.locator('.bg-green-500');
+    await expect(badge).toHaveText('2', { timeout: 10_000 });
+
+    // Terminate one session via API — badge should decrement to 1 without reload
+    await terminateTestSession(request, token, session1.id);
+    await expect(badge).toHaveText('1', { timeout: 10_000 });
+
+    // Badge should still be visible (one session remains)
+    await expect(badge).toBeVisible();
+  });
 });
