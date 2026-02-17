@@ -9,13 +9,62 @@ metadata:
 data:
   # Database path must be in writable volume (readOnlyRootFilesystem is enabled)
   SORTIE_DB: "/data/sortie.db"
+  {{- if .Values.seed }}
+  SORTIE_SEED: {{ .Values.seed | quote }}
+  {{- end }}
+  # Branding configuration
+  {{- if .Values.branding.configPath }}
+  SORTIE_CONFIG: {{ .Values.branding.configPath | quote }}
+  {{- end }}
+  {{- if .Values.branding.logoURL }}
+  SORTIE_LOGO_URL: {{ .Values.branding.logoURL | quote }}
+  {{- end }}
+  SORTIE_PRIMARY_COLOR: {{ .Values.branding.primaryColor | quote }}
+  SORTIE_SECONDARY_COLOR: {{ .Values.branding.secondaryColor | quote }}
+  SORTIE_TENANT_NAME: {{ .Values.branding.tenantName | quote }}
+  # Session configuration
   SORTIE_SESSION_TIMEOUT: {{ .Values.session.timeout | quote }}
   SORTIE_SESSION_CLEANUP_INTERVAL: {{ .Values.session.cleanupInterval | quote }}
   SORTIE_POD_READY_TIMEOUT: {{ .Values.session.podReadyTimeout | quote }}
+  # Sidecar images
   SORTIE_VNC_SIDECAR_IMAGE: {{ .Values.vncSidecar.image | quote }}
   SORTIE_BROWSER_SIDECAR_IMAGE: {{ .Values.browserSidecar.image | quote }}
   SORTIE_GUACD_SIDECAR_IMAGE: {{ .Values.guacdSidecar.image | quote }}
+  # Gateway rate limiting
+  SORTIE_GATEWAY_RATE_LIMIT: {{ .Values.gateway.rateLimit | quote }}
+  SORTIE_GATEWAY_BURST: {{ .Values.gateway.burst | quote }}
+  # Session quotas
+  SORTIE_MAX_SESSIONS_PER_USER: {{ .Values.sessionQuotas.maxSessionsPerUser | quote }}
+  SORTIE_MAX_GLOBAL_SESSIONS: {{ .Values.sessionQuotas.maxGlobalSessions | quote }}
+  # Default session pod resources
+  SORTIE_DEFAULT_CPU_REQUEST: {{ .Values.sessionResources.cpuRequest | quote }}
+  SORTIE_DEFAULT_CPU_LIMIT: {{ .Values.sessionResources.cpuLimit | quote }}
+  SORTIE_DEFAULT_MEM_REQUEST: {{ .Values.sessionResources.memRequest | quote }}
+  SORTIE_DEFAULT_MEM_LIMIT: {{ .Values.sessionResources.memLimit | quote }}
+  # File transfer
+  SORTIE_MAX_UPLOAD_SIZE: {{ .Values.fileTransfer.maxUploadSize | int64 | quote }}
+  # Session queueing
+  SORTIE_QUEUE_MAX_SIZE: {{ .Values.queue.maxSize | quote }}
+  SORTIE_QUEUE_TIMEOUT: {{ .Values.queue.timeout | quote }}
+  {{- if .Values.oidc.enabled }}
+  # OIDC/SSO configuration
+  SORTIE_OIDC_ISSUER: {{ .Values.oidc.issuer | quote }}
+  SORTIE_OIDC_CLIENT_ID: {{ .Values.oidc.clientId | quote }}
+  SORTIE_OIDC_REDIRECT_URL: {{ .Values.oidc.redirectUrl | quote }}
+  {{- if .Values.oidc.scopes }}
+  SORTIE_OIDC_SCOPES: {{ .Values.oidc.scopes | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.eventRecording.enabled }}
+  # Session event recording
+  SORTIE_RECORDING_ENABLED: "true"
+  {{- if .Values.eventRecording.endpoint }}
+  SORTIE_RECORDING_ENDPOINT: {{ .Values.eventRecording.endpoint | quote }}
+  {{- end }}
+  SORTIE_RECORDING_BUFFER_SIZE: {{ .Values.eventRecording.bufferSize | quote }}
+  {{- end }}
   {{- if .Values.recording.enabled }}
+  # Video recording
   SORTIE_VIDEO_RECORDING_ENABLED: "true"
   SORTIE_RECORDING_STORAGE_BACKEND: {{ .Values.recording.storageBackend | quote }}
   SORTIE_RECORDING_STORAGE_PATH: {{ .Values.recording.storagePath | quote }}
@@ -27,4 +76,10 @@ data:
   SORTIE_RECORDING_S3_ENDPOINT: {{ .Values.recording.s3.endpoint | quote }}
   SORTIE_RECORDING_S3_PREFIX: {{ .Values.recording.s3.prefix | quote }}
   {{- end }}
+  {{- end }}
+  {{- if .Values.billing.enabled }}
+  # Billing/metering
+  SORTIE_BILLING_ENABLED: "true"
+  SORTIE_BILLING_EXPORTER: {{ .Values.billing.exporter | quote }}
+  SORTIE_BILLING_EXPORT_INTERVAL: {{ .Values.billing.exportInterval | quote }}
   {{- end }}
