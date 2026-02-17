@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"os"
 	"testing"
 )
 
@@ -498,34 +499,77 @@ func TestMixedVisibilityInCategory(t *testing.T) {
 }
 
 func TestDataMigrationExistingCategories(t *testing.T) {
-	db := setupTestDB(t)
+	// Simulate the upgrade scenario: a database at baseline (version 1)
+	// with apps, then upgrading to version 2 which creates categories.
+	tmpFile, err := os.CreateTemp("", "test-datamigration-*.db")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
 
-	// Create apps with categories (simulating existing data)
-	for _, app := range []Application{
-		{ID: "m-1", Name: "App1", Description: "d", URL: "http://x", Icon: "i", Category: "DevTools"},
-		{ID: "m-2", Name: "App2", Description: "d", URL: "http://x", Icon: "i", Category: "DevTools"},
-		{ID: "m-3", Name: "App3", Description: "d", URL: "http://x", Icon: "i", Category: "Security"},
-	} {
-		db.CreateApp(app)
+	// Step 1: Create a database at version 1 (baseline) with apps that have categories.
+	conn, err := sql.Open("sqlite", tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
 	}
 
-	// Run migration again (simulates reopening DB)
-	db.migrateExistingCategories()
+	// Run baseline migration manually to get tables
+	if err := runMigrations("sqlite", tmpFile.Name()); err != nil {
+		conn.Close()
+		t.Fatalf("runMigrations error = %v", err)
+	}
+
+	// Re-open to get a usable connection (runMigrations closes its own)
+	conn.Close()
+	conn, err = sql.Open("sqlite", tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to reopen database: %v", err)
+	}
+
+	// Insert apps with categories
+	for _, cat := range []struct{ id, name string }{
+		{"m-1", "DevTools"},
+		{"m-2", "DevTools"},
+		{"m-3", "Security"},
+	} {
+		_, err := conn.Exec(
+			"INSERT INTO applications (id, name, description, url, icon, category) VALUES (?, ?, 'd', 'http://x', 'i', ?)",
+			cat.id, "App", cat.name,
+		)
+		if err != nil {
+			t.Fatalf("failed to insert app: %v", err)
+		}
+	}
+
+	// Force version back to 1 so version 2 (data migration) will run on next Open
+	_, err = conn.Exec("UPDATE schema_migrations SET version = 1")
+	if err != nil {
+		t.Fatalf("failed to force version: %v", err)
+	}
+	conn.Close()
+
+	// Step 2: Open via normal path — should run migration 000002 and create categories
+	database, err := Open(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer database.Close()
 
 	// Check that categories were auto-created
-	cat, err := db.GetCategoryByName("DevTools")
+	cat2, err := database.GetCategoryByName("DevTools")
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
-	if cat == nil {
+	if cat2 == nil {
 		t.Fatal("expected DevTools category to be auto-created")
 	}
 
-	cat, err = db.GetCategoryByName("Security")
+	cat3, err := database.GetCategoryByName("Security")
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
-	if cat == nil {
+	if cat3 == nil {
 		t.Fatal("expected Security category to be auto-created")
 	}
 }

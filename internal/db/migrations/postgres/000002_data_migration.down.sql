@@ -1,0 +1,1 @@
+-- Data migrations cannot be reversed. This is intentionally a no-op.
