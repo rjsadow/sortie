@@ -16,8 +16,19 @@ import (
 type Config struct {
 	// Server configuration
 	Port int
-	DB   string
+	DB   string // SQLite file path (backward compat, maps to DBPath)
 	Seed string
+
+	// Database configuration
+	DBType     string // "sqlite" (default) or "postgres"
+	DBPath     string // SQLite file path (when DBType="sqlite")
+	DBDSN      string // Full PostgreSQL DSN (takes precedence over individual params)
+	DBHost     string // PostgreSQL host
+	DBPort     int    // PostgreSQL port (default: 5432)
+	DBName     string // PostgreSQL database name
+	DBUser     string // PostgreSQL user
+	DBPassword string // PostgreSQL password
+	DBSSLMode  string // PostgreSQL SSL mode (default: "disable")
 
 	// Branding configuration
 	BrandingConfigPath string
@@ -125,6 +136,9 @@ func (e ValidationErrors) Error() string {
 const (
 	DefaultPort                   = 8080
 	DefaultDBPath                 = "sortie.db"
+	DefaultDBType                 = "sqlite"
+	DefaultDBPort                 = 5432
+	DefaultDBSSLMode              = "disable"
 	DefaultBrandingConfigPath     = "branding.json"
 	DefaultPrimaryColor           = "#1F2A3C"
 	DefaultSecondaryColor         = "#2B3445"
@@ -167,6 +181,11 @@ func Load() (*Config, error) {
 		// Server defaults
 		Port: DefaultPort,
 		DB:   DefaultDBPath,
+
+		// Database defaults
+		DBType:    DefaultDBType,
+		DBPort:    DefaultDBPort,
+		DBSSLMode: DefaultDBSSLMode,
 
 		// Branding defaults
 		BrandingConfigPath: DefaultBrandingConfigPath,
@@ -254,6 +273,43 @@ func (c *Config) loadFromEnv() error {
 	if v := os.Getenv("SORTIE_SEED"); v != "" {
 		c.Seed = v
 	}
+
+	// Database configuration
+	if v := os.Getenv("SORTIE_DB_TYPE"); v != "" {
+		c.DBType = v
+	}
+	if v := os.Getenv("SORTIE_DB_DSN"); v != "" {
+		c.DBDSN = v
+	}
+	if v := os.Getenv("SORTIE_DB_HOST"); v != "" {
+		c.DBHost = v
+	}
+	if v := os.Getenv("SORTIE_DB_PORT"); v != "" {
+		port, err := strconv.Atoi(v)
+		if err != nil {
+			parseErrors = append(parseErrors, ValidationError{
+				Field:   "SORTIE_DB_PORT",
+				Message: fmt.Sprintf("invalid port number: %q (must be an integer)", v),
+			})
+		} else {
+			c.DBPort = port
+		}
+	}
+	if v := os.Getenv("SORTIE_DB_NAME"); v != "" {
+		c.DBName = v
+	}
+	if v := os.Getenv("SORTIE_DB_USER"); v != "" {
+		c.DBUser = v
+	}
+	if v := os.Getenv("SORTIE_DB_PASSWORD"); v != "" {
+		c.DBPassword = v
+	}
+	if v := os.Getenv("SORTIE_DB_SSLMODE"); v != "" {
+		c.DBSSLMode = v
+	}
+
+	// Sync DBPath with DB for backward compatibility
+	c.DBPath = c.DB
 
 	// Branding configuration
 	if v := os.Getenv("SORTIE_CONFIG"); v != "" {
@@ -705,11 +761,26 @@ func (c *Config) Validate() ValidationErrors {
 		})
 	}
 
-	// Validate DB path is not empty
-	if c.DB == "" {
+	// Validate DB type
+	switch c.DBType {
+	case "sqlite":
+		if c.DB == "" {
+			errs = append(errs, ValidationError{
+				Field:   "SORTIE_DB",
+				Message: "database path cannot be empty",
+			})
+		}
+	case "postgres":
+		if c.DBDSN == "" && (c.DBHost == "" || c.DBName == "" || c.DBUser == "") {
+			errs = append(errs, ValidationError{
+				Field:   "SORTIE_DB_DSN",
+				Message: "PostgreSQL requires either SORTIE_DB_DSN or all of SORTIE_DB_HOST, SORTIE_DB_NAME, and SORTIE_DB_USER",
+			})
+		}
+	default:
 		errs = append(errs, ValidationError{
-			Field:   "SORTIE_DB",
-			Message: "database path cannot be empty",
+			Field:   "SORTIE_DB_TYPE",
+			Message: fmt.Sprintf("unsupported database type: %q (must be \"sqlite\" or \"postgres\")", c.DBType),
 		})
 	}
 
@@ -771,6 +842,33 @@ func isValidHexColor(s string) bool {
 	return true
 }
 
+// DSN returns the database connection string based on the configured database type.
+// For SQLite, it returns the file path. For PostgreSQL, it constructs a DSN from
+// individual parameters or returns the explicit DSN if set.
+func (c *Config) DSN() string {
+	switch c.DBType {
+	case "postgres":
+		if c.DBDSN != "" {
+			return c.DBDSN
+		}
+		dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
+			c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, c.DBSSLMode)
+		return dsn
+	default:
+		return c.DB
+	}
+}
+
+// IsSQLite returns true if the configured database type is SQLite.
+func (c *Config) IsSQLite() bool {
+	return c.DBType == "" || c.DBType == "sqlite"
+}
+
+// IsPostgres returns true if the configured database type is PostgreSQL.
+func (c *Config) IsPostgres() bool {
+	return c.DBType == "postgres"
+}
+
 // OIDCEnabled returns true if OIDC/SSO is configured with the minimum required fields.
 func (c *Config) OIDCEnabled() bool {
 	return c.OIDCIssuer != "" && c.OIDCClientID != "" && c.OIDCClientSecret != ""
@@ -801,6 +899,7 @@ func LoadWithFlags(port int, db, seed string) (*Config, error) {
 	}
 	if db != "" && db != DefaultDBPath {
 		cfg.DB = db
+		cfg.DBPath = db
 	}
 	if seed != "" {
 		cfg.Seed = seed
