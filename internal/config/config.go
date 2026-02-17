@@ -82,7 +82,9 @@ type Config struct {
 	RecordingS3Bucket   string // S3 bucket name
 	RecordingS3Region   string // AWS region
 	RecordingS3Endpoint string // Custom endpoint for MinIO/self-hosted S3
-	RecordingS3Prefix   string // Key prefix within bucket
+	RecordingS3Prefix      string // Key prefix within bucket
+	RecordingS3AccessKeyID     string // Explicit AWS access key ID (optional)
+	RecordingS3SecretAccessKey string // Explicit AWS secret access key (optional)
 
 	// Billing/metering configuration
 	BillingEnabled        bool          // Enable metering event collection
@@ -642,6 +644,14 @@ func (c *Config) loadFromEnv() error {
 		c.RecordingS3Prefix = v
 	}
 
+	if v := os.Getenv("SORTIE_RECORDING_S3_ACCESS_KEY_ID"); v != "" {
+		c.RecordingS3AccessKeyID = v
+	}
+
+	if v := os.Getenv("SORTIE_RECORDING_S3_SECRET_ACCESS_KEY"); v != "" {
+		c.RecordingS3SecretAccessKey = v
+	}
+
 	// Session queueing configuration
 	if v := os.Getenv("SORTIE_QUEUE_MAX_SIZE"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -731,6 +741,14 @@ func (c *Config) Validate() ValidationErrors {
 		errs = append(errs, ValidationError{
 			Field:   "SORTIE_RECORDING_S3_BUCKET",
 			Message: "S3 bucket is required when storage backend is \"s3\"",
+		})
+	}
+
+	// Validate S3 credentials: if one is set, both must be set
+	if (c.RecordingS3AccessKeyID != "") != (c.RecordingS3SecretAccessKey != "") {
+		errs = append(errs, ValidationError{
+			Field:   "SORTIE_RECORDING_S3_ACCESS_KEY_ID / SORTIE_RECORDING_S3_SECRET_ACCESS_KEY",
+			Message: "both S3 access key ID and secret access key must be set together",
 		})
 	}
 

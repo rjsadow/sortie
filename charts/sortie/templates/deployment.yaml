@@ -51,6 +51,20 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- if and .Values.recording.s3.existingSecret.accessKeyID.name .Values.recording.s3.existingSecret.accessKeyID.key }}
+            - name: SORTIE_RECORDING_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.recording.s3.existingSecret.accessKeyID.name | quote }}
+                  key: {{ .Values.recording.s3.existingSecret.accessKeyID.key | quote }}
+            {{- end }}
+            {{- if and .Values.recording.s3.existingSecret.secretAccessKey.name .Values.recording.s3.existingSecret.secretAccessKey.key }}
+            - name: SORTIE_RECORDING_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.recording.s3.existingSecret.secretAccessKey.name | quote }}
+                  key: {{ .Values.recording.s3.existingSecret.secretAccessKey.key | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:

@@ -148,6 +148,15 @@ recording:
     region: "us-east-1"
     endpoint: ""             # Custom S3 endpoint (MinIO)
     prefix: "recordings/"
+    accessKeyID: ""          # Explicit AWS access key ID (optional)
+    secretAccessKey: ""      # Explicit AWS secret access key (optional)
+    existingSecret:
+      accessKeyID:
+        name: ""             # K8s Secret name containing the access key ID
+        key: ""              # Key within that Secret
+      secretAccessKey:
+        name: ""             # K8s Secret name containing the secret access key
+        key: ""              # Key within that Secret
 
 # Billing/metering configuration
 billing:

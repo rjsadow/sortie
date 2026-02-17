@@ -262,6 +262,8 @@ func main() {
 				appConfig.RecordingS3Region,
 				appConfig.RecordingS3Endpoint,
 				appConfig.RecordingS3Prefix,
+				appConfig.RecordingS3AccessKeyID,
+				appConfig.RecordingS3SecretAccessKey,
 			)
 			if err != nil {
 				slog.Error("failed to initialize S3 recording store", "error", err)

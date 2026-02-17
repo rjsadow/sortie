@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -27,10 +28,17 @@ type S3Store struct {
 
 // NewS3Store creates an S3Store configured from AWS defaults and the given parameters.
 // An empty endpoint uses the standard AWS S3 endpoint; a non-empty endpoint targets
-// MinIO or another S3-compatible service.
-func NewS3Store(bucket, region, endpoint, prefix string) (*S3Store, error) {
+// MinIO or another S3-compatible service. When accessKeyID and secretAccessKey are
+// both non-empty, static credentials are used instead of the default credential chain.
+func NewS3Store(bucket, region, endpoint, prefix, accessKeyID, secretAccessKey string) (*S3Store, error) {
 	opts := []func(*awsconfig.LoadOptions) error{
 		awsconfig.WithRegion(region),
+	}
+
+	if accessKeyID != "" && secretAccessKey != "" {
+		opts = append(opts, awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, ""),
+		))
 	}
 
 	cfg, err := awsconfig.LoadDefaultConfig(context.Background(), opts...)
