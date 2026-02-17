@@ -378,6 +378,112 @@ func TestSSE_StopAndRestartEvents(t *testing.T) {
 	}
 }
 
+func TestSSE_TerminateOneOfMultipleSessions(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	// Create app
+	appBody := []byte(`{"id":"sse-multi-sess","name":"SSE MultiSess","launch_type":"container","container_image":"nginx:latest"}`)
+	resp := testutil.AuthPost(t, ts.URL+"/api/apps", ts.AdminToken, appBody)
+	resp.Body.Close()
+
+	// Connect SSE
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	sseResp, scanner := connectSSE(t, ts, ts.AdminToken, ctx)
+	defer sseResp.Body.Close()
+
+	adminID := getAdminUserID(t, ts)
+
+	// Create two sessions
+	sessBody := []byte(fmt.Sprintf(`{"app_id":"sse-multi-sess","user_id":"%s"}`, adminID))
+	resp = testutil.AuthPost(t, ts.URL+"/api/sessions", ts.AdminToken, sessBody)
+	var sess1 map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&sess1)
+	resp.Body.Close()
+	sess1ID := sess1["id"].(string)
+
+	// Drain session1 created event
+	evt := readNextEvent(scanner)
+	if evt == nil || evt.Type != "session.created" {
+		t.Fatalf("expected session.created for sess1, got %+v", evt)
+	}
+
+	resp = testutil.AuthPost(t, ts.URL+"/api/sessions", ts.AdminToken, sessBody)
+	var sess2 map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&sess2)
+	resp.Body.Close()
+	sess2ID := sess2["id"].(string)
+
+	// Drain session2 created event
+	evt = readNextEvent(scanner)
+	if evt == nil || evt.Type != "session.created" {
+		t.Fatalf("expected session.created for sess2, got %+v", evt)
+	}
+
+	// Wait for both sessions to be running
+	for _, sid := range []string{sess1ID, sess2ID} {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			r := testutil.AuthGet(t, ts.URL+"/api/sessions/"+sid, ts.AdminToken)
+			var s map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&s)
+			r.Body.Close()
+			if s["status"] == "running" {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// Drain ready events for both sessions
+	readNextEvent(scanner) // session.ready for sess1
+	readNextEvent(scanner) // session.ready for sess2
+
+	// Verify both sessions are running via API
+	listResp := testutil.AuthGet(t, ts.URL+"/api/sessions", ts.AdminToken)
+	var sessions []map[string]interface{}
+	json.NewDecoder(listResp.Body).Decode(&sessions)
+	listResp.Body.Close()
+	runningCount := 0
+	for _, s := range sessions {
+		if s["status"] == "running" {
+			runningCount++
+		}
+	}
+	if runningCount != 2 {
+		t.Fatalf("expected 2 running sessions, got %d", runningCount)
+	}
+
+	// Terminate session 1 — should get terminated event, session 2 stays running
+	resp = testutil.AuthDelete(t, ts.URL+"/api/sessions/"+sess1ID, ts.AdminToken)
+	resp.Body.Close()
+
+	evt = readNextEvent(scanner)
+	if evt == nil {
+		t.Fatal("did not receive session.terminated event")
+	}
+	if evt.Type != "session.terminated" {
+		t.Errorf("expected session.terminated, got %q", evt.Type)
+	}
+	if evt.SessionID != sess1ID {
+		t.Errorf("expected terminated session_id %q, got %q", sess1ID, evt.SessionID)
+	}
+
+	// Verify only one session remains running
+	listResp = testutil.AuthGet(t, ts.URL+"/api/sessions", ts.AdminToken)
+	json.NewDecoder(listResp.Body).Decode(&sessions)
+	listResp.Body.Close()
+	runningCount = 0
+	for _, s := range sessions {
+		if s["status"] == "running" {
+			runningCount++
+		}
+	}
+	if runningCount != 1 {
+		t.Errorf("expected 1 running session after termination, got %d", runningCount)
+	}
+}
+
 // getAdminUserID fetches the admin user ID via the /api/auth/me endpoint.
 func getAdminUserID(t *testing.T, ts *testutil.TestServer) string {
 	t.Helper()
