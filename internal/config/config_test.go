@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -1221,6 +1222,60 @@ func TestConfig_DSN_PostgresConstructed(t *testing.T) {
 	want := "postgres://myuser:s3cret@db.example.com:5433/mydb?sslmode=require"
 	if got != want {
 		t.Errorf("DSN() = %v, want %v", got, want)
+	}
+}
+
+func TestConfig_DSN_PostgresPasswordURLEncoding(t *testing.T) {
+	tests := []struct {
+		name         string
+		user         string
+		password     string
+		wantContains []string
+	}{
+		{"at sign in password", "user", "p@ss", []string{"%40"}},
+		{"colon and slash in password", "user", "p:ss/wd", []string{"%3A", "%2F"}},
+		{"percent sign in password", "user", "100%done", []string{"%25"}},
+		{"query chars in password", "user", "p?q=1#f", []string{"%3F", "%23"}},
+		{"at sign in username", "u@ser", "pass", []string{"%40"}},
+		{"simple password unchanged", "user", "s3cret", nil},
+		{"empty password", "user", "", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				DBType:     "postgres",
+				DBHost:     "localhost",
+				DBPort:     5432,
+				DBName:     "testdb",
+				DBUser:     tt.user,
+				DBPassword: tt.password,
+				DBSSLMode:  "disable",
+			}
+
+			got := cfg.DSN()
+
+			for _, sub := range tt.wantContains {
+				if !strings.Contains(got, sub) {
+					t.Errorf("DSN() = %q, want it to contain %q", got, sub)
+				}
+			}
+
+			// Round-trip: parse the DSN and verify credentials survive encoding
+			parsed, err := url.Parse(got)
+			if err != nil {
+				t.Fatalf("DSN() produced unparseable URL %q: %v", got, err)
+			}
+
+			if parsed.User.Username() != tt.user {
+				t.Errorf("parsed username = %q, want %q", parsed.User.Username(), tt.user)
+			}
+
+			gotPass, _ := parsed.User.Password()
+			if gotPass != tt.password {
+				t.Errorf("parsed password = %q, want %q", gotPass, tt.password)
+			}
+		})
 	}
 }
 

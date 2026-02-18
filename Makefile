@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend dev-docs frontend backend deps docs-deps docs kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all test-postgres test-integration-postgres playwright-install test-playwright test-playwright-ui test-playwright-report
+.PHONY: all build clean dev dev-backend dev-frontend dev-docs frontend backend deps docs-deps docs kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all test-postgres test-integration-postgres playwright-install test-playwright test-playwright-ui test-playwright-report test-helm
 
 all: build
 
@@ -144,3 +144,7 @@ test-playwright-ui: build
 
 test-playwright-report:
 	web/node_modules/.bin/playwright show-report web/playwright-report
+
+# Helm chart unit tests (requires helm-unittest plugin)
+test-helm:
+	helm unittest charts/sortie

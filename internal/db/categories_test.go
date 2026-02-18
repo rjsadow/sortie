@@ -499,6 +499,9 @@ func TestMixedVisibilityInCategory(t *testing.T) {
 }
 
 func TestDataMigrationExistingCategories(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific data migration test")
+	}
 	// Simulate the upgrade scenario: a database at baseline (version 1)
 	// with apps, then upgrading to version 2 which creates categories.
 	tmpFile, err := os.CreateTemp("", "test-datamigration-*.db")

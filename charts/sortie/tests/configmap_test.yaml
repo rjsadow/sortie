@@ -1,0 +1,83 @@
+suite: ConfigMap template tests
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: should set SQLite config with no Postgres keys for default SQLite
+    set:
+      database.type: sqlite
+      database.sqlite.path: "/data/sortie.db"
+    asserts:
+      - equal:
+          path: data.SORTIE_DB_TYPE
+          value: "sqlite"
+      - equal:
+          path: data.SORTIE_DB
+          value: "/data/sortie.db"
+      - isNull:
+          path: data.SORTIE_DB_HOST
+      - isNull:
+          path: data.SORTIE_DB_PORT
+      - isNull:
+          path: data.SORTIE_DB_NAME
+      - isNull:
+          path: data.SORTIE_DB_USER
+      - isNull:
+          path: data.SORTIE_DB_SSLMODE
+      - isNull:
+          path: data.SORTIE_DB_DSN
+
+  - it: should set individual Postgres params when no DSN provided
+    set:
+      database.type: postgres
+      database.postgres.host: db.example.com
+      database.postgres.port: 5432
+      database.postgres.database: sortie
+      database.postgres.user: sortie
+      database.postgres.sslMode: disable
+    asserts:
+      - equal:
+          path: data.SORTIE_DB_TYPE
+          value: "postgres"
+      - equal:
+          path: data.SORTIE_DB_HOST
+          value: "db.example.com"
+      - equal:
+          path: data.SORTIE_DB_PORT
+          value: "5432"
+      - equal:
+          path: data.SORTIE_DB_NAME
+          value: "sortie"
+      - equal:
+          path: data.SORTIE_DB_USER
+          value: "sortie"
+      - equal:
+          path: data.SORTIE_DB_SSLMODE
+          value: "disable"
+      - isNull:
+          path: data.SORTIE_DB_DSN
+      - isNull:
+          path: data.SORTIE_DB
+
+  - it: should set DSN and omit individual params when DSN provided
+    set:
+      database.type: postgres
+      database.postgres.dsn: "postgres://user:pass@host:5432/db?sslmode=disable"
+    asserts:
+      - equal:
+          path: data.SORTIE_DB_TYPE
+          value: "postgres"
+      - equal:
+          path: data.SORTIE_DB_DSN
+          value: "postgres://user:pass@host:5432/db?sslmode=disable"
+      - isNull:
+          path: data.SORTIE_DB_HOST
+      - isNull:
+          path: data.SORTIE_DB_PORT
+      - isNull:
+          path: data.SORTIE_DB_NAME
+      - isNull:
+          path: data.SORTIE_DB_USER
+      - isNull:
+          path: data.SORTIE_DB_SSLMODE
+      - isNull:
+          path: data.SORTIE_DB

@@ -25,7 +25,21 @@ Sortie has been deployed to namespace "{{ .Values.namespace }}".
   Readiness: /readyz
   Metrics:   /metrics
 
-{{- if not .Values.persistence.enabled }}
+{{- if eq .Values.database.type "postgres" }}
+
+=== Database: PostgreSQL ===
+
+  Host:     {{ .Values.database.postgres.host }}
+  Port:     {{ .Values.database.postgres.port }}
+  Database: {{ .Values.database.postgres.database }}
+  User:     {{ .Values.database.postgres.user }}
+  SSL Mode: {{ .Values.database.postgres.sslMode }}
+  {{- if .Values.database.postgres.existingSecret }}
+  Password: from Secret "{{ .Values.database.postgres.existingSecret }}"
+  {{- end }}
+{{- end }}
+
+{{- if and (eq .Values.database.type "sqlite") (not .Values.persistence.enabled) }}
 
 === WARNING: Persistence Disabled ===
 

@@ -83,7 +83,8 @@ a single binary. Entry point is `main.go`.
   `BuildWebProxyPodSpec`, `BuildWindowsPodSpec`)
 - `internal/runner/` — Pluggable workload backend
   (Kubernetes, mock for testing)
-- `internal/db/` — SQLite schema, CRUD operations,
+- `internal/db/` — Multi-database support (SQLite +
+  Postgres) via Bun ORM, CRUD operations, golang-migrate
   migrations
 - `internal/recordings/` — Session video recording
   (handler, storage)
@@ -96,10 +97,12 @@ a single binary. Entry point is `main.go`.
 JWT-protected routes (apps, sessions, admin) then SPA
 catch-all. Admin routes use `requireAdmin()` middleware.
 
-**Database:** SQLite via `modernc.org/sqlite` (pure Go, no
-CGO). Migrations in `/migrations/` use
-`ALTER TABLE ADD COLUMN` with error suppression for
-idempotency. Admin settings use a generic key-value store
+**Database:** Supports SQLite (`modernc.org/sqlite`) and
+PostgreSQL via Bun ORM (`github.com/uptrace/bun`).
+Migrations use `golang-migrate` with embedded SQL files per
+dialect in `internal/db/migrations/{sqlite,postgres}/`.
+`SORTIE_DB_TYPE` selects the backend (`sqlite` or
+`postgres`). Admin settings use a generic key-value store
 (`GetSetting`/`SetSetting`).
 
 ### Frontend

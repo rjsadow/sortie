@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -851,9 +852,14 @@ func (c *Config) DSN() string {
 		if c.DBDSN != "" {
 			return c.DBDSN
 		}
-		dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-			c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, c.DBSSLMode)
-		return dsn
+		u := &url.URL{
+			Scheme:   "postgres",
+			User:     url.UserPassword(c.DBUser, c.DBPassword),
+			Host:     fmt.Sprintf("%s:%d", c.DBHost, c.DBPort),
+			Path:     c.DBName,
+			RawQuery: fmt.Sprintf("sslmode=%s", c.DBSSLMode),
+		}
+		return u.String()
 	default:
 		return c.DB
 	}
