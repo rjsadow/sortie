@@ -3,30 +3,17 @@ package guacamole
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 	"github.com/rjsadow/sortie/internal/sessions"
 )
 
 func setupTestDB(t *testing.T) *db.DB {
 	t.Helper()
-	tmpFile, err := os.CreateTemp("", "test-guac-*.db")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	tmpFile.Close()
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
-
-	database, err := db.Open(tmpFile.Name())
-	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
-	}
-	t.Cleanup(func() { database.Close() })
-
-	return database
+	return dbtest.NewTestDB(t)
 }
 
 func setupWindowsApp(t *testing.T, database *db.DB) {

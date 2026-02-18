@@ -12,6 +12,7 @@ import (
 
 	"github.com/rjsadow/sortie/internal/config"
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 	"github.com/rjsadow/sortie/internal/diagnostics"
 	"github.com/rjsadow/sortie/internal/files"
 	"github.com/rjsadow/sortie/internal/plugins"
@@ -87,16 +88,9 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 	// Use fast bcrypt for tests (DefaultCost is ~100x slower under -race).
 	auth.BcryptCost = bcrypt.MinCost
 
-	// 1. Open a temp-file SQLite database.
-	// We cannot use ":memory:" because Go's sql.DB connection pool opens
-	// multiple connections, and each in-memory connection gets its own DB.
-	// The session manager's background goroutines would see empty tables.
+	// 1. Open a test database via dbtest (supports sqlite or postgres).
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-	database, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("failed to open test database: %v", err)
-	}
+	database := dbtest.NewTestDB(t)
 
 	// Wire shared DB into the storage plugin
 	storage.SetDB(database)
@@ -202,11 +196,10 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 	// 10. Pre-generate admin token
 	adminToken := LoginAs(t, ts.URL, TestAdminUsername, TestAdminPassword)
 
-	// 11. Register cleanup
+	// 11. Register cleanup (database.Close() is handled by dbtest)
 	t.Cleanup(func() {
 		ts.Close()
 		sm.Stop()
-		database.Close()
 	})
 
 	return &TestServer{

@@ -1,4 +1,4 @@
-.PHONY: all build clean dev dev-backend dev-frontend dev-docs frontend backend deps docs-deps docs kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all playwright-install test-playwright test-playwright-ui test-playwright-report
+.PHONY: all build clean dev dev-backend dev-frontend dev-docs frontend backend deps docs-deps docs kind kind-windows kind-teardown migrate-up migrate-down migrate-status test test-integration test-e2e test-all test-postgres test-integration-postgres playwright-install test-playwright test-playwright-ui test-playwright-report
 
 all: build
 
@@ -98,6 +98,14 @@ test-integration: frontend
 # Run E2E tests against a live Kind cluster
 test-e2e:
 	go test -v -timeout 10m -count=1 ./tests/e2e/...
+
+# Run Go unit tests against Postgres (requires SORTIE_TEST_POSTGRES_DSN)
+test-postgres:
+	SORTIE_TEST_DB_TYPE=postgres go test -v -race -p 1 -count=1 $$(go list ./... | grep -v /tests/)
+
+# Run API integration tests against Postgres (requires SORTIE_TEST_POSTGRES_DSN)
+test-integration-postgres: frontend
+	SORTIE_TEST_DB_TYPE=postgres go test -v -race -p 1 -timeout 5m -count=1 ./tests/integration/...
 
 # Run unit + integration tests
 test-all: test test-integration

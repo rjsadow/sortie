@@ -11,20 +11,7 @@ import (
 
 func setupTestDB(t *testing.T) *DB {
 	t.Helper()
-	tmpFile, err := os.CreateTemp("", "test-*.db")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	tmpFile.Close()
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
-
-	database, err := Open(tmpFile.Name())
-	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
-	}
-	t.Cleanup(func() { database.Close() })
-
-	return database
+	return newTestDatabase(t)
 }
 
 // --- Database lifecycle tests ---
@@ -104,6 +91,78 @@ func TestPing(t *testing.T) {
 	if err := db.Ping(); err != nil {
 		t.Errorf("Ping() error = %v", err)
 	}
+}
+
+// --- ExecRaw tests ---
+
+func TestExecRaw(t *testing.T) {
+	db := setupTestDB(t)
+
+	t.Run("insert and verify via ORM", func(t *testing.T) {
+		// Use ExecRaw to insert a setting directly
+		_, err := db.ExecRaw("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
+			"exec_raw_key", "exec_raw_value", time.Now())
+		if err != nil {
+			t.Fatalf("ExecRaw INSERT error = %v", err)
+		}
+
+		// Verify via the ORM-based method
+		val, err := db.GetSetting("exec_raw_key")
+		if err != nil {
+			t.Fatalf("GetSetting() error = %v", err)
+		}
+		if val != "exec_raw_value" {
+			t.Errorf("got value = %q, want %q", val, "exec_raw_value")
+		}
+	})
+
+	t.Run("update with parameterized query", func(t *testing.T) {
+		// First create an app via ORM
+		app := Application{
+			ID: "exec-raw-app", Name: "RawApp", Description: "d",
+			URL: "http://x", Icon: "i", Category: "c",
+		}
+		if err := db.CreateApp(app); err != nil {
+			t.Fatalf("CreateApp() error = %v", err)
+		}
+
+		// Update the name using ExecRaw
+		result, err := db.ExecRaw("UPDATE applications SET name = ? WHERE id = ?", "UpdatedRawApp", "exec-raw-app")
+		if err != nil {
+			t.Fatalf("ExecRaw UPDATE error = %v", err)
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			t.Fatalf("RowsAffected() error = %v", err)
+		}
+		if rows != 1 {
+			t.Errorf("got RowsAffected = %d, want 1", rows)
+		}
+
+		// Verify via ORM
+		got, _ := db.GetApp("exec-raw-app")
+		if got == nil || got.Name != "UpdatedRawApp" {
+			t.Errorf("got Name = %v, want UpdatedRawApp", got)
+		}
+	})
+
+	t.Run("returns error for invalid SQL", func(t *testing.T) {
+		_, err := db.ExecRaw("INSERT INTO nonexistent_table (col) VALUES (?)", "val")
+		if err == nil {
+			t.Fatal("expected error for invalid table, got nil")
+		}
+	})
+
+	t.Run("no-op update returns zero rows affected", func(t *testing.T) {
+		result, err := db.ExecRaw("UPDATE applications SET name = ? WHERE id = ?", "x", "does-not-exist")
+		if err != nil {
+			t.Fatalf("ExecRaw() error = %v", err)
+		}
+		rows, _ := result.RowsAffected()
+		if rows != 0 {
+			t.Errorf("got RowsAffected = %d, want 0", rows)
+		}
+	})
 }
 
 // --- Application CRUD tests ---
@@ -1395,7 +1454,7 @@ func TestGetStaleSessions(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	// Force the updated_at to be old
-	db.bun.DB.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, "stale-1")
+	db.ExecRaw("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, "stale-1")
 
 	// Create a fresh session
 	freshTime := time.Now()
@@ -1454,7 +1513,7 @@ func TestGetStaleSessionsExcludesInactiveStatuses(t *testing.T) {
 		if err := db.CreateSession(sess); err != nil {
 			t.Fatalf("CreateSession(%s) error = %v", status, err)
 		}
-		db.bun.DB.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, sess.ID)
+		db.ExecRaw("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, sess.ID)
 	}
 
 	stale, err := db.GetStaleSessions(1 * time.Hour)
@@ -1488,7 +1547,7 @@ func TestGetStaleSessionsPerSessionTimeout(t *testing.T) {
 	if err := db.CreateSession(sess); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
-	db.bun.DB.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", twoMinAgo, "short-timeout")
+	db.ExecRaw("UPDATE sessions SET updated_at = ? WHERE id = ?", twoMinAgo, "short-timeout")
 
 	// With a 1-hour global default, only the per-session timeout should catch it
 	stale, err := db.GetStaleSessions(1 * time.Hour)
