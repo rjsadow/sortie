@@ -6,11 +6,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 	"github.com/rjsadow/sortie/internal/sessions"
 )
 
@@ -199,20 +199,7 @@ func TestIsWebSocketRequest(t *testing.T) {
 // setupTestDBAndManager creates a test database and session manager for integration tests.
 func setupTestDBAndManager(t *testing.T) (*db.DB, *sessions.Manager) {
 	t.Helper()
-
-	tmpFile, err := os.CreateTemp("", "proxy-test-*.db")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	tmpFile.Close()
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
-
-	database, err := db.Open(tmpFile.Name())
-	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
-	}
-	t.Cleanup(func() { database.Close() })
-
+	database := dbtest.NewTestDB(t)
 	mgr := sessions.NewManager(database)
 	return database, mgr
 }

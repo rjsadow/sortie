@@ -2,27 +2,13 @@ package db
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 )
 
 func setupTenantTestDB(t *testing.T) *DB {
 	t.Helper()
-	tmpFile, err := os.CreateTemp("", "tenant-test-*.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpFile.Close()
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
-
-	database, err := Open(tmpFile.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { database.Close() })
-
-	return database
+	return newTestDatabase(t)
 }
 
 func TestDefaultTenantSeeded(t *testing.T) {

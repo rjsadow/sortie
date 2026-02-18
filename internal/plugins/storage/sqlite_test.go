@@ -6,18 +6,13 @@ import (
 	"testing"
 
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 func openTestDB(t *testing.T) *db.DB {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	database, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("failed to open test database: %v", err)
-	}
-	t.Cleanup(func() { database.Close() })
-	return database
+	return dbtest.NewTestDB(t)
 }
 
 func TestSQLiteStorage_Metadata(t *testing.T) {

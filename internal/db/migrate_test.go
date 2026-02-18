@@ -9,6 +9,9 @@ import (
 )
 
 func TestRunMigrations_SQLite(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-migrate-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -76,6 +79,9 @@ func TestRunMigrations_SQLite(t *testing.T) {
 }
 
 func TestHandleMigrationUpgrade_ExistingDB(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-upgrade-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -120,6 +126,9 @@ func TestHandleMigrationUpgrade_ExistingDB(t *testing.T) {
 }
 
 func TestHandleMigrationUpgrade_OldSchemaTable(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-oldschema-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -181,6 +190,9 @@ func TestHandleMigrationUpgrade_OldSchemaTable(t *testing.T) {
 }
 
 func TestHandleMigrationUpgrade_FreshDB(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-fresh-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -208,6 +220,9 @@ func TestHandleMigrationUpgrade_FreshDB(t *testing.T) {
 }
 
 func TestOpenDB_SQLite(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-opendb-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -243,6 +258,9 @@ func TestOpenDB_UnsupportedType(t *testing.T) {
 // TestOpenDB_InMemory exercises the :memory: special-case path in OpenDB
 // which rewrites the DSN to file::memory:?cache=shared.
 func TestOpenDB_InMemory(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	database, err := OpenDB("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB(:memory:) error = %v", err)
@@ -275,6 +293,9 @@ func TestOpenDB_InMemory(t *testing.T) {
 // TestSchemaColumns_Applications verifies that the applications table has all
 // expected columns with correct types and defaults after migration.
 func TestSchemaColumns_Applications(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific schema test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-schema-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -366,6 +387,9 @@ func TestSchemaColumns_Applications(t *testing.T) {
 // TestSchemaColumns_AllTables verifies that every table has the expected column
 // count, catching missing or extra columns from SQL file typos.
 func TestSchemaColumns_AllTables(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific schema test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-allcols-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -413,6 +437,9 @@ func TestSchemaColumns_AllTables(t *testing.T) {
 
 // TestSchemaIndexes verifies that all expected indexes are created.
 func TestSchemaIndexes(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific schema test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-indexes-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -472,6 +499,9 @@ func TestSchemaIndexes(t *testing.T) {
 // TestDefaultTenantSeedIdempotent verifies that running migrations twice
 // does not duplicate the default tenant.
 func TestDefaultTenantSeedIdempotent(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-seedidemp-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -504,6 +534,9 @@ func TestDefaultTenantSeedIdempotent(t *testing.T) {
 
 // TestNewMigrator_SQLite tests the exported NewMigrator function used by the CLI tool.
 func TestNewMigrator_SQLite(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-newmigrator-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -545,6 +578,9 @@ func TestNewMigrator_UnsupportedType(t *testing.T) {
 
 // TestDownMigration verifies the baseline down migration drops all tables.
 func TestDownMigration(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-down-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -602,6 +638,9 @@ func TestDownMigration(t *testing.T) {
 
 // TestUpDownUpCycle verifies that a full up → down → up cycle works cleanly.
 func TestUpDownUpCycle(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-cycle-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -670,6 +709,9 @@ func TestUpDownUpCycle(t *testing.T) {
 // an old database with data and the legacy schema_migrations table,
 // upgrading to golang-migrate with all data preserved.
 func TestEndToEndUpgrade_OldDBWithData(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-e2e-upgrade-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -827,6 +869,9 @@ func TestEndToEndUpgrade_OldDBWithData(t *testing.T) {
 // TestDataMigration_EmptyCategories verifies the data migration does not
 // create categories for apps with empty category strings.
 func TestDataMigration_EmptyCategories(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-emptycat-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -876,6 +921,9 @@ func TestDataMigration_EmptyCategories(t *testing.T) {
 // TestDataMigration_DuplicateCategories verifies that re-running the data
 // migration does not create duplicate categories.
 func TestDataMigration_DuplicateCategories(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific migration test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-dupecat-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -925,6 +973,9 @@ func TestDataMigration_DuplicateCategories(t *testing.T) {
 // TestSchemaColumns_Recordings verifies the recordings table has all expected
 // columns including the video_path column added via later migrations.
 func TestSchemaColumns_Recordings(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific schema test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-reccols-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
@@ -967,6 +1018,9 @@ func TestSchemaColumns_Recordings(t *testing.T) {
 // TestSchemaColumns_Users verifies the users table has auth_provider and
 // tenant-related columns from later migrations.
 func TestSchemaColumns_Users(t *testing.T) {
+	if testDBType() != "sqlite" {
+		t.Skip("SQLite-specific schema test")
+	}
 	tmpFile, err := os.CreateTemp("", "test-usercols-*.db")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)

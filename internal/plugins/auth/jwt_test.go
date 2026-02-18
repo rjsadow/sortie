@@ -7,21 +7,19 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 )
 
 const testSecret = "this-is-a-test-secret-that-is-at-least-32-characters-long"
 
-// setupTestProvider creates a JWTAuthProvider with an in-memory SQLite database.
+// setupTestProvider creates a JWTAuthProvider with a test database.
 func setupTestProvider(t *testing.T) (*JWTAuthProvider, *db.DB) {
 	t.Helper()
 
-	database, err := db.Open(":memory:")
-	if err != nil {
-		t.Fatalf("failed to open test database: %v", err)
-	}
+	database := dbtest.NewTestDB(t)
 
 	provider := NewJWTAuthProvider()
-	err = provider.Initialize(context.Background(), map[string]string{
+	err := provider.Initialize(context.Background(), map[string]string{
 		"jwt_secret":     testSecret,
 		"access_expiry":  "15m",
 		"refresh_expiry": "24h",

@@ -409,6 +409,12 @@ func (db *DB) Ping() error {
 	return db.bun.PingContext(ctx())
 }
 
+// ExecRaw executes a raw SQL query. Bun's NewRaw automatically translates
+// ? placeholders to $1, $2, etc. for Postgres.
+func (db *DB) ExecRaw(query string, args ...any) (sql.Result, error) {
+	return db.bun.NewRaw(query, args...).Exec(ctx())
+}
+
 // SeedFromJSON loads initial apps from a JSON file if the database is empty
 func (db *DB) SeedFromJSON(jsonPath string) error {
 	count, err := db.bun.NewSelect().Model((*Application)(nil)).Count(ctx())

@@ -8,33 +8,20 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/rjsadow/sortie/internal/config"
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 	"github.com/rjsadow/sortie/internal/middleware"
 	"github.com/rjsadow/sortie/internal/plugins"
 )
 
 func setupTestDB(t *testing.T) *db.DB {
 	t.Helper()
-	tmpFile, err := os.CreateTemp("", "rec-handler-test-*.db")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	tmpFile.Close()
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
-
-	database, err := db.Open(tmpFile.Name())
-	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
-	}
-	t.Cleanup(func() { database.Close() })
-
-	return database
+	return dbtest.NewTestDB(t)
 }
 
 func setupTestHandler(t *testing.T) (*Handler, *db.DB, *LocalStore) {

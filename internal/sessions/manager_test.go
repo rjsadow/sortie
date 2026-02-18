@@ -7,18 +7,14 @@ import (
 	"time"
 
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 	"github.com/rjsadow/sortie/internal/runner"
 )
 
-// newTestDB creates an in-memory SQLite database for testing.
+// newTestDB creates a test database using the shared dbtest helper.
 func newTestDB(t *testing.T) *db.DB {
 	t.Helper()
-	database, err := db.Open(":memory:")
-	if err != nil {
-		t.Fatalf("failed to open test database: %v", err)
-	}
-	t.Cleanup(func() { database.Close() })
-	return database
+	return dbtest.NewTestDB(t)
 }
 
 // seedContainerApp inserts a container-type app and returns it.

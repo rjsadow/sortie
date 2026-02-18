@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rjsadow/sortie/internal/db"
+	"github.com/rjsadow/sortie/internal/db/dbtest"
 )
 
 // testOIDCSecret is a dummy secret used only in tests (not a real credential).
@@ -14,12 +15,7 @@ const testOIDCSecret = "test-oidc-dummy-secret-for-unit-tests-only" //nolint:gos
 
 func newTestDB(t *testing.T) *db.DB {
 	t.Helper()
-	database, err := db.Open(":memory:")
-	if err != nil {
-		t.Fatalf("failed to open test database: %v", err)
-	}
-	t.Cleanup(func() { database.Close() })
-	return database
+	return dbtest.NewTestDB(t)
 }
 
 func TestOIDCAuthProvider_Name(t *testing.T) {
