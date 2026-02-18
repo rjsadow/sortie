@@ -227,7 +227,7 @@ func TestOpenDB_SQLite(t *testing.T) {
 
 	// Verify tables were created
 	var count int
-	err = database.conn.QueryRow("SELECT COUNT(*) FROM applications").Scan(&count)
+	err = database.bun.DB.QueryRow("SELECT COUNT(*) FROM applications").Scan(&count)
 	if err != nil {
 		t.Fatalf("applications table not created: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestOpenDB_InMemory(t *testing.T) {
 
 	// Verify tables exist on the in-memory DB
 	var count int
-	if err := database.conn.QueryRow("SELECT COUNT(*) FROM applications").Scan(&count); err != nil {
+	if err := database.bun.DB.QueryRow("SELECT COUNT(*) FROM applications").Scan(&count); err != nil {
 		t.Fatalf("applications table not created on in-memory DB: %v", err)
 	}
 
@@ -297,7 +297,7 @@ func TestSchemaColumns_Applications(t *testing.T) {
 		pk       bool
 	}
 
-	rows, err := database.conn.Query("SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('applications')")
+	rows, err := database.bun.DB.Query("SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('applications')")
 	if err != nil {
 		t.Fatalf("pragma_table_info error: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestSchemaColumns_AllTables(t *testing.T) {
 
 	for table, expected := range expectedColumnCounts {
 		var count int
-		err := database.conn.QueryRow("SELECT COUNT(*) FROM pragma_table_info(?)", table).Scan(&count)
+		err := database.bun.DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info(?)", table).Scan(&count)
 		if err != nil {
 			t.Errorf("pragma_table_info(%q) error: %v", table, err)
 			continue
@@ -447,7 +447,7 @@ func TestSchemaIndexes(t *testing.T) {
 	}
 
 	// Query all indexes from sqlite_master
-	rows, err := database.conn.Query("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'")
+	rows, err := database.bun.DB.Query("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'")
 	if err != nil {
 		t.Fatalf("failed to query indexes: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestDefaultTenantSeedIdempotent(t *testing.T) {
 	defer db2.Close()
 
 	var count int
-	err = db2.conn.QueryRow("SELECT COUNT(*) FROM tenants WHERE id = 'default'").Scan(&count)
+	err = db2.bun.DB.QueryRow("SELECT COUNT(*) FROM tenants WHERE id = 'default'").Scan(&count)
 	if err != nil {
 		t.Fatalf("query error: %v", err)
 	}
@@ -803,7 +803,7 @@ func TestEndToEndUpgrade_OldDBWithData(t *testing.T) {
 	// Verify schema_migrations is in golang-migrate format
 	var version int
 	var dirty bool
-	err = database.conn.QueryRow("SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty)
+	err = database.bun.DB.QueryRow("SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty)
 	if err != nil {
 		t.Fatalf("schema_migrations query error: %v", err)
 	}
@@ -944,7 +944,7 @@ func TestSchemaColumns_Recordings(t *testing.T) {
 		"status", "tenant_id", "created_at", "completed_at", "video_path",
 	}
 
-	rows, err := database.conn.Query("SELECT name FROM pragma_table_info('recordings')")
+	rows, err := database.bun.DB.Query("SELECT name FROM pragma_table_info('recordings')")
 	if err != nil {
 		t.Fatalf("pragma_table_info error: %v", err)
 	}
@@ -987,7 +987,7 @@ func TestSchemaColumns_Users(t *testing.T) {
 		"created_at", "updated_at",
 	}
 
-	rows, err := database.conn.Query("SELECT name FROM pragma_table_info('users')")
+	rows, err := database.bun.DB.Query("SELECT name FROM pragma_table_info('users')")
 	if err != nil {
 		t.Fatalf("pragma_table_info error: %v", err)
 	}

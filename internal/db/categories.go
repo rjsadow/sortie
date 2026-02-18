@@ -15,20 +15,16 @@ func (db *DB) CreateCategory(cat Category) error {
 		cat.TenantID = DefaultTenantID
 	}
 	now := time.Now()
-	_, err := db.conn.Exec(
-		"INSERT INTO categories (id, name, description, tenant_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-		cat.ID, cat.Name, cat.Description, cat.TenantID, now, now,
-	)
+	cat.CreatedAt = now
+	cat.UpdatedAt = now
+	_, err := db.bun.NewInsert().Model(&cat).Exec(ctx())
 	return err
 }
 
 // GetCategory retrieves a category by ID
 func (db *DB) GetCategory(id string) (*Category, error) {
 	var cat Category
-	err := db.conn.QueryRow(
-		"SELECT id, name, description, tenant_id, created_at, updated_at FROM categories WHERE id = ?",
-		id,
-	).Scan(&cat.ID, &cat.Name, &cat.Description, &cat.TenantID, &cat.CreatedAt, &cat.UpdatedAt)
+	err := db.bun.NewSelect().Model(&cat).Where("id = ?", id).Scan(ctx())
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -41,10 +37,7 @@ func (db *DB) GetCategory(id string) (*Category, error) {
 // GetCategoryByName retrieves a category by name
 func (db *DB) GetCategoryByName(name string) (*Category, error) {
 	var cat Category
-	err := db.conn.QueryRow(
-		"SELECT id, name, description, tenant_id, created_at, updated_at FROM categories WHERE name = ?",
-		name,
-	).Scan(&cat.ID, &cat.Name, &cat.Description, &cat.TenantID, &cat.CreatedAt, &cat.UpdatedAt)
+	err := db.bun.NewSelect().Model(&cat).Where("name = ?", name).Scan(ctx())
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -56,35 +49,26 @@ func (db *DB) GetCategoryByName(name string) (*Category, error) {
 
 // ListCategories returns all categories
 func (db *DB) ListCategories() ([]Category, error) {
-	rows, err := db.conn.Query(
-		"SELECT id, name, description, tenant_id, created_at, updated_at FROM categories ORDER BY name",
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanCategories(rows)
+	var cats []Category
+	err := db.bun.NewSelect().Model(&cats).OrderExpr("name").Scan(ctx())
+	return cats, err
 }
 
 // ListCategoriesByTenant returns categories for a specific tenant
 func (db *DB) ListCategoriesByTenant(tenantID string) ([]Category, error) {
-	rows, err := db.conn.Query(
-		"SELECT id, name, description, tenant_id, created_at, updated_at FROM categories WHERE tenant_id = ? ORDER BY name",
-		tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanCategories(rows)
+	var cats []Category
+	err := db.bun.NewSelect().Model(&cats).Where("tenant_id = ?", tenantID).OrderExpr("name").Scan(ctx())
+	return cats, err
 }
 
 // UpdateCategory updates an existing category
 func (db *DB) UpdateCategory(cat Category) error {
-	result, err := db.conn.Exec(
-		"UPDATE categories SET name = ?, description = ?, updated_at = ? WHERE id = ?",
-		cat.Name, cat.Description, time.Now(), cat.ID,
-	)
+	result, err := db.bun.NewUpdate().Model((*Category)(nil)).
+		Set("name = ?", cat.Name).
+		Set("description = ?", cat.Description).
+		Set("updated_at = ?", time.Now()).
+		Where("id = ?", cat.ID).
+		Exec(ctx())
 	if err != nil {
 		return err
 	}
@@ -100,7 +84,7 @@ func (db *DB) UpdateCategory(cat Category) error {
 
 // DeleteCategory removes a category by ID
 func (db *DB) DeleteCategory(id string) error {
-	result, err := db.conn.Exec("DELETE FROM categories WHERE id = ?", id)
+	result, err := db.bun.NewDelete().Model((*Category)(nil)).Where("id = ?", id).Exec(ctx())
 	if err != nil {
 		return err
 	}
@@ -112,8 +96,8 @@ func (db *DB) DeleteCategory(id string) error {
 		return sql.ErrNoRows
 	}
 	// Clean up junction tables
-	db.conn.Exec("DELETE FROM category_admins WHERE category_id = ?", id)
-	db.conn.Exec("DELETE FROM category_approved_users WHERE category_id = ?", id)
+	db.bun.NewDelete().Model((*CategoryAdmin)(nil)).Where("category_id = ?", id).Exec(ctx())
+	db.bun.NewDelete().Model((*CategoryApprovedUser)(nil)).Where("category_id = ?", id).Exec(ctx())
 	return nil
 }
 
@@ -121,19 +105,17 @@ func (db *DB) DeleteCategory(id string) error {
 
 // AddCategoryAdmin adds a user as admin of a category
 func (db *DB) AddCategoryAdmin(categoryID, userID string) error {
-	_, err := db.conn.Exec(
-		"INSERT OR IGNORE INTO category_admins (category_id, user_id) VALUES (?, ?)",
-		categoryID, userID,
-	)
+	admin := CategoryAdmin{CategoryID: categoryID, UserID: userID}
+	_, err := db.bun.NewInsert().Model(&admin).On("CONFLICT DO NOTHING").Exec(ctx())
 	return err
 }
 
 // RemoveCategoryAdmin removes a user as admin of a category
 func (db *DB) RemoveCategoryAdmin(categoryID, userID string) error {
-	result, err := db.conn.Exec(
-		"DELETE FROM category_admins WHERE category_id = ? AND user_id = ?",
-		categoryID, userID,
-	)
+	result, err := db.bun.NewDelete().Model((*CategoryAdmin)(nil)).
+		Where("category_id = ?", categoryID).
+		Where("user_id = ?", userID).
+		Exec(ctx())
 	if err != nil {
 		return err
 	}
@@ -149,57 +131,50 @@ func (db *DB) RemoveCategoryAdmin(categoryID, userID string) error {
 
 // ListCategoryAdmins returns all admin user IDs for a category
 func (db *DB) ListCategoryAdmins(categoryID string) ([]string, error) {
-	rows, err := db.conn.Query(
-		"SELECT user_id FROM category_admins WHERE category_id = ? ORDER BY user_id",
-		categoryID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanStringColumn(rows)
+	var userIDs []string
+	err := db.bun.NewSelect().Model((*CategoryAdmin)(nil)).
+		Column("user_id").
+		Where("category_id = ?", categoryID).
+		OrderExpr("user_id").
+		Scan(ctx(), &userIDs)
+	return userIDs, err
 }
 
 // IsCategoryAdmin checks if a user is an admin of a category
 func (db *DB) IsCategoryAdmin(userID, categoryID string) (bool, error) {
-	var count int
-	err := db.conn.QueryRow(
-		"SELECT COUNT(*) FROM category_admins WHERE category_id = ? AND user_id = ?",
-		categoryID, userID,
-	).Scan(&count)
+	count, err := db.bun.NewSelect().Model((*CategoryAdmin)(nil)).
+		Where("category_id = ?", categoryID).
+		Where("user_id = ?", userID).
+		Count(ctx())
 	return count > 0, err
 }
 
 // GetCategoriesAdminedByUser returns category IDs that a user admins
 func (db *DB) GetCategoriesAdminedByUser(userID string) ([]string, error) {
-	rows, err := db.conn.Query(
-		"SELECT category_id FROM category_admins WHERE user_id = ? ORDER BY category_id",
-		userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanStringColumn(rows)
+	var categoryIDs []string
+	err := db.bun.NewSelect().Model((*CategoryAdmin)(nil)).
+		Column("category_id").
+		Where("user_id = ?", userID).
+		OrderExpr("category_id").
+		Scan(ctx(), &categoryIDs)
+	return categoryIDs, err
 }
 
 // --- Approved user management ---
 
 // AddCategoryApprovedUser adds a user to a category's approved list
 func (db *DB) AddCategoryApprovedUser(categoryID, userID string) error {
-	_, err := db.conn.Exec(
-		"INSERT OR IGNORE INTO category_approved_users (category_id, user_id) VALUES (?, ?)",
-		categoryID, userID,
-	)
+	approved := CategoryApprovedUser{CategoryID: categoryID, UserID: userID}
+	_, err := db.bun.NewInsert().Model(&approved).On("CONFLICT DO NOTHING").Exec(ctx())
 	return err
 }
 
 // RemoveCategoryApprovedUser removes a user from a category's approved list
 func (db *DB) RemoveCategoryApprovedUser(categoryID, userID string) error {
-	result, err := db.conn.Exec(
-		"DELETE FROM category_approved_users WHERE category_id = ? AND user_id = ?",
-		categoryID, userID,
-	)
+	result, err := db.bun.NewDelete().Model((*CategoryApprovedUser)(nil)).
+		Where("category_id = ?", categoryID).
+		Where("user_id = ?", userID).
+		Exec(ctx())
 	if err != nil {
 		return err
 	}
@@ -215,24 +190,21 @@ func (db *DB) RemoveCategoryApprovedUser(categoryID, userID string) error {
 
 // ListCategoryApprovedUsers returns all approved user IDs for a category
 func (db *DB) ListCategoryApprovedUsers(categoryID string) ([]string, error) {
-	rows, err := db.conn.Query(
-		"SELECT user_id FROM category_approved_users WHERE category_id = ? ORDER BY user_id",
-		categoryID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanStringColumn(rows)
+	var userIDs []string
+	err := db.bun.NewSelect().Model((*CategoryApprovedUser)(nil)).
+		Column("user_id").
+		Where("category_id = ?", categoryID).
+		OrderExpr("user_id").
+		Scan(ctx(), &userIDs)
+	return userIDs, err
 }
 
 // IsCategoryApprovedUser checks if a user is approved for a category
 func (db *DB) IsCategoryApprovedUser(userID, categoryID string) (bool, error) {
-	var count int
-	err := db.conn.QueryRow(
-		"SELECT COUNT(*) FROM category_approved_users WHERE category_id = ? AND user_id = ?",
-		categoryID, userID,
-	).Scan(&count)
+	count, err := db.bun.NewSelect().Model((*CategoryApprovedUser)(nil)).
+		Where("category_id = ?", categoryID).
+		Where("user_id = ?", userID).
+		Count(ctx())
 	return count > 0, err
 }
 
@@ -246,7 +218,8 @@ func (db *DB) ListVisibleCategoriesForUser(userID string, userRoles []string, te
 		return db.ListCategoriesByTenant(tenantID)
 	}
 
-	rows, err := db.conn.Query(`
+	var cats []Category
+	err := db.bun.NewRaw(`
 		SELECT DISTINCT c.id, c.name, c.description, c.tenant_id, c.created_at, c.updated_at
 		FROM categories c
 		INNER JOIN applications a ON a.category = c.name AND a.tenant_id = ?
@@ -258,12 +231,8 @@ func (db *DB) ListVisibleCategoriesForUser(userID string, userRoles []string, te
 		     OR (a.visibility = 'admin_only' AND ca.user_id IS NOT NULL))
 		ORDER BY c.name`,
 		tenantID, userID, userID, tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanCategories(rows)
+	).Scan(ctx(), &cats)
+	return cats, err
 }
 
 // ListAppsForUser returns apps filtered by app-level visibility.
@@ -274,7 +243,8 @@ func (db *DB) ListAppsForUser(userID string, userRoles []string, tenantID string
 		return db.ListAppsByTenant(tenantID)
 	}
 
-	rows, err := db.conn.Query(`
+	var apps []Application
+	err := db.bun.NewRaw(`
 		SELECT a.id, a.name, a.description, a.url, a.icon, a.category,
 		       a.visibility, a.launch_type, a.os_type, a.container_image, a.container_port,
 		       a.container_args, a.cpu_request, a.cpu_limit, a.memory_request,
@@ -289,12 +259,8 @@ func (db *DB) ListAppsForUser(userID string, userRoles []string, tenantID string
 		     OR (a.visibility = 'admin_only' AND ca.user_id IS NOT NULL))
 		ORDER BY a.category, a.name`,
 		tenantID, userID, userID, tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanApps(rows)
+	).Scan(ctx(), &apps)
+	return apps, err
 }
 
 // EnsureCategoryExists creates a category for the given name if it doesn't exist.
@@ -321,30 +287,4 @@ func (db *DB) EnsureCategoryExists(name, tenantID string) (string, error) {
 		return "", err
 	}
 	return id, nil
-}
-
-// --- helpers ---
-
-func scanCategories(rows *sql.Rows) ([]Category, error) {
-	var cats []Category
-	for rows.Next() {
-		var cat Category
-		if err := rows.Scan(&cat.ID, &cat.Name, &cat.Description, &cat.TenantID, &cat.CreatedAt, &cat.UpdatedAt); err != nil {
-			return nil, err
-		}
-		cats = append(cats, cat)
-	}
-	return cats, rows.Err()
-}
-
-func scanStringColumn(rows *sql.Rows) ([]string, error) {
-	var result []string
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, err
-		}
-		result = append(result, s)
-	}
-	return result, rows.Err()
 }
