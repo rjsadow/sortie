@@ -7,14 +7,89 @@ and how to manage it across deployments.
 
 Sortie uses a layered persistence strategy:
 
-| Data Type        | Storage                  | Persistence | Survives Restart |
-| ---------------- | ------------------------ | ----------- | ---------------- |
-| User Settings    | Browser localStorage     | Per-browser | Yes (client)     |
-| App Specs        | SQLite database          | Server-side | Yes (with PVC)   |
-| Session Metadata | SQLite + in-memory cache | Server-side | Partial          |
-| Workspace Volume | Kubernetes emptyDir      | Pod-local   | No               |
-| Audit/Analytics  | SQLite database          | Server-side | Yes (with PVC)   |
-| Recordings       | Local filesystem or S3   | Server-side | Yes (with PVC or S3) |
+| Data Type        | Storage                       | Persistence | Survives Restart |
+| ---------------- | ----------------------------- | ----------- | ---------------- |
+| User Settings    | Browser localStorage          | Per-browser | Yes (client)     |
+| App Specs        | SQLite or PostgreSQL           | Server-side | Yes              |
+| Session Metadata | Database + in-memory cache     | Server-side | Partial          |
+| Workspace Volume | Kubernetes emptyDir            | Pod-local   | No               |
+| Audit/Analytics  | SQLite or PostgreSQL           | Server-side | Yes              |
+| Recordings       | Local filesystem or S3         | Server-side | Yes (with PVC or S3) |
+
+## Database Backend
+
+Sortie supports two database backends: **SQLite** (default) and **PostgreSQL**.
+Set the backend via the `SORTIE_DB_TYPE` environment variable.
+
+### SQLite (default)
+
+SQLite is the zero-configuration default. The database is a single file
+created automatically on first run.
+
+```bash
+SORTIE_DB_TYPE=sqlite        # or omit entirely (sqlite is default)
+SORTIE_DB=sortie.db          # file path
+```
+
+SQLite is suitable for single-instance deployments. For multi-replica
+or high-availability setups, use PostgreSQL.
+
+### PostgreSQL
+
+PostgreSQL enables multi-replica deployments, horizontal scaling, and
+standard database tooling for backups and monitoring.
+
+Configure via a full DSN or individual parameters:
+
+```bash
+SORTIE_DB_TYPE=postgres
+
+# Option 1: Full DSN (takes precedence)
+SORTIE_DB_DSN=postgres://sortie:password@db.example.com:5432/sortie?sslmode=require
+
+# Option 2: Individual parameters
+SORTIE_DB_HOST=db.example.com
+SORTIE_DB_PORT=5432
+SORTIE_DB_NAME=sortie
+SORTIE_DB_USER=sortie
+SORTIE_DB_PASSWORD=password
+SORTIE_DB_SSLMODE=require
+```
+
+### Helm Chart Configuration
+
+The Helm chart supports both backends via `values.yaml`:
+
+```yaml
+# SQLite (default)
+database:
+  type: sqlite
+  sqlite:
+    path: "/data/sortie.db"
+
+# PostgreSQL
+database:
+  type: postgres
+  postgres:
+    host: "db.example.com"
+    port: 5432
+    database: "sortie"
+    user: "sortie"
+    password: ""           # or use existingSecret
+    sslMode: "require"
+    # existingSecret: my-pg-secret   # references a K8s Secret with "password" key
+    # dsn: ""                        # full DSN (overrides individual params)
+```
+
+### Migrations
+
+Sortie uses [golang-migrate](https://github.com/golang-migrate/migrate)
+with embedded SQL files for each dialect. Migrations run automatically on
+startup. Each backend has its own migration files in
+`internal/db/migrations/{sqlite,postgres}/`.
+
+When upgrading from a pre-migration database, Sortie detects existing tables
+and baselines the migration version automatically.
 
 ## User Settings
 
@@ -58,7 +133,7 @@ CREATE TABLE user_preferences (
 
 ## App Specs (Application Definitions)
 
-Application metadata is the core data model, stored in SQLite.
+Application metadata is the core data model, stored in the configured database.
 
 ### Schema
 
@@ -344,7 +419,7 @@ CREATE INDEX idx_analytics_timestamp ON analytics(timestamp);
 
 ## Backups
 
-### SQLite Database Backup
+### SQLite Backup
 
 #### Manual Backup
 
@@ -399,6 +474,26 @@ spec:
                 claimName: sortie-backup
           restartPolicy: OnFailure
 ```
+
+### PostgreSQL Backup
+
+For PostgreSQL deployments, use standard `pg_dump` tooling:
+
+```bash
+# Manual backup
+pg_dump -h db.example.com -U sortie -d sortie > sortie-backup-$(date +%Y%m%d).sql
+
+# Compressed backup
+pg_dump -h db.example.com -U sortie -d sortie -Fc > sortie-backup-$(date +%Y%m%d).dump
+
+# Restore
+pg_restore -h db.example.com -U sortie -d sortie --clean sortie-backup.dump
+```
+
+Most managed PostgreSQL services (AWS RDS, Cloud SQL, Azure Database)
+provide automated backups. For self-hosted Postgres, configure
+`pg_dump` via CronJob or use a tool like
+[pgBackRest](https://pgbackrest.org/).
 
 ### Backup Storage
 
@@ -468,7 +563,9 @@ Primary configuration via environment (`.env.example`):
 
 ```bash
 SORTIE_PORT=8080
-SORTIE_DB=sortie.db
+SORTIE_DB_TYPE=sqlite             # or "postgres"
+SORTIE_DB=sortie.db               # SQLite file path
+# SORTIE_DB_DSN=postgres://...    # PostgreSQL connection string
 SORTIE_SEED=examples/apps.json
 SORTIE_CONFIG=branding.json
 SORTIE_NAMESPACE=sortie
@@ -491,20 +588,20 @@ Mounted via ConfigMap in Kubernetes deployments.
 
 ## Summary
 
-| What             | Where                         | How to Backup       |
-| ---------------- | ----------------------------- | ------------------- |
-| User preferences | Browser localStorage          | N/A (client-side)   |
-| Applications     | SQLite `applications` table   | Database backup     |
-| Sessions         | SQLite `sessions` + memory    | DB backup (no live) |
-| Audit logs       | SQLite `audit_log` table      | Database backup     |
-| Analytics        | SQLite `analytics` table      | Database backup     |
-| Branding config  | ConfigMap / JSON file         | GitOps              |
-| Recordings       | Local filesystem or S3        | PVC / S3 replication |
-| K8s manifests    | Git repository                | GitOps              |
+| What             | Where                            | How to Backup          |
+| ---------------- | -------------------------------- | ---------------------- |
+| User preferences | Browser localStorage             | N/A (client-side)      |
+| Applications     | Database `applications` table    | sqlite3 .backup / pg_dump |
+| Sessions         | Database `sessions` + memory     | DB backup (no live)    |
+| Audit logs       | Database `audit_log` table       | Database backup        |
+| Analytics        | Database `analytics` table       | Database backup        |
+| Branding config  | ConfigMap / JSON file            | GitOps                 |
+| Recordings       | Local filesystem or S3           | PVC / S3 replication   |
+| K8s manifests    | Git repository                   | GitOps                 |
 
 For production deployments:
 
-1. Use PersistentVolumeClaim for database storage
-2. Configure automated daily backups
-3. Test restore procedures regularly
-4. Consider PostgreSQL migration for high-availability requirements
+1. **SQLite**: use PersistentVolumeClaim for database storage; limited to single replica
+2. **PostgreSQL**: recommended for multi-replica, HA, and horizontal scaling
+3. Configure automated daily backups (CronJob for SQLite, `pg_dump` or managed backups for Postgres)
+4. Test restore procedures regularly
