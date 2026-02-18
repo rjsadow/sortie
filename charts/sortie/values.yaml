@@ -185,8 +185,8 @@ queue:
   maxSize: 0               # Max queued requests when at capacity (0 = no queueing)
   timeout: "30"            # Per-request queue wait timeout in seconds
 
-# Persistent storage for SQLite database.
-# Required for multi-replica deployments.
+# Persistent storage for SQLite database (ignored when database.type is "postgres").
+# Required for multi-replica deployments with SQLite.
 # Use ReadWriteMany access mode with a shared filesystem (e.g., NFS, CephFS, EFS)
 # when running more than one replica so all pods share the same database.
 persistence:

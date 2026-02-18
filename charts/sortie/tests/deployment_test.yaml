@@ -1,0 +1,86 @@
+suite: Deployment template tests
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should mount data volume with emptyDir for SQLite default
+    set:
+      database.type: sqlite
+      persistence.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir: {}
+
+  - it: should reference PVC for data volume when SQLite with persistence
+    set:
+      database.type: sqlite
+      persistence.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-sortie-data
+
+  - it: should not mount data volume for Postgres but keep tmp volume
+    set:
+      database.type: postgres
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tmp
+            emptyDir: {}
+
+  - it: should inject SORTIE_DB_PASSWORD from existingSecret for Postgres
+    set:
+      database.type: postgres
+      database.postgres.existingSecret: my-pg-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SORTIE_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-pg-secret
+                key: password
+
+  - it: should not inject SORTIE_DB_PASSWORD env when Postgres without existingSecret
+    set:
+      database.type: postgres
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SORTIE_DB_PASSWORD
+
+  - it: should not inject SORTIE_DB_PASSWORD env for SQLite
+    set:
+      database.type: sqlite
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SORTIE_DB_PASSWORD

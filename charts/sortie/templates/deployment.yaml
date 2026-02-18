@@ -65,6 +65,13 @@ spec:
                   name: {{ .Values.recording.s3.existingSecret.secretAccessKey.name | quote }}
                   key: {{ .Values.recording.s3.existingSecret.secretAccessKey.key | quote }}
             {{- end }}
+            {{- if and (eq .Values.database.type "postgres") .Values.database.postgres.existingSecret }}
+            - name: SORTIE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.postgres.existingSecret }}
+                  key: password
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
@@ -90,11 +97,14 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 3
           volumeMounts:
+            {{- if eq .Values.database.type "sqlite" }}
             - name: data
               mountPath: /data
+            {{- end }}
             - name: tmp
               mountPath: /tmp
       volumes:
+        {{- if eq .Values.database.type "sqlite" }}
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
@@ -102,5 +112,6 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- end }}
         - name: tmp
           emptyDir: {}

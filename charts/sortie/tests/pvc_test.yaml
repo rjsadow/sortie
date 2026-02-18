@@ -1,0 +1,38 @@
+suite: PVC template tests
+templates:
+  - templates/pvc.yaml
+tests:
+  - it: should create PVC for SQLite with persistence enabled
+    set:
+      database.type: sqlite
+      persistence.enabled: true
+      persistence.size: 1Gi
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PersistentVolumeClaim
+
+  - it: should not create PVC for SQLite with persistence disabled
+    set:
+      database.type: sqlite
+      persistence.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create PVC for Postgres even with persistence enabled
+    set:
+      database.type: postgres
+      persistence.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create PVC for Postgres with persistence disabled
+    set:
+      database.type: postgres
+      persistence.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
