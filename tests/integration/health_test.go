@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/rjsadow/sortie/internal/plugins"
 	"github.com/rjsadow/sortie/tests/integration/testutil"
 )
 
@@ -73,6 +74,40 @@ func TestHealth_LoadStatus(t *testing.T) {
 	// Should have load_factor field
 	if _, ok := body["load_factor"]; !ok {
 		t.Error("expected load_factor in response")
+	}
+}
+
+func TestHealth_StoragePluginRegistered(t *testing.T) {
+	// NewTestServer calls storage.SetDB(database) which wires the shared DB
+	// into the storage plugin factory. Verify the factory is registered and
+	// produces a healthy plugin in the integration test environment.
+	_ = testutil.NewTestServer(t)
+
+	storagePlugins := plugins.Global().ListPluginsByType(plugins.PluginTypeStorage)
+
+	// The sqlite and memory factories should both be registered via init()
+	found := false
+	for _, p := range storagePlugins {
+		if p.Name == "sqlite" && p.Type == plugins.PluginTypeStorage {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected 'sqlite' storage plugin to be registered in global registry")
+	}
+
+	// Verify the factory produces a plugin with correct metadata.
+	// ListPluginsByType calls factory() internally, exercising the SetDB wiring.
+	for _, p := range storagePlugins {
+		if p.Name == "sqlite" {
+			if p.Version == "" {
+				t.Error("expected sqlite plugin to have a version")
+			}
+			if p.Description == "" {
+				t.Error("expected sqlite plugin to have a description")
+			}
+		}
 	}
 }
 
