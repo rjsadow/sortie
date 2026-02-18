@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -51,112 +50,56 @@ const DefaultTenantID = "default"
 
 // CreateTenant inserts a new tenant
 func (db *DB) CreateTenant(tenant Tenant) error {
-	settingsJSON, err := json.Marshal(tenant.Settings)
-	if err != nil {
-		return fmt.Errorf("failed to marshal settings: %w", err)
-	}
-
-	quotasJSON, err := json.Marshal(tenant.Quotas)
-	if err != nil {
-		return fmt.Errorf("failed to marshal quotas: %w", err)
-	}
-
 	now := time.Now()
-	_, err = db.conn.Exec(
-		"INSERT INTO tenants (id, name, slug, settings, quotas, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		tenant.ID, tenant.Name, tenant.Slug, string(settingsJSON), string(quotasJSON), now, now,
-	)
+	tenant.CreatedAt = now
+	tenant.UpdatedAt = now
+	_, err := db.bun.NewInsert().Model(&tenant).Exec(ctx())
 	return err
 }
 
 // GetTenant retrieves a tenant by ID
 func (db *DB) GetTenant(id string) (*Tenant, error) {
-	return db.scanTenant(
-		"SELECT id, name, slug, settings, quotas, created_at, updated_at FROM tenants WHERE id = ?",
-		id,
-	)
-}
-
-// GetTenantBySlug retrieves a tenant by slug
-func (db *DB) GetTenantBySlug(slug string) (*Tenant, error) {
-	return db.scanTenant(
-		"SELECT id, name, slug, settings, quotas, created_at, updated_at FROM tenants WHERE slug = ?",
-		slug,
-	)
-}
-
-func (db *DB) scanTenant(query string, args ...any) (*Tenant, error) {
 	var t Tenant
-	var settingsJSON, quotasJSON string
-	err := db.conn.QueryRow(query, args...).Scan(
-		&t.ID, &t.Name, &t.Slug, &settingsJSON, &quotasJSON, &t.CreatedAt, &t.UpdatedAt,
-	)
+	err := db.bun.NewSelect().Model(&t).Where("id = ?", id).Scan(ctx())
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	return &t, nil
+}
 
-	if settingsJSON != "" && settingsJSON != "{}" {
-		json.Unmarshal([]byte(settingsJSON), &t.Settings)
+// GetTenantBySlug retrieves a tenant by slug
+func (db *DB) GetTenantBySlug(slug string) (*Tenant, error) {
+	var t Tenant
+	err := db.bun.NewSelect().Model(&t).Where("slug = ?", slug).Scan(ctx())
+	if err == sql.ErrNoRows {
+		return nil, nil
 	}
-	if quotasJSON != "" && quotasJSON != "{}" {
-		json.Unmarshal([]byte(quotasJSON), &t.Quotas)
+	if err != nil {
+		return nil, err
 	}
-
 	return &t, nil
 }
 
 // ListTenants returns all tenants
 func (db *DB) ListTenants() ([]Tenant, error) {
-	rows, err := db.conn.Query(
-		"SELECT id, name, slug, settings, quotas, created_at, updated_at FROM tenants ORDER BY name",
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var tenants []Tenant
-	for rows.Next() {
-		var t Tenant
-		var settingsJSON, quotasJSON string
-		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &settingsJSON, &quotasJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
-			return nil, err
-		}
-		if settingsJSON != "" && settingsJSON != "{}" {
-			json.Unmarshal([]byte(settingsJSON), &t.Settings)
-		}
-		if quotasJSON != "" && quotasJSON != "{}" {
-			json.Unmarshal([]byte(quotasJSON), &t.Quotas)
-		}
-		tenants = append(tenants, t)
-	}
-
-	return tenants, rows.Err()
+	err := db.bun.NewSelect().Model(&tenants).OrderExpr("name").Scan(ctx())
+	return tenants, err
 }
 
 // UpdateTenant updates an existing tenant
 func (db *DB) UpdateTenant(tenant Tenant) error {
-	settingsJSON, err := json.Marshal(tenant.Settings)
-	if err != nil {
-		return fmt.Errorf("failed to marshal settings: %w", err)
-	}
-
-	quotasJSON, err := json.Marshal(tenant.Quotas)
-	if err != nil {
-		return fmt.Errorf("failed to marshal quotas: %w", err)
-	}
-
-	result, err := db.conn.Exec(
-		"UPDATE tenants SET name = ?, slug = ?, settings = ?, quotas = ?, updated_at = ? WHERE id = ?",
-		tenant.Name, tenant.Slug, string(settingsJSON), string(quotasJSON), time.Now(), tenant.ID,
-	)
+	tenant.UpdatedAt = time.Now()
+	result, err := db.bun.NewUpdate().Model(&tenant).
+		Column("name", "slug", "settings", "quotas", "updated_at").
+		WherePK().
+		Exec(ctx())
 	if err != nil {
 		return err
 	}
-
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -173,11 +116,10 @@ func (db *DB) DeleteTenant(id string) error {
 		return fmt.Errorf("cannot delete the default tenant")
 	}
 
-	result, err := db.conn.Exec("DELETE FROM tenants WHERE id = ?", id)
+	result, err := db.bun.NewDelete().Model((*Tenant)(nil)).Where("id = ?", id).Exec(ctx())
 	if err != nil {
 		return err
 	}
-
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -192,103 +134,91 @@ func (db *DB) DeleteTenant(id string) error {
 
 // ListAppsByTenant returns all applications belonging to a tenant
 func (db *DB) ListAppsByTenant(tenantID string) ([]Application, error) {
-	rows, err := db.conn.Query(
-		"SELECT id, name, description, url, icon, category, visibility, launch_type, os_type, container_image, container_port, container_args, cpu_request, cpu_limit, memory_request, memory_limit, egress_policy FROM applications WHERE tenant_id = ? ORDER BY category, name",
-		tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return scanApps(rows)
+	var apps []Application
+	err := db.bun.NewSelect().Model(&apps).
+		Where("tenant_id = ?", tenantID).
+		OrderExpr("category, name").
+		Scan(ctx())
+	return apps, err
 }
 
 // ListUsersByTenant returns all users belonging to a tenant
 func (db *DB) ListUsersByTenant(tenantID string) ([]User, error) {
-	rows, err := db.conn.Query(
-		"SELECT id, username, email, display_name, password_hash, roles, auth_provider, auth_provider_id, tenant_id, tenant_roles, created_at, updated_at FROM users WHERE tenant_id = ? ORDER BY created_at DESC",
-		tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return scanUsers(rows)
+	var users []User
+	err := db.bun.NewSelect().Model(&users).
+		Where("tenant_id = ?", tenantID).
+		OrderExpr("created_at DESC").
+		Scan(ctx())
+	return users, err
 }
 
 // ListSessionsByTenant returns all active sessions belonging to a tenant
 func (db *DB) ListSessionsByTenant(tenantID string) ([]Session, error) {
-	rows, err := db.conn.Query(
-		"SELECT id, user_id, app_id, pod_name, pod_ip, status, idle_timeout, tenant_id, created_at, updated_at FROM sessions WHERE tenant_id = ? AND status NOT IN ('terminated', 'failed') ORDER BY created_at DESC",
-		tenantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return scanSessions(rows)
+	var sessions []Session
+	err := db.bun.NewSelect().Model(&sessions).
+		Where("tenant_id = ?", tenantID).
+		Where("status NOT IN (?, ?)", "terminated", "failed").
+		OrderExpr("created_at DESC").
+		Scan(ctx())
+	return sessions, err
 }
 
 // CountActiveSessionsByTenant returns the number of active sessions for a tenant
 func (db *DB) CountActiveSessionsByTenant(tenantID string) (int, error) {
-	var count int
-	err := db.conn.QueryRow(
-		"SELECT COUNT(*) FROM sessions WHERE tenant_id = ? AND status IN ('creating', 'running')",
-		tenantID,
-	).Scan(&count)
+	count, err := db.bun.NewSelect().Model((*Session)(nil)).
+		Where("tenant_id = ?", tenantID).
+		Where("status IN (?, ?)", "creating", "running").
+		Count(ctx())
 	return count, err
 }
 
 // CountUsersByTenant returns the number of users in a tenant
 func (db *DB) CountUsersByTenant(tenantID string) (int, error) {
-	var count int
-	err := db.conn.QueryRow("SELECT COUNT(*) FROM users WHERE tenant_id = ?", tenantID).Scan(&count)
+	count, err := db.bun.NewSelect().Model((*User)(nil)).
+		Where("tenant_id = ?", tenantID).
+		Count(ctx())
 	return count, err
 }
 
 // CountAppsByTenant returns the number of apps in a tenant
 func (db *DB) CountAppsByTenant(tenantID string) (int, error) {
-	var count int
-	err := db.conn.QueryRow("SELECT COUNT(*) FROM applications WHERE tenant_id = ?", tenantID).Scan(&count)
+	count, err := db.bun.NewSelect().Model((*Application)(nil)).
+		Where("tenant_id = ?", tenantID).
+		Count(ctx())
 	return count, err
 }
 
 // LogAuditWithTenant creates a tenant-scoped audit log entry
 func (db *DB) LogAuditWithTenant(tenantID, user, action, details string) error {
-	_, err := db.conn.Exec(
-		"INSERT INTO audit_log (tenant_id, user, action, details) VALUES (?, ?, ?, ?)",
-		tenantID, user, action, details,
-	)
+	log := AuditLog{
+		TenantID: tenantID,
+		User:     user,
+		Action:   action,
+		Details:  details,
+	}
+	_, err := db.bun.NewInsert().Model(&log).Exec(ctx())
 	return err
 }
 
 // QueryAuditLogsByTenant returns audit logs for a specific tenant
 func (db *DB) QueryAuditLogsByTenant(tenantID string, filter AuditLogFilter) (*AuditLogPage, error) {
-	where := "WHERE tenant_id = ?"
-	args := []any{tenantID}
+	q := db.bun.NewSelect().Model((*AuditLog)(nil)).Where("tenant_id = ?", tenantID)
 
 	if filter.User != "" {
-		where += " AND user = ?"
-		args = append(args, filter.User)
+		q = q.Where("\"user\" = ?", filter.User)
 	}
 	if filter.Action != "" {
-		where += " AND action = ?"
-		args = append(args, filter.Action)
+		q = q.Where("action = ?", filter.Action)
 	}
 	if !filter.From.IsZero() {
-		where += " AND timestamp >= ?"
-		args = append(args, filter.From)
+		q = q.Where("timestamp >= ?", filter.From)
 	}
 	if !filter.To.IsZero() {
-		where += " AND timestamp <= ?"
-		args = append(args, filter.To)
+		q = q.Where("timestamp <= ?", filter.To)
 	}
 
-	var total int
-	if err := db.conn.QueryRow("SELECT COUNT(*) FROM audit_log "+where, args...).Scan(&total); err != nil {
+	total, err := q.Count(ctx())
+	if err != nil {
 		return nil, fmt.Errorf("failed to count audit logs: %w", err)
 	}
 
@@ -298,127 +228,11 @@ func (db *DB) QueryAuditLogsByTenant(tenantID string, filter AuditLogFilter) (*A
 	}
 	offset := max(filter.Offset, 0)
 
-	query := "SELECT id, timestamp, user, action, details FROM audit_log " + where + " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
-	queryArgs := append(args, limit, offset)
-
-	rows, err := db.conn.Query(query, queryArgs...)
+	var logs []AuditLog
+	err = q.OrderExpr("timestamp DESC").Limit(limit).Offset(offset).Scan(ctx(), &logs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query audit logs: %w", err)
 	}
-	defer rows.Close()
-
-	var logs []AuditLog
-	for rows.Next() {
-		var l AuditLog
-		if err := rows.Scan(&l.ID, &l.Timestamp, &l.User, &l.Action, &l.Details); err != nil {
-			return nil, err
-		}
-		logs = append(logs, l)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
 
 	return &AuditLogPage{Logs: logs, Total: total}, nil
-}
-
-// helper to scan application rows (shared between ListApps and ListAppsByTenant)
-func scanApps(rows *sql.Rows) ([]Application, error) {
-	var apps []Application
-	for rows.Next() {
-		var app Application
-		var visibility string
-		var launchType, osType, containerImage string
-		var containerPort int
-		var containerArgsJSON string
-		var cpuRequest, cpuLimit, memoryRequest, memoryLimit string
-		var egressPolicyJSON string
-		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.URL, &app.Icon, &app.Category, &visibility, &launchType, &osType, &containerImage, &containerPort, &containerArgsJSON, &cpuRequest, &cpuLimit, &memoryRequest, &memoryLimit, &egressPolicyJSON); err != nil {
-			return nil, err
-		}
-		app.Visibility = CategoryVisibility(visibility)
-		if app.Visibility == "" {
-			app.Visibility = CategoryVisibilityPublic
-		}
-		app.LaunchType = LaunchType(launchType)
-		if app.LaunchType == "" {
-			app.LaunchType = LaunchTypeURL
-		}
-		app.OsType = osType
-		if app.OsType == "" {
-			app.OsType = "linux"
-		}
-		app.ContainerImage = containerImage
-		app.ContainerPort = containerPort
-		if containerArgsJSON != "" && containerArgsJSON != "[]" {
-			json.Unmarshal([]byte(containerArgsJSON), &app.ContainerArgs)
-		}
-		if cpuRequest != "" || cpuLimit != "" || memoryRequest != "" || memoryLimit != "" {
-			app.ResourceLimits = &ResourceLimits{
-				CPURequest:    cpuRequest,
-				CPULimit:      cpuLimit,
-				MemoryRequest: memoryRequest,
-				MemoryLimit:   memoryLimit,
-			}
-		}
-		if egressPolicyJSON != "" {
-			var ep EgressPolicy
-			if json.Unmarshal([]byte(egressPolicyJSON), &ep) == nil && ep.Mode != "" {
-				app.EgressPolicy = &ep
-			}
-		}
-		apps = append(apps, app)
-	}
-	return apps, rows.Err()
-}
-
-// helper to scan user rows
-func scanUsers(rows *sql.Rows) ([]User, error) {
-	var users []User
-	for rows.Next() {
-		var user User
-		var rolesJSON string
-		var authProvider, authProviderID sql.NullString
-		var tenantID sql.NullString
-		var tenantRolesJSON sql.NullString
-		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.PasswordHash, &rolesJSON, &authProvider, &authProviderID, &tenantID, &tenantRolesJSON, &user.CreatedAt, &user.UpdatedAt); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal([]byte(rolesJSON), &user.Roles); err != nil {
-			user.Roles = []string{"user"}
-		}
-		if authProvider.Valid {
-			user.AuthProvider = authProvider.String
-		}
-		if authProviderID.Valid {
-			user.AuthProviderID = authProviderID.String
-		}
-		if tenantID.Valid {
-			user.TenantID = tenantID.String
-		}
-		if tenantRolesJSON.Valid && tenantRolesJSON.String != "" && tenantRolesJSON.String != "[]" {
-			json.Unmarshal([]byte(tenantRolesJSON.String), &user.TenantRoles)
-		}
-		users = append(users, user)
-	}
-	return users, rows.Err()
-}
-
-// helper to scan session rows
-func scanSessions(rows *sql.Rows) ([]Session, error) {
-	var sessions []Session
-	for rows.Next() {
-		var session Session
-		var status string
-		var tenantID sql.NullString
-		if err := rows.Scan(&session.ID, &session.UserID, &session.AppID, &session.PodName, &session.PodIP, &status, &session.IdleTimeout, &tenantID, &session.CreatedAt, &session.UpdatedAt); err != nil {
-			return nil, err
-		}
-		session.Status = SessionStatus(status)
-		if tenantID.Valid {
-			session.TenantID = tenantID.String
-		}
-		sessions = append(sessions, session)
-	}
-	return sessions, rows.Err()
 }

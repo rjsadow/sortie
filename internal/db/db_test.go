@@ -1395,7 +1395,7 @@ func TestGetStaleSessions(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	// Force the updated_at to be old
-	db.conn.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, "stale-1")
+	db.bun.DB.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, "stale-1")
 
 	// Create a fresh session
 	freshTime := time.Now()
@@ -1454,7 +1454,7 @@ func TestGetStaleSessionsExcludesInactiveStatuses(t *testing.T) {
 		if err := db.CreateSession(sess); err != nil {
 			t.Fatalf("CreateSession(%s) error = %v", status, err)
 		}
-		db.conn.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, sess.ID)
+		db.bun.DB.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", oldTime, sess.ID)
 	}
 
 	stale, err := db.GetStaleSessions(1 * time.Hour)
@@ -1488,7 +1488,7 @@ func TestGetStaleSessionsPerSessionTimeout(t *testing.T) {
 	if err := db.CreateSession(sess); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
-	db.conn.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", twoMinAgo, "short-timeout")
+	db.bun.DB.Exec("UPDATE sessions SET updated_at = ? WHERE id = ?", twoMinAgo, "short-timeout")
 
 	// With a 1-hour global default, only the per-session timeout should catch it
 	stale, err := db.GetStaleSessions(1 * time.Hour)
