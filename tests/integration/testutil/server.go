@@ -16,6 +16,7 @@ import (
 	"github.com/rjsadow/sortie/internal/files"
 	"github.com/rjsadow/sortie/internal/plugins"
 	"github.com/rjsadow/sortie/internal/plugins/auth"
+	"github.com/rjsadow/sortie/internal/plugins/storage"
 	"github.com/rjsadow/sortie/internal/recordings"
 	"github.com/rjsadow/sortie/internal/server"
 	"github.com/rjsadow/sortie/internal/sessions"
@@ -96,6 +97,9 @@ func NewTestServer(t *testing.T, opts ...Option) *TestServer {
 	if err != nil {
 		t.Fatalf("failed to open test database: %v", err)
 	}
+
+	// Wire shared DB into the storage plugin
+	storage.SetDB(database)
 
 	// Suppress noisy log output during tests
 	_ = os.Setenv("SORTIE_LOG_LEVEL", "error")

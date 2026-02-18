@@ -22,6 +22,7 @@ import (
 	"github.com/rjsadow/sortie/internal/k8s"
 	"github.com/rjsadow/sortie/internal/plugins"
 	"github.com/rjsadow/sortie/internal/plugins/auth"
+	"github.com/rjsadow/sortie/internal/plugins/storage"
 	"github.com/rjsadow/sortie/internal/runner"
 	"github.com/rjsadow/sortie/internal/server"
 	"github.com/rjsadow/sortie/internal/sessions"
@@ -74,6 +75,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+
+	// Wire shared DB into the storage plugin before any plugin initialization
+	storage.SetDB(database)
 
 	// Seed from JSON if provided and database is empty
 	if appConfig.Seed != "" {
