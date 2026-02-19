@@ -346,7 +346,7 @@ func TestListExpiredRecordings(t *testing.T) {
 
 	// Backdate exp-old to 31 days ago
 	past := now.Add(-31 * 24 * time.Hour)
-	if _, err := db.bun.DB.Exec("UPDATE recordings SET completed_at = ? WHERE id = ?", past, "exp-old"); err != nil {
+	if _, err := db.ExecRaw("UPDATE recordings SET completed_at = ? WHERE id = ?", past, "exp-old"); err != nil {
 		t.Fatalf("backdate completed_at: %v", err)
 	}
 

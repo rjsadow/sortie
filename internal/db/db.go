@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -415,6 +416,19 @@ func (db *DB) ExecRaw(query string, args ...any) (sql.Result, error) {
 	return db.bun.NewRaw(query, args...).Exec(ctx())
 }
 
+// IsDuplicateKeyError returns true if the error is a unique constraint
+// violation from either SQLite or PostgreSQL.
+func IsDuplicateKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// SQLite: "UNIQUE constraint failed: tablename.column"
+	// Postgres: "duplicate key value violates unique constraint"
+	return strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "duplicate key value violates unique constraint")
+}
+
 // SeedFromJSON loads initial apps from a JSON file if the database is empty
 func (db *DB) SeedFromJSON(jsonPath string) error {
 	count, err := db.bun.NewSelect().Model((*Application)(nil)).Count(ctx())
@@ -448,7 +462,7 @@ func (db *DB) SeedFromJSON(jsonPath string) error {
 // ListApps returns all applications
 func (db *DB) ListApps() ([]Application, error) {
 	var apps []Application
-	err := db.bun.NewSelect().Model(&apps).OrderExpr("category, name").Scan(ctx())
+	err := db.bun.NewSelect().Model(&apps).OrderExpr("LOWER(category), LOWER(name)").Scan(ctx())
 	return apps, err
 }
 
@@ -636,7 +650,7 @@ func (db *DB) GetAnalyticsStats() (*AnalyticsStats, error) {
 		SELECT a.app_id, COALESCE(ap.name, a.app_id) as app_name, COUNT(*) as launch_count
 		FROM analytics a
 		LEFT JOIN applications ap ON a.app_id = ap.id
-		GROUP BY a.app_id
+		GROUP BY a.app_id, ap.name
 		ORDER BY launch_count DESC
 	`).Scan(ctx(), &appStats)
 	if err != nil {

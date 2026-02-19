@@ -649,7 +649,7 @@ func (h *handlers) handleApps(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.app.DB.CreateApp(app); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if db.IsDuplicateKeyError(err) {
 				http.Error(w, "Application with this ID already exists", http.StatusConflict)
 				return
 			}
@@ -857,7 +857,7 @@ func (h *handlers) handleAppSpecs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.app.DB.CreateAppSpec(spec); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if db.IsDuplicateKeyError(err) {
 				http.Error(w, "AppSpec with this ID already exists", http.StatusConflict)
 				return
 			}
@@ -2209,7 +2209,7 @@ func (h *handlers) handleAdminTemplates(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if err := h.app.DB.CreateTemplate(template); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if db.IsDuplicateKeyError(err) {
 				http.Error(w, "Template with this ID already exists", http.StatusConflict)
 				return
 			}
@@ -2644,7 +2644,7 @@ func (h *handlers) handleCategories(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.app.DB.CreateCategory(cat); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if db.IsDuplicateKeyError(err) {
 				http.Error(w, "Category with this name already exists", http.StatusConflict)
 				return
 			}

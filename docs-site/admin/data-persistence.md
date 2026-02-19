@@ -601,7 +601,7 @@ Mounted via ConfigMap in Kubernetes deployments.
 
 For production deployments:
 
-1. **SQLite**: use PersistentVolumeClaim for database storage; limited to single replica
-2. **PostgreSQL**: recommended for multi-replica, HA, and horizontal scaling
-3. Configure automated daily backups (CronJob for SQLite, `pg_dump` or managed backups for Postgres)
+1. **SQLite**: use a PVC for database storage (single replica only)
+2. **PostgreSQL**: recommended for multi-replica and HA
+3. Configure automated daily backups
 4. Test restore procedures regularly
