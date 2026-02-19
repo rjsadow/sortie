@@ -8,7 +8,7 @@ configuration using Kubernetes.
 - Kubernetes cluster (1.21+)
 - kubectl configured
 - Container registry access
-- Persistent volume provisioner (for SQLite storage)
+- Persistent volume provisioner (for SQLite storage), or a PostgreSQL instance
 
 ## Building the Container Image
 
@@ -209,14 +209,69 @@ kubectl apply -f ingress.yaml
 
 ## High Availability Considerations
 
-### SQLite Limitations
+### Choosing a Database Backend
 
-SQLite is suitable for single-instance deployments. For true HA with
-multiple replicas, consider:
+Sortie supports SQLite and PostgreSQL. Choose based on your scaling needs:
 
-1. **PostgreSQL Migration**: Replace SQLite with PostgreSQL for multi-replica support
-2. **Read Replicas**: Use SQLite with read replicas (Litestream) for read scaling
-3. **Shared Storage**: Use a shared filesystem (NFS, EFS) with file locking
+| Criteria           | SQLite                        | PostgreSQL                    |
+| ------------------ | ----------------------------- | ----------------------------- |
+| Setup complexity   | Zero config (file-based)      | Requires a Postgres instance  |
+| Replicas           | Single instance only           | Multiple replicas supported   |
+| Backups            | sqlite3 `.backup` / Litestream | pg_dump / managed backups     |
+| Best for           | Dev, single-node, small teams  | Production, HA, scaling       |
+
+### Deploying with PostgreSQL
+
+Set `SORTIE_DB_TYPE=postgres` and provide connection parameters. With the
+Helm chart:
+
+```yaml
+# values.yaml
+database:
+  type: postgres
+  postgres:
+    host: "db.example.com"
+    port: 5432
+    database: "sortie"
+    user: "sortie"
+    sslMode: "require"
+    existingSecret: sortie-pg-password  # K8s Secret with "password" key
+```
+
+Create the password Secret:
+
+```bash
+kubectl create secret generic sortie-pg-password \
+  --namespace sortie \
+  --from-literal=password='your-secure-password'
+```
+
+Deploy:
+
+```bash
+helm upgrade --install sortie charts/sortie \
+  --namespace sortie --create-namespace \
+  -f values.yaml
+```
+
+When using PostgreSQL, the PVC for SQLite storage is automatically
+skipped, and `replicaCount` can be increased for horizontal scaling.
+
+### SQLite with Persistence
+
+For single-instance SQLite deployments, enable persistence to survive
+pod restarts:
+
+```yaml
+database:
+  type: sqlite
+  sqlite:
+    path: "/data/sortie.db"
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: standard
+```
 
 ### Load Balancing
 
@@ -267,7 +322,7 @@ spec:
 
 ### Horizontal Pod Autoscaler
 
-For automatic scaling (requires PostgreSQL for multi-replica):
+For automatic scaling (requires PostgreSQL — see above):
 
 ```yaml
 # hpa.yaml
@@ -324,20 +379,27 @@ Configure centralized logging:
 
 ## Backup and Recovery
 
-### Database Backup
+### SQLite Backup
 
 ```bash
-# Backup SQLite database
 kubectl exec -n sortie deployment/sortie -- \
   sqlite3 /data/sortie.db ".backup '/data/backup.db'"
 
-# Copy backup locally
 kubectl cp sortie/sortie-pod:/data/backup.db ./backup.db
 ```
 
+### PostgreSQL Backup
+
+```bash
+pg_dump -h db.example.com -U sortie -d sortie -Fc > sortie-backup.dump
+```
+
+For managed PostgreSQL (RDS, Cloud SQL), use the provider's automated
+backup and point-in-time recovery features.
+
 ### Disaster Recovery
 
-1. Regular PVC snapshots (if supported by storage class)
+1. Regular PVC snapshots (SQLite) or managed DB backups (PostgreSQL)
 2. Off-cluster backup of database
 3. GitOps for manifest recovery
 

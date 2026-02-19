@@ -1,9 +1,12 @@
 package db
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
+
+	_ "github.com/lib/pq"
 )
 
 // testDBType returns the configured test database type (default: "sqlite").
@@ -77,6 +80,59 @@ func truncateAllTables(t *testing.T, database *DB) {
 	if err != nil {
 		t.Fatalf("failed to re-seed default tenant: %v", err)
 	}
+}
+
+// testPostgresDSN returns the Postgres DSN from SORTIE_TEST_POSTGRES_DSN
+// or skips the test if not set.
+func testPostgresDSN(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("SORTIE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("SORTIE_TEST_POSTGRES_DSN not set; skipping Postgres test")
+	}
+	return dsn
+}
+
+// resetPostgresDB drops ALL tables in the public schema including schema_migrations.
+// Unlike truncateAllTables (which preserves table structures), this produces a
+// completely empty database — required by migration tests that need to test
+// table creation from scratch.
+func resetPostgresDB(t *testing.T, dsn string) {
+	t.Helper()
+
+	conn, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("resetPostgresDB: failed to open connection: %v", err)
+	}
+	defer conn.Close()
+
+	_, err = conn.Exec(`
+		DO $$ DECLARE
+			r RECORD;
+		BEGIN
+			FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+				EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+			END LOOP;
+		END $$;
+	`)
+	if err != nil {
+		t.Fatalf("resetPostgresDB: failed to drop tables: %v", err)
+	}
+}
+
+// openRawPostgresConn opens a raw *sql.DB (not Bun-wrapped) for Postgres.
+// The connection is closed automatically via t.Cleanup.
+// This is needed for tests that call handleMigrationUpgrade() directly
+// before OpenDB has been called.
+func openRawPostgresConn(t *testing.T, dsn string) *sql.DB {
+	t.Helper()
+
+	conn, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("openRawPostgresConn: failed to open: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }
 
 // --- Tests for the test helper infrastructure itself ---

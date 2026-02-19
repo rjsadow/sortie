@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -309,12 +310,14 @@ func TestApplicationCRUD(t *testing.T) {
 		if len(apps) < 2 {
 			t.Fatalf("ListApps() returned %d apps, want >= 2", len(apps))
 		}
-		// Verify sorting: category ascending, then name ascending
+		// Verify case-insensitive sorting: category ascending, then name ascending
 		for i := 1; i < len(apps); i++ {
-			if apps[i].Category < apps[i-1].Category {
+			catCur := strings.ToLower(apps[i].Category)
+			catPrev := strings.ToLower(apps[i-1].Category)
+			if catCur < catPrev {
 				t.Errorf("apps not sorted by category: %s < %s", apps[i].Category, apps[i-1].Category)
 			}
-			if apps[i].Category == apps[i-1].Category && apps[i].Name < apps[i-1].Name {
+			if catCur == catPrev && strings.ToLower(apps[i].Name) < strings.ToLower(apps[i-1].Name) {
 				t.Errorf("apps not sorted by name within category: %s < %s", apps[i].Name, apps[i-1].Name)
 			}
 		}
@@ -503,6 +506,9 @@ func TestAnalytics(t *testing.T) {
 	})
 
 	t.Run("analytics for deleted app uses app_id as name", func(t *testing.T) {
+		if testDBType() == "postgres" {
+			t.Skip("Postgres FK constraint prevents orphaned analytics rows; COALESCE fallback is defensive for SQLite only")
+		}
 		freshDB := setupTestDB(t)
 		// Record launch for app that doesn't exist in applications table
 		if err := freshDB.RecordLaunch("deleted-app"); err != nil {

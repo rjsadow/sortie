@@ -6,7 +6,7 @@ This guide covers setting up and running Sortie for local development.
 
 | Tool    | Version | Check Command       |
 |---------|---------|---------------------|
-| Go      | 1.24+   | `go version`        |
+| Go      | 1.25+   | `go version`        |
 | Node.js | 22+     | `node --version`    |
 | npm     | 10+     | `npm --version`     |
 | Make    | any     | `make --version`    |
@@ -26,11 +26,11 @@ This starts both the backend and frontend servers with a single command.
 
 ## Port Reference
 
-| Service  | Port | URL                       | Description                    |
-|----------|------|---------------------------|--------------------------------|
-| Frontend | 5173 | `http://localhost:5173`   | Vite dev server with HMR       |
-| Backend  | 8080 | `http://localhost:8080`   | Go API server                  |
-| Database | -    | `./sortie.db`          | SQLite file (created on start) |
+| Service  | Port | URL                       | Description                        |
+|----------|------|---------------------------|------------------------------------|
+| Frontend | 5173 | `http://localhost:5173`   | Vite dev server with HMR           |
+| Backend  | 8080 | `http://localhost:8080`   | Go API server                      |
+| Database | -    | `./sortie.db`          | SQLite file (default) or PostgreSQL |
 
 **Use `http://localhost:5173`** for development. The Vite dev server proxies
 API requests (`/api/*`, `/ws/*`, `/apps.json`) to the backend automatically.
@@ -107,8 +107,35 @@ sortie/
 
 ## Database
 
-Sortie uses SQLite for persistence. The database file (`sortie.db`)
-is created automatically on first run in the current directory.
+Sortie supports **SQLite** (default) and **PostgreSQL** as database backends.
+
+### SQLite (default)
+
+The database file (`sortie.db`) is created automatically on first run:
+
+```bash
+make dev   # uses SQLite by default
+```
+
+Reset: `rm sortie.db && make dev`
+
+### PostgreSQL (local development)
+
+Start a local Postgres instance and point Sortie at it:
+
+```bash
+# Start Postgres via Docker
+docker run --rm -d --name sortie-pg \
+  -e POSTGRES_USER=sortie -e POSTGRES_PASSWORD=sortie -e POSTGRES_DB=sortie \
+  -p 5432:5432 postgres:16
+
+# Run Sortie with Postgres
+export SORTIE_DB_TYPE=postgres
+export SORTIE_DB_DSN='postgres://sortie:sortie@localhost:5432/sortie?sslmode=disable'
+make dev
+```
+
+Migrations run automatically on startup for both backends.
 
 ### Seeding Data
 
@@ -118,11 +145,56 @@ is created automatically on first run in the current directory.
 
 Or during development, the sample apps are loaded automatically.
 
-### Reset Database
+## Testing
+
+### Go Tests
 
 ```bash
-rm sortie.db
-make dev
+make test               # Unit tests (SQLite, excludes /tests/ directory)
+make test-integration   # API integration tests with mock runner
+make test-all           # Unit + integration combined
+```
+
+### Running Tests Against PostgreSQL
+
+All Go tests support dual-backend execution. Set environment variables
+to run against Postgres instead of SQLite:
+
+```bash
+# Start a local Postgres (if not already running)
+docker run --rm -d --name sortie-test-pg \
+  -e POSTGRES_USER=sortie_test -e POSTGRES_PASSWORD=sortie_test \
+  -e POSTGRES_DB=sortie_test -p 5432:5432 postgres:16
+
+# Run unit tests against Postgres
+SORTIE_TEST_DB_TYPE=postgres \
+SORTIE_TEST_POSTGRES_DSN='postgres://sortie_test:sortie_test@localhost:5432/sortie_test?sslmode=disable' \
+  go test -v -race -p 1 -count=1 ./internal/db/...
+
+# Run integration tests against Postgres
+SORTIE_TEST_DB_TYPE=postgres \
+SORTIE_TEST_POSTGRES_DSN='postgres://sortie_test:sortie_test@localhost:5432/sortie_test?sslmode=disable' \
+  go test -v -race -p 1 -count=1 -timeout 5m ./tests/integration/...
+```
+
+The `-p 1` flag is required for Postgres tests since they share a
+single database instance and must run serially.
+
+Without `SORTIE_TEST_POSTGRES_DSN`, all Postgres-specific tests
+automatically skip.
+
+### Playwright E2E Tests
+
+```bash
+make test-playwright    # Browser E2E tests (port 3847, mock runner)
+```
+
+### Linting
+
+```bash
+make lint                           # Frontend ESLint
+npx --prefix web tsc -b --noEmit    # TypeScript type checking
+golangci-lint run ./...             # Go linting
 ```
 
 ## API Endpoints
@@ -172,10 +244,17 @@ don't appear:
 
 ### Database issues
 
-Reset the database:
+For SQLite, reset by deleting the file:
 
 ```bash
 rm sortie.db
 ```
 
-The database is recreated on next server start.
+For PostgreSQL, drop and recreate the database:
+
+```bash
+dropdb -h localhost -U sortie_test sortie_test
+createdb -h localhost -U sortie_test sortie_test
+```
+
+The schema is recreated automatically on next server start.

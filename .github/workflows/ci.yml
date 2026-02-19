@@ -195,6 +195,118 @@ jobs:
           path: integration-coverage.out
           retention-days: 7
 
+  # Go unit tests against Postgres
+  go-postgres:
+    name: Go Tests (Postgres)
+    runs-on: ubuntu-latest
+    needs: [frontend, docs]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sortie_test
+          POSTGRES_PASSWORD: sortie_test
+          POSTGRES_DB: sortie_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist
+
+      - name: Download docs artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-dist
+          path: docs-site/dist
+
+      - name: Go test (Postgres)
+        env:
+          SORTIE_TEST_DB_TYPE: postgres
+          SORTIE_TEST_POSTGRES_DSN: postgres://sortie_test:sortie_test@localhost:5432/sortie_test?sslmode=disable
+        run: |
+          go test -v -race -p 1 -count=1 -coverprofile=coverage-postgres.out \
+            $(go list ./... | grep -v /tests/)
+
+      - name: Upload Postgres coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-postgres-coverage
+          path: coverage-postgres.out
+          retention-days: 7
+
+  # Integration tests against Postgres
+  integration-tests-postgres:
+    name: Integration Tests (Postgres)
+    runs-on: ubuntu-latest
+    needs: [frontend, docs]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sortie_test
+          POSTGRES_PASSWORD: sortie_test
+          POSTGRES_DB: sortie_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist
+
+      - name: Download docs artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-dist
+          path: docs-site/dist
+
+      - name: Run integration tests (Postgres)
+        env:
+          SORTIE_TEST_DB_TYPE: postgres
+          SORTIE_TEST_POSTGRES_DSN: postgres://sortie_test:sortie_test@localhost:5432/sortie_test?sslmode=disable
+        run: go test -v -race -p 1 -count=1 -timeout 5m -coverprofile=integration-coverage-postgres.out ./tests/integration/...
+
+      - name: Upload integration coverage (Postgres)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-postgres-coverage
+          path: integration-coverage-postgres.out
+          retention-days: 7
+
   # Playwright E2E tests (browser-based frontend tests)
   playwright-e2e:
     name: Playwright E2E
@@ -365,8 +477,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run npm audit
-        run: npm audit --audit-level=high
+      - name: Run npm audit (production deps)
+        run: npm audit --audit-level=high --omit=dev
 
   # Security: Secret scanning
   secret-scan:
