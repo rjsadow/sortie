@@ -138,5 +138,5 @@ curl -X POST /api/sessions/shares/join \
   -d '{"token": "share-token-value"}'
 ```
 
-See the [API Reference](/developer/api-reference) for the complete
+See the [API Reference](../developer/api-reference.md) for the complete
 endpoint listing.

@@ -10,9 +10,6 @@ exclude = [
     "example\\.com",
     # Placeholder CDN URLs
     "your-cdn\\.com",
-    # VitePress root-relative links (/guide/foo, /admin/bar, etc.)
-    # These are validated by the VitePress build (Docs Build CI job).
-    "^/[a-zA-Z]",
 ]
 
 # Don't check links in code blocks

@@ -44,4 +44,4 @@ recordings can be deleted but not downloaded.
 
 Your administrator controls where recordings are stored and how long they
 are kept. Recordings may be automatically deleted after a retention period.
-See the [admin recording guide](/admin/recording) for configuration details.
+See the [admin recording guide](../admin/recording.md) for configuration details.
