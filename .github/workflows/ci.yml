@@ -522,9 +522,6 @@ jobs:
       - name: Check links
         uses: lycheeverse/lychee-action@v2
         with:
-          # Root-relative VitePress links (/guide/foo) are validated by the
-          # Docs Build job. Lychee only checks external URLs in docs-site
-          # and all links in top-level markdown files.
-          args: --no-progress --exclude localhost --scheme https --scheme http 'docs-site/**/*.md' '*.md'
+          args: --no-progress 'docs-site/**/*.md' '*.md'
           fail: true
           failIfEmpty: false
