@@ -24,7 +24,7 @@ calls to the backend automatically.
 
 ## Project Structure
 
-```
+```text
 main.go              Server entry point
 internal/            Go backend packages
 web/                 React frontend (Vite + TypeScript)
