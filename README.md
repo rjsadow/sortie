@@ -1,6 +1,7 @@
 # Sortie
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-rjsadow.github.io%2Fsortie-blue)](https://rjsadow.github.io/sortie/)
 
 A self-hosted application launcher that gives your organization
 one portal to access every internal tool. Users browse a catalog,
@@ -129,15 +130,16 @@ deploy/              Kubernetes manifests and Kind config
 
 ## Documentation
 
-Full documentation is available at `/docs/` when running Sortie, or browse
-the source in [`docs-site/`](docs-site/).
+**[https://rjsadow.github.io/sortie/](https://rjsadow.github.io/sortie/)**
 
-- [Getting Started](docs-site/guide/index.md)
-- [Development Guide](docs-site/developer/development.md)
-- [Kubernetes Deployment](docs-site/admin/kubernetes.md)
-- [Reverse Proxy Setup](docs-site/admin/reverse-proxy.md)
+Full documentation is also available at `/docs/` when running Sortie.
+
+- [Getting Started](https://rjsadow.github.io/sortie/guide/)
+- [Development Guide](https://rjsadow.github.io/sortie/developer/development)
+- [Kubernetes Deployment](https://rjsadow.github.io/sortie/admin/kubernetes)
+- [Reverse Proxy Setup](https://rjsadow.github.io/sortie/admin/reverse-proxy)
   (NGINX, Traefik, Caddy)
-- [Data Persistence & Backup](docs-site/admin/data-persistence.md)
-- [Disaster Recovery](docs-site/admin/disaster-recovery.md)
-- [Plugin System](docs-site/developer/plugin-system.md)
-- [Template Marketplace](docs-site/guide/templates.md)
+- [Data Persistence & Backup](https://rjsadow.github.io/sortie/admin/data-persistence)
+- [Disaster Recovery](https://rjsadow.github.io/sortie/admin/disaster-recovery)
+- [Plugin System](https://rjsadow.github.io/sortie/developer/plugin-system)
+- [Template Marketplace](https://rjsadow.github.io/sortie/guide/templates)
