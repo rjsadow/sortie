@@ -65,7 +65,7 @@ body:
         - "Kubernetes (Kind)"
         - "Kubernetes (Helm)"
         - "Other"
-      default: "Local (make dev)"
+      default: 0
     validations:
       required: true
 
