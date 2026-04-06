@@ -1,5 +1,7 @@
 # Sortie
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 A self-hosted application launcher that gives your organization
 one portal to access every internal tool. Users browse a catalog,
 click launch, and get a running desktop app streamed to their
