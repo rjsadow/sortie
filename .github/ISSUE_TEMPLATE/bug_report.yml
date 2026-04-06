@@ -1,5 +1,5 @@
-name: Bug Report
-description: File a bug report to help us improve Sortie
+name: "Bug Report"
+description: "File a bug report to help us improve Sortie"
 title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
@@ -12,17 +12,17 @@ body:
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: A clear and concise description of what the bug is.
-      placeholder: Tell us what you see...
+      label: "Description"
+      description: "A clear and concise description of what the bug is."
+      placeholder: "Tell us what you see..."
     validations:
       required: true
 
   - type: textarea
     id: steps-to-reproduce
     attributes:
-      label: Steps to reproduce
-      description: How do you trigger this bug?
+      label: "Steps to reproduce"
+      description: "How do you trigger this bug?"
       placeholder: |
         1. Go to ...
         2. Click on Launch for app ...
@@ -33,74 +33,74 @@ body:
   - type: textarea
     id: expected-behavior
     attributes:
-      label: Expected behavior
-      description: What did you expect to happen?
+      label: "Expected behavior"
+      description: "What did you expect to happen?"
     validations:
       required: true
 
   - type: textarea
     id: actual-behavior
     attributes:
-      label: Actual behavior
-      description: What actually happened?
+      label: "Actual behavior"
+      description: "What actually happened?"
     validations:
       required: true
 
   - type: input
     id: sortie-version
     attributes:
-      label: Sortie Version
-      description: Commit hash, tag, or sortie version output
+      label: "Sortie Version"
+      description: "Commit hash, tag, or sortie version output"
     validations:
       required: true
 
   - type: dropdown
     id: deployment-method
     attributes:
-      label: Deployment Method
-      description: How did you deploy Sortie?
+      label: "Deployment Method"
+      description: "How did you deploy Sortie?"
       options:
-        - Local (make dev)
-        - Docker
-        - Kubernetes (Kind)
-        - Kubernetes (Helm)
-        - Other
-      default: Local (make dev)
+        - "Local (make dev)"
+        - "Docker"
+        - "Kubernetes (Kind)"
+        - "Kubernetes (Helm)"
+        - "Other"
+      default: "Local (make dev)"
     validations:
       required: true
 
   - type: input
     id: host-os
     attributes:
-      label: Host OS
-      description: OS where Sortie backend or K8s cluster runs
-      placeholder: e.g. Ubuntu 22.04, macOS 14, Windows 11
+      label: "Host OS"
+      description: "OS where Sortie backend or K8s cluster runs"
+      placeholder: "e.g. Ubuntu 22.04, macOS 14, Windows 11"
 
   - type: input
     id: client-browser
     attributes:
-      label: Client Browser
-      description: Browser used to access Sortie
-      placeholder: e.g. Chrome 124, Firefox 125
+      label: "Client Browser"
+      description: "Browser used to access Sortie"
+      placeholder: "e.g. Chrome 124, Firefox 125"
 
   - type: input
     id: k8s-version
     attributes:
-      label: Kubernetes Version
-      description: Output of kubectl version --short or kind version
+      label: "Kubernetes Version"
+      description: "Output of kubectl version --short or kind version"
 
   - type: textarea
     id: logs
     attributes:
-      label: Relevant log output
-      description: Paste backend, browser console, or kubectl logs
+      label: "Relevant log output"
+      description: "Paste backend, browser console, or kubectl logs"
       render: shell
 
   - type: checkboxes
     id: terms
     attributes:
-      label: Code of Conduct
-      description: By submitting this issue, you agree to follow this project Code of Conduct
+      label: "Code of Conduct"
+      description: "By submitting this issue, you agree to follow this project Code of Conduct"
       options:
-        - label: I agree to follow this projects Code of Conduct
+        - label: "I agree to follow this projects Code of Conduct"
           required: true
