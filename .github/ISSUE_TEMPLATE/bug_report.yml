@@ -1,31 +1,31 @@
 name: Bug Report
-description: File a bug report to help us improve sortie
+description: File a bug report to help us improve Sortie
 title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
-      value:  |
+      value: |
         Thanks for taking the time to fill out this bug report!
-        Please include as much detail as possible to help us reproduce and fix the issue.
+        Please include as much detail as possible to help us reproduce the issue.
 
   - type: textarea
     id: description
     attributes:
       label: Description
       description: A clear and concise description of what the bug is.
-      placeholder: Tell us what the bug is.
+      placeholder: Tell us what you see...
     validations:
       required: true
 
   - type: textarea
     id: steps-to-reproduce
     attributes:
-      label: Steps to Reproduce
-      description: How do you trigger this bug? Please walk us through the steps.
+      label: Steps to reproduce
+      description: How do you trigger this bug?
       placeholder: |
-        1. Go to '...'
-        2. Click on 'Launch' for app '...'
+        1. Go to ...
+        2. Click on Launch for app ...
         3. Observe the error
     validations:
       required: true
@@ -33,7 +33,7 @@ body:
   - type: textarea
     id: expected-behavior
     attributes:
-      label: Expected Behavior
+      label: Expected behavior
       description: What did you expect to happen?
     validations:
       required: true
@@ -41,8 +41,8 @@ body:
   - type: textarea
     id: actual-behavior
     attributes:
-      label: Actual Behavior
-      description: What actually happened? Include error message if any.
+      label: Actual behavior
+      description: What actually happened?
     validations:
       required: true
 
@@ -50,7 +50,7 @@ body:
     id: sortie-version
     attributes:
       label: Sortie Version
-      description: Commit hash, tag, or `sortie version` output
+      description: Commit hash, tag, or sortie version output
     validations:
       required: true
 
@@ -58,12 +58,14 @@ body:
     id: deployment-method
     attributes:
       label: Deployment Method
+      description: How did you deploy Sortie?
       options:
-        - local (make dev)
+        - Local (make dev)
         - Docker
         - Kubernetes (Kind)
         - Kubernetes (Helm)
-        - Other (please specify)
+        - Other
+      default: Local (make dev)
     validations:
       required: true
 
@@ -72,32 +74,33 @@ body:
     attributes:
       label: Host OS
       description: OS where Sortie backend or K8s cluster runs
-      placeholder: e.g., Ubuntu 22.04, macOS 14, Windows 11
+      placeholder: e.g. Ubuntu 22.04, macOS 14, Windows 11
 
   - type: input
     id: client-browser
-    attributes: Client Browser
-    description: Browser used to access sortie
-    placeholder: e.g. Chrome 124, Firefox 125
+    attributes:
+      label: Client Browser
+      description: Browser used to access Sortie
+      placeholder: e.g. Chrome 124, Firefox 125
 
   - type: input
     id: k8s-version
     attributes:
       label: Kubernetes Version
-      description: Output of `kubectl version --short` or `kind version`
+      description: Output of kubectl version --short or kind version
 
   - type: textarea
     id: logs
     attributes:
       label: Relevant log output
-      description: Paste backend, browser console, or kubectl logs. This will be auto-formatted as code.
+      description: Paste backend, browser console, or kubectl logs
       render: shell
 
   - type: checkboxes
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this issue, you agree to follow this project's Code of Conduct
+      description: By submitting this issue, you agree to follow this project Code of Conduct
       options:
-        - label: I agree to follow this project's Code of Conduct
+        - label: I agree to follow this projects Code of Conduct
           required: true

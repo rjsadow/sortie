@@ -1,4 +1,4 @@
-name: Feature Request
+name: 💡 Feature Request
 description: Suggest an idea for Sortie
 title: "[Feature]: "
 labels: ["enhancement", "triage"]
@@ -13,8 +13,8 @@ body:
     id: problem
     attributes:
       label: Problem Description
-      description: Is your feature request related to a problem? Please describe.
-      placeholder: "I'm always frustrated when..."
+      description: Is your feature request related to a problem?
+      placeholder: "I am always frustrated when..."
     validations:
       required: true
 
@@ -22,7 +22,7 @@ body:
     id: proposed-solution
     attributes:
       label: Proposed Solution
-      description: Describe the solution you'd like to see.
+      description: Describe the solution you would like to see.
       placeholder: A clear and concise description of what you want to happen.
     validations:
       required: true
@@ -31,14 +31,14 @@ body:
     id: alternatives-considered
     attributes:
       label: Alternatives Considered
-      description: Describe any alternative solutions or features you've considered.
+      description: Describe any alternative solutions or features you have considered.
 
   - type: textarea
     id: use-case
     attributes:
       label: Use Case
       description: How will this feature benefit your workflow or organization?
-      placeholder: Example: "As a DevOps engineer, I want to..."
+      placeholder: "Example: As a DevOps engineer, I want to..."
     validations:
       required: true
 
@@ -46,6 +46,7 @@ body:
     id: affected-component
     attributes:
       label: Affected Component
+      description: Which part of Sortie does this affect?
       options:
         - Backend (Go/API)
         - Frontend (React/UI)
@@ -53,6 +54,7 @@ body:
         - Streaming (noVNC/Guacamole)
         - Documentation/DevX
         - Other
+      default: Other
     validations:
       required: true
 
@@ -60,7 +62,7 @@ body:
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this issue, you agree to follow this project's Code of Conduct
+      description: By submitting this issue, you agree to follow this project Code of Conduct
       options:
-        - label: I agree to follow this project's Code of Conduct
+        - label: I agree to follow this projects Code of Conduct
           required: true
