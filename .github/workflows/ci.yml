@@ -522,6 +522,6 @@ jobs:
       - name: Check links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --no-progress --exclude localhost 'docs-site/**/*.md' '*.md'
+          args: --no-progress 'docs-site/**/*.md' '*.md'
           fail: true
           failIfEmpty: false

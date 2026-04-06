@@ -169,7 +169,7 @@ type Application struct {
 ```
 
 The `visibility` field controls who can see the application. See the
-[Access Control guide](/guide/access-control) for details.
+[Access Control guide](../guide/access-control.md) for details.
 
 ### Seeding
 

@@ -59,7 +59,7 @@ Each application has a `visibility` field that controls who can see it:
 System administrators (`admin` role) can always see all
 applications regardless of visibility.
 
-See the [Access Control guide](/guide/access-control) for
+See the [Access Control guide](../guide/access-control.md) for
 details on how visibility interacts with category-scoped
 access grants.
 
@@ -106,7 +106,7 @@ access grants.
 ### Session Sharing
 
 Session owners can share running container sessions with other users.
-See the [Session Sharing guide](/guide/session-sharing) for details.
+See the [Session Sharing guide](../guide/session-sharing.md) for details.
 
 Shared sessions returned from `/api/sessions/shared` include extra
 fields: `is_shared`, `owner_username`, `share_permission`, and `share_id`.
