@@ -1,0 +1,103 @@
+name: Bug Report
+description: File a bug report to help us improve sortie
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value:  |
+        Thanks for taking the time to fill out this bug report!
+        Please include as much detail as possible to help us reproduce and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: How do you trigger this bug? Please walk us through the steps.
+      placeholder: |
+        1. Go to '...'
+        2. Click on 'Launch' for app '...'
+        3. Observe the error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include error message if any.
+    validations:
+      required: true
+
+  - type: input
+    id: sortie-version
+    attributes:
+      label: Sortie Version
+      description: Commit hash, tag, or `sortie version` output
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment-method
+    attributes:
+      label: Deployment Method
+      options:
+        - local (make dev)
+        - Docker
+        - Kubernetes (Kind)
+        - Kubernetes (Helm)
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: input
+    id: host-os
+    attributes:
+      label: Host OS
+      description: OS where Sortie backend or K8s cluster runs
+      placeholder: e.g., Ubuntu 22.04, macOS 14, Windows 11
+
+  - type: input
+    id: client-browser
+    attributes: Client Browser
+    description: Browser used to access sortie
+    placeholder: e.g. Chrome 124, Firefox 125
+
+  - type: input
+    id: k8s-version
+    attributes:
+      label: Kubernetes Version
+      description: Output of `kubectl version --short` or `kind version`
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Paste backend, browser console, or kubectl logs. This will be auto-formatted as code.
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow this project's Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
