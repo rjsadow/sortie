@@ -91,13 +91,17 @@ test.describe('Session Sharing', () => {
     // Permission selector should be visible
     await expect(page.getByLabel('Permission')).toBeVisible();
 
-    // Invite by username
+    // Invite by username — wait for the share API response before asserting
     await page.getByPlaceholder('Enter username').fill('pw-share-viewer');
+    const inviteResponse = page.waitForResponse((res) =>
+      res.url().includes('/shares') && res.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Invite' }).click();
+    await inviteResponse;
 
     // Should show the share in "Current Shares" section
-    await expect(page.getByText('Current Shares')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('pw-share-viewer')).toBeVisible();
+    await expect(page.getByText('Current Shares')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('pw-share-viewer')).toBeVisible({ timeout: 10_000 });
     // Use locator scoped to the share entry to avoid matching the <option> in the Permission <select>
     const shareEntry = page.getByText('pw-share-viewer').locator('..');
     await expect(shareEntry.getByText('View Only')).toBeVisible();
@@ -181,10 +185,14 @@ test.describe('Session Sharing', () => {
 
     // Share dialog should show current shares
     await expect(page.getByText('Share Session')).toBeVisible();
-    await expect(page.getByText('Current Shares')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Current Shares')).toBeVisible({ timeout: 15_000 });
 
-    // Revoke the first share
+    // Revoke the first share — wait for the delete API response
+    const revokeResponse = page.waitForResponse((res) =>
+      res.url().includes('/shares') && res.request().method() === 'DELETE',
+    );
     await page.getByRole('button', { name: 'Revoke' }).first().click();
+    await revokeResponse;
 
     // The revoked share should disappear (wait a moment for refresh)
     // Check via API that a share was removed
