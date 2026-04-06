@@ -1,9 +1,14 @@
 import { defineConfig } from 'vitepress'
 
+// Allow overriding the base path for different deployment targets:
+// - Default '/docs/' for the embedded server (go:embed)
+// - '/sortie/' for GitHub Pages (set via VITEPRESS_BASE env var)
+const base = (process.env.VITEPRESS_BASE as `/${string}/` | undefined) ?? '/docs/'
+
 export default defineConfig({
   title: 'Sortie',
   description: 'Self-hosted application launcher for teams',
-  base: '/docs/',
+  base,
   outDir: './dist',
 
   themeConfig: {
@@ -71,6 +76,6 @@ export default defineConfig({
   },
 
   head: [
-    ['link', { rel: 'icon', href: '/docs/favicon.ico' }],
+    ['link', { rel: 'icon', href: `${base}favicon.ico` }],
   ],
 })
