@@ -1,0 +1,65 @@
+name: "Feature Request"
+description: "Suggest an idea for Sortie"
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a feature!
+        Please describe your idea and how it would help Sortie users.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem Description"
+      description: "Is your feature request related to a problem?"
+      placeholder: "I am always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: "Proposed Solution"
+      description: "Describe the solution you would like to see."
+      placeholder: "A clear and concise description of what you want to happen."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives-considered
+    attributes:
+      label: "Alternatives Considered"
+      description: "Describe any alternative solutions or features you have considered."
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: "Use Case"
+      description: "How will this feature benefit your workflow or organization?"
+      placeholder: "Example: As a DevOps engineer, I want to..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected-component
+    attributes:
+      label: "Affected Component"
+      description: "Which part of Sortie does this affect?"
+      options:
+        - "Backend (Go/API)"
+        - "Frontend (React/UI)"
+        - "Kubernetes/Orchestration"
+        - "Streaming (noVNC/Guacamole)"
+        - "Documentation/DevX"
+        - "Other"
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: "Code of Conduct"
+      description: "By submitting this issue, you agree to follow this project Code of Conduct"
+      options:
+        - label: "I agree to follow this projects Code of Conduct"
+          required: true
